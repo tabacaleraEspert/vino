@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router";
 import { useData } from "../context/DataContext";
-import { ArrowLeft, Store, Edit2, X } from "lucide-react";
+import { ArrowLeft, Store, Edit2, X, Check } from "lucide-react";
 
 export function MerchantDetail() {
   const { merchantId } = useParams<{ merchantId: string }>();

@@ -4,8 +4,9 @@ import re
 import time
 from typing import Any, Dict, List, Optional
 
+from app.sheets.cache import invalidate
 from app.sheets.client import get_sheets_service
-from app.sheets.registry import SHEETS
+from app.sheets.registry import SHEETS, get_current_spreadsheet_id
 from app.sheets.service import (
     _col_to_a1,
     _find_row_index_by_column_value,
@@ -94,6 +95,7 @@ def create_categoria(nombre: str, icon: str = DEFAULT_ICON, color: str = DEFAULT
         raise RuntimeError("Insert OK pero no pude re-encontrar la fila por Timestamp")
 
     row_dict = _values_to_rows(headers2, [values2[idx]])[0]
+    invalidate(get_current_spreadsheet_id(), "categorias")
     r = _categoria_row_to_response(row_dict)
     r["name"] = r["nombre"]
     return r
@@ -127,6 +129,7 @@ def patch_categoria_by_id(cat_id: str, patch: Dict[str, Any]) -> Dict[str, Any]:
             spreadsheetId=cfg.spreadsheet_id,
             body={"valueInputOption": "USER_ENTERED", "data": updates},
         ).execute()
+        invalidate(get_current_spreadsheet_id(), "categorias")
 
     updated = get_categoria_by_id(cat_id)
     if not updated:
@@ -189,6 +192,7 @@ def delete_categoria_by_id(cat_id: str) -> bool:
             }]
         },
     ).execute()
+    invalidate(get_current_spreadsheet_id(), "categorias")
     return True
 
 
@@ -252,6 +256,7 @@ def create_subcategoria(categoria_id: str, nombre: str) -> Dict[str, Any]:
         raise RuntimeError("Insert OK pero no pude re-encontrar la subcategoría por Timestamp")
 
     row_dict = _values_to_rows(headers2, [values2[idx]])[0]
+    invalidate(get_current_spreadsheet_id(), "subcategorias")
     return {
         "id": str(row_dict.get("Id", "")).strip(),
         "categoria_id": str(row_dict.get("Id_Categoria", "")).strip(),
@@ -283,6 +288,7 @@ def patch_subcategoria_by_id(sub_id: str, nombre: str) -> Dict[str, Any]:
         valueInputOption="USER_ENTERED",
         body={"values": [[nombre]]},
     ).execute()
+    invalidate(get_current_spreadsheet_id(), "subcategorias")
 
     _, rows = read_table("subcategorias")
     for r in rows:
@@ -332,6 +338,7 @@ def delete_subcategoria_by_id(sub_id: str) -> bool:
             }]
         },
     ).execute()
+    invalidate(get_current_spreadsheet_id(), "subcategorias")
     return True
 
 
@@ -475,6 +482,7 @@ def create_regla(
         insertDataOption="INSERT_ROWS",
         body={"values": [row_out]},
     ).execute()
+    invalidate(get_current_spreadsheet_id(), "reglas")
 
     time.sleep(0.2)
     headers2, values2 = _get_headers_and_values_raw("reglas")
@@ -606,6 +614,7 @@ def patch_regla_by_id(regla_id: str, patch: Dict[str, Any]) -> Dict[str, Any]:
                 spreadsheetId=cfg.spreadsheet_id,
                 body={"valueInputOption": "USER_ENTERED", "data": data},
             ).execute()
+            invalidate(get_current_spreadsheet_id(), "reglas")
 
     updated = get_regla_by_id(regla_id)
     if not updated:
@@ -659,6 +668,7 @@ def delete_regla_by_id(regla_id: str) -> bool:
             }]
         },
     ).execute()
+    invalidate(get_current_spreadsheet_id(), "reglas")
     return True
 
 
@@ -806,6 +816,7 @@ def create_presupuesto(
         insertDataOption="INSERT_ROWS",
         body={"values": [row_out]},
     ).execute()
+    invalidate(get_current_spreadsheet_id(), "presupuestos")
 
     time.sleep(0.2)
     headers2, values2 = _get_headers_and_values_raw("presupuestos")
@@ -891,6 +902,7 @@ def patch_presupuesto_by_id(presup_id: str, patch: Dict[str, Any]) -> Dict[str, 
             spreadsheetId=cfg.spreadsheet_id,
             body={"valueInputOption": "USER_ENTERED", "data": updates},
         ).execute()
+        invalidate(get_current_spreadsheet_id(), "presupuestos")
 
     updated = get_presupuesto_by_id(presup_id)
     if not updated:
@@ -935,4 +947,5 @@ def delete_presupuesto_by_id(presup_id: str) -> bool:
             }]
         },
     ).execute()
+    invalidate(get_current_spreadsheet_id(), "presupuestos")
     return True

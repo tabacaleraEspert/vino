@@ -159,6 +159,8 @@ export interface PresupuestoRaw {
 
 // API calls
 export const api = {
+  health: () => apiFetch<{ ok: boolean; version: string }>("/health"),
+
   categories: {
     list: (token?: string) =>
       apiFetch<CategoriaRaw[]>("/categorias", { token }),

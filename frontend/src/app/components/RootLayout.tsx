@@ -1,13 +1,20 @@
 import { Outlet, NavLink } from "react-router";
+import { useEffect, useState } from "react";
 import { Home, Receipt, FolderOpen, Wallet, Store, TrendingUp, LogOut } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useData } from "../context/DataContext";
 import { useNavigate } from "react-router";
+import { api } from "@/lib/api";
 
 export function RootLayout() {
   const { user, logout } = useAuth();
   const { isLoading, error } = useData();
   const navigate = useNavigate();
+  const [backendVersion, setBackendVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.health().then((r) => setBackendVersion(r.version)).catch(() => setBackendVersion(null));
+  }, []);
 
   const handleLogout = () => {
     logout();
@@ -32,6 +39,10 @@ export function RootLayout() {
             {user && (
               <p className="text-xs text-gray-500">{user.name}</p>
             )}
+            <p className="text-[10px] text-gray-400 mt-0.5" title="Versiones frontend y backend">
+              v{__APP_VERSION__}
+              {backendVersion != null && ` · API v${backendVersion}`}
+            </p>
           </div>
           <button
             onClick={handleLogout}

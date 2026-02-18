@@ -8,6 +8,7 @@ from typing import Generator
 import pyodbc
 
 from app.core.config import settings
+from app.core.request_metrics import time_sql_block
 
 
 def _get_connection_string() -> str:
@@ -29,8 +30,9 @@ def _get_connection_string() -> str:
 @contextmanager
 def get_connection() -> Generator[pyodbc.Connection, None, None]:
     """Context manager para obtener conexión a Azure SQL."""
-    conn = pyodbc.connect(_get_connection_string())
-    try:
-        yield conn
-    finally:
-        conn.close()
+    with time_sql_block():
+        conn = pyodbc.connect(_get_connection_string())
+        try:
+            yield conn
+        finally:
+            conn.close()

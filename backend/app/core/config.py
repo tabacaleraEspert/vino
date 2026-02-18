@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     SHEETS_REGISTRY_JSON: str | None = None
     # Fallback solo para scripts/dev; en producción viene de ID_Sheets (MaestroUsuarios)
     SPREADSHEET_ID: str | None = None
+    # Cache in-memory para read_table (segundos). 0 = desactivado.
+    SHEETS_CACHE_TTL_SEC: int = 60
 
     class Config:
         env_file = ".env"

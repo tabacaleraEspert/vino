@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.router import router as v1_router
 from app.core.config import settings
 from app.core.logging import configure_logging
+from app.middleware.metrics import RequestMetricsMiddleware
 
 configure_logging()
 
@@ -11,6 +12,9 @@ app = FastAPI(
     title="Finanzas Personales API",
     version=settings.APP_VERSION,
 )
+
+# Métricas por request: request_id, path, t_total, t_sql, t_sheets (para identificar cuellos)
+app.add_middleware(RequestMetricsMiddleware)
 
 # CORS: Azure Portal puede tener su propia CORS que anula esta. Si falla, en Portal → CORS
 # vacía todos los orígenes para que la app maneje CORS.

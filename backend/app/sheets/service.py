@@ -5,8 +5,10 @@ from datetime import date, datetime, timezone
 import re
 import time
 
+from app.core.request_metrics import time_sheets_block
+from app.sheets.cache import _get_cached, _set_cached, invalidate
 from app.sheets.client import get_sheets_service
-from app.sheets.registry import SHEETS
+from app.sheets.registry import SHEETS, get_current_spreadsheet_id
 
 
 # =========================
@@ -81,26 +83,33 @@ def _now_timestamp_iso_local() -> str:
 # =========================
 
 def read_table(entity: str) -> Tuple[List[str], List[Dict[str, Any]]]:
-    cfg = SHEETS[entity]
-    svc = get_sheets_service()
+    sid = get_current_spreadsheet_id()
+    cached = _get_cached(sid, entity)
+    if cached:
+        return cached
 
-    header_range = f"{cfg.worksheet}!A{cfg.header_row}:Z{cfg.header_row}"
-    header_resp = svc.spreadsheets().values().get(
-        spreadsheetId=cfg.spreadsheet_id,
-        range=header_range,
-    ).execute()
-    headers = header_resp.get("values", [[]])[0]
-    if not headers:
-        return [], []
+    with time_sheets_block():
+        cfg = SHEETS[entity]
+        svc = get_sheets_service()
 
-    data_range = f"{cfg.worksheet}!A{cfg.header_row + 1}:Z"
-    data_resp = svc.spreadsheets().values().get(
-        spreadsheetId=cfg.spreadsheet_id,
-        range=data_range,
-    ).execute()
-    values = data_resp.get("values", [])
+        header_range = f"{cfg.worksheet}!A{cfg.header_row}:Z{cfg.header_row}"
+        header_resp = svc.spreadsheets().values().get(
+            spreadsheetId=cfg.spreadsheet_id,
+            range=header_range,
+        ).execute()
+        headers = header_resp.get("values", [[]])[0]
+        if not headers:
+            return [], []
 
-    rows = _values_to_rows(headers, values)
+        data_range = f"{cfg.worksheet}!A{cfg.header_row + 1}:Z"
+        data_resp = svc.spreadsheets().values().get(
+            spreadsheetId=cfg.spreadsheet_id,
+            range=data_range,
+        ).execute()
+        values = data_resp.get("values", [])
+
+        rows = _values_to_rows(headers, values)
+        _set_cached(sid, entity, headers, rows)
     return headers, rows
 
 
@@ -298,24 +307,25 @@ def get_movimiento_by_id(mov_id: str) -> Optional[Dict[str, Any]]:
 
 def _get_headers_and_values_raw(entity: str) -> Tuple[List[str], List[List[Any]]]:
     """Devuelve headers y values raw (listas) para poder ubicar filas/índices."""
-    cfg = SHEETS[entity]
-    svc = get_sheets_service()
+    with time_sheets_block():
+        cfg = SHEETS[entity]
+        svc = get_sheets_service()
 
-    header_range = f"{cfg.worksheet}!A{cfg.header_row}:Z{cfg.header_row}"
-    header_resp = svc.spreadsheets().values().get(
-        spreadsheetId=cfg.spreadsheet_id,
-        range=header_range,
-    ).execute()
-    headers = header_resp.get("values", [[]])[0]
-    if not headers:
-        return [], []
+        header_range = f"{cfg.worksheet}!A{cfg.header_row}:Z{cfg.header_row}"
+        header_resp = svc.spreadsheets().values().get(
+            spreadsheetId=cfg.spreadsheet_id,
+            range=header_range,
+        ).execute()
+        headers = header_resp.get("values", [[]])[0]
+        if not headers:
+            return [], []
 
-    data_range = f"{cfg.worksheet}!A{cfg.header_row + 1}:Z"
-    data_resp = svc.spreadsheets().values().get(
-        spreadsheetId=cfg.spreadsheet_id,
-        range=data_range,
-    ).execute()
-    values = data_resp.get("values", [])
+        data_range = f"{cfg.worksheet}!A{cfg.header_row + 1}:Z"
+        data_resp = svc.spreadsheets().values().get(
+            spreadsheetId=cfg.spreadsheet_id,
+            range=data_range,
+        ).execute()
+        values = data_resp.get("values", [])
 
     return headers, values
 
@@ -370,13 +380,14 @@ def create_movimiento(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     # Append
     append_range = f"{cfg.worksheet}!A{cfg.header_row + 1}:Z"
-    svc.spreadsheets().values().append(
-        spreadsheetId=cfg.spreadsheet_id,
-        range=append_range,
-        valueInputOption="USER_ENTERED",
-        insertDataOption="INSERT_ROWS",
-        body={"values": [row_out]},
-    ).execute()
+    with time_sheets_block():
+        svc.spreadsheets().values().append(
+            spreadsheetId=cfg.spreadsheet_id,
+            range=append_range,
+            valueInputOption="USER_ENTERED",
+            insertDataOption="INSERT_ROWS",
+            body={"values": [row_out]},
+        ).execute()
 
     # Pequeña espera para que se calculen fórmulas/Id si aplica
     time.sleep(0.2)
@@ -394,6 +405,7 @@ def create_movimiento(payload: Dict[str, Any]) -> Dict[str, Any]:
         raise RuntimeError("Insert OK pero no pude re-encontrar la fila por Timestamp")
 
     row_dict = _values_to_rows(headers2, [values2[idx]])[0]
+    invalidate(get_current_spreadsheet_id(), "movimientos")
     return row_dict
 
 
@@ -432,10 +444,12 @@ def patch_movimiento_by_id(mov_id: str, patch: Dict[str, Any]) -> Dict[str, Any]
         updates.append({"range": a1, "values": [[new_value]]})
 
     if updates:
-        svc.spreadsheets().values().batchUpdate(
-            spreadsheetId=cfg.spreadsheet_id,
-            body={"valueInputOption": "USER_ENTERED", "data": updates},
-        ).execute()
+        with time_sheets_block():
+            svc.spreadsheets().values().batchUpdate(
+                spreadsheetId=cfg.spreadsheet_id,
+                body={"valueInputOption": "USER_ENTERED", "data": updates},
+            ).execute()
+        invalidate(get_current_spreadsheet_id(), "movimientos")
 
     # Devolvemos el registro actualizado (re-lectura por Id)
     updated = get_movimiento_by_id(mov_id)
