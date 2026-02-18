@@ -1,4 +1,6 @@
-const API_BASE = import.meta.env.VITE_API_URL || "/api/v1";
+const API_BASE =
+  import.meta.env.VITE_API_URL ||
+  "https://vino-backend-bkbge8cwfffsdrhc.brazilsouth-01.azurewebsites.net/api/v1";
 
 export async function apiFetch<T = unknown>(
   path: string,
