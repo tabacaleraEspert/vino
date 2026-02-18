@@ -8,7 +8,12 @@ class Settings(BaseSettings):
     JWT_SECRET: str = "dev_change_me"
     JWT_EXPIRE_MIN: int = 60 * 24
     MASTER_KEY: str = "dev_master_change_me"
-    CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
+    CORS_ORIGINS: list[str] = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "https://lively-sand-05dbb8b0f.1.azurestaticapps.net",
+    ]
 
     SQL_SERVER: str | None = None
     SQL_DB: str | None = None
