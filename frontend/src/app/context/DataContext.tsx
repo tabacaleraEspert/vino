@@ -6,6 +6,7 @@ import {
   mapCatalogToCategories,
   mapReglasToMerchantRules,
   mapPresupuestosToBudgets,
+  transactionToPatchPayload,
   type MovimientosPaginatedResponse,
   Category,
   Subcategory,
@@ -24,6 +25,7 @@ interface DataContextType {
   updateSubcategory: (categoryId: string, subcategoryId: string, newName: string) => Promise<void>;
   deleteSubcategory: (categoryId: string, subcategoryId: string) => Promise<void>;
   transactions: Transaction[];
+  updateTransaction: (id: string, updates: Partial<Transaction>) => Promise<void>;
   budgets: Budget[];
   addBudget: (budget: Omit<Budget, "id">) => Promise<void>;
   updateBudget: (id: string, budget: Partial<Budget>) => Promise<void>;
@@ -229,6 +231,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
     await fetchData();
   };
 
+  const updateTransaction = async (id: string, updates: Partial<Transaction>) => {
+    if (!token) return;
+    const payload = transactionToPatchPayload(updates, categories, merchants);
+    if (Object.keys(payload).length === 0) return;
+    await api.movimientos.update(id, payload, token);
+    await fetchData();
+  };
+
   return (
     <DataContext.Provider
       value={{
@@ -240,6 +250,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         updateSubcategory,
         deleteSubcategory,
         transactions,
+        updateTransaction,
         budgets,
         addBudget,
         updateBudget,

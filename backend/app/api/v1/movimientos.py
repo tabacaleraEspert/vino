@@ -4,7 +4,9 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.api.deps import set_sheets_context
+from app.cache.sheets_cache import invalidate
 from app.core.security import require_user
+from app.sheets.registry import get_current_spreadsheet_id
 from app.sheets.service import (
     create_movimiento,
     get_movimiento_by_id,
@@ -69,6 +71,19 @@ def list_movimientos(
         }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/invalidate-cache")
+def invalidate_movimientos_cache(user: dict = Depends(require_user)):
+    """
+    Invalida el cache de movimientos del usuario.
+    Útil tras editar/crear para forzar datos frescos en el siguiente GET.
+    """
+    set_sheets_context(user)
+    sid = get_current_spreadsheet_id()
+    invalidate(sid, "movimientos")
+    return {"ok": True}
+
 
 @router.get("/{id}")
 def get_movimiento(id: str, user: dict = Depends(require_user)):

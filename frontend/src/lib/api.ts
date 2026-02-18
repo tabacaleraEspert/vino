@@ -14,7 +14,9 @@ export async function apiFetch<T = unknown>(
   if (token) {
     (headers as Record<string, string>)["Authorization"] = `Bearer ${token}`;
   }
-  const res = await fetch(`${API_BASE}${path}`, { ...init, headers });
+  const method = (init.method || "GET").toUpperCase();
+  const cacheOpt = method === "GET" ? { cache: "no-store" as RequestCache } : {};
+  const res = await fetch(`${API_BASE}${path}`, { ...init, ...cacheOpt, headers });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail || "Error en la petición");
@@ -68,6 +70,7 @@ export interface Transaction {
   id: string;
   amount: number;
   description: string;
+  descripcion?: string;
   date: string;
   categoryId: string;
   subcategoryId?: string;
@@ -337,6 +340,11 @@ export const api = {
         : "";
       return apiFetch<MovimientosPaginatedResponse>(`/movimientos${q}`, { token });
     },
+    invalidateCache: (token?: string) =>
+      apiFetch<{ ok: boolean }>("/movimientos/invalidate-cache", {
+        method: "POST",
+        token,
+      }),
     create: (data: Record<string, unknown>, token?: string) =>
       apiFetch<MovimientoRaw>("/movimientos", {
         method: "POST",
@@ -511,6 +519,45 @@ export function mapMovimientoToTransaction(
   };
 }
 
+/** Convierte YYYY-MM-DD a DD/MM/YYYY para el backend */
+export function formatDateToBackend(dateStr: string): string {
+  if (!dateStr || !dateStr.trim()) return "";
+  const parts = String(dateStr).trim().split("-");
+  if (parts.length === 3) {
+    const [y, m, d] = parts;
+    return `${d.padStart(2, "0")}/${m.padStart(2, "0")}/${y}`;
+  }
+  return dateStr;
+}
+
+/** Convierte Transaction a payload para PATCH /movimientos (formato Sheets) */
+export function transactionToPatchPayload(
+  t: Partial<Transaction>,
+  categories: Category[],
+  merchants: Merchant[]
+): Record<string, unknown> {
+  const payload: Record<string, unknown> = {};
+  if (t.description != null) payload.Descripcion = t.description;
+  if (t.amount != null) payload.Monto = Math.abs(t.amount);
+  if (t.date != null) payload.Fecha = formatDateToBackend(t.date);
+  if (t.merchantId != null) {
+    const m = merchants.find((mr) => mr.id === t.merchantId);
+    if (m) payload.Comercio = m.name;
+  }
+  if (t.categoryId != null) {
+    const c = categories.find((cat) => cat.id === t.categoryId);
+    if (c) payload.Nombre_Categoria = c.name;
+  }
+  if (t.subcategoryId != null) {
+    const c = categories.find((cat) => cat.id === t.categoryId);
+    const s = c?.subcategories?.find((sub) => sub.id === t.subcategoryId);
+    if (s) payload.Nombre_SubCategoria = s.name;
+  } else if (t.categoryId != null) {
+    payload.Nombre_SubCategoria = "";
+  }
+  return payload;
+}
+
 /** Mapea MovimientoItem (formato paginado API) a Transaction */
 export function mapMovimientoItemToTransaction(
   item: MovimientoItem,
@@ -532,6 +579,7 @@ export function mapMovimientoItemToTransaction(
     id: item.id,
     amount,
     description: item.comercio || item.descripcion || "Sin descripción",
+    descripcion: item.descripcion?.trim() || undefined,
     date: item.fecha,
     categoryId: category?.id || "unknown",
     subcategoryId: subcategory?.id,

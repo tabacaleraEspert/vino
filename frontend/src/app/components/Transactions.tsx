@@ -2,10 +2,13 @@ import { useState } from "react";
 import { useData } from "../context/DataContext";
 import { useMonth } from "../context/MonthContext";
 import { MonthSelector } from "./MonthSelector";
-import { Search, Filter, X, Calendar, DollarSign, Store } from "lucide-react";
+import { EditTransactionModal } from "./EditTransactionModal";
+import { Search, Filter, X, Calendar, DollarSign, Store, Edit2 } from "lucide-react";
+import type { Transaction } from "../../lib/api";
 
 export function Transactions() {
   const { categories, merchants, transactions } = useData();
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const { selectedMonth } = useMonth();
 
   const transactionsInMonth = transactions.filter((t) => {
@@ -270,17 +273,32 @@ export function Transactions() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate">
-                            {transaction.description}
+                            {merchant?.name || transaction.description}
                           </p>
-                          <p className="text-xs text-gray-500">
-                            {merchant?.name}
-                            {subcategory && ` • ${subcategory.name}`}
+                          <p className="text-xs text-gray-500 truncate">
+                            {[
+                              transaction.descripcion?.trim() || null,
+                              subcategory?.name,
+                            ]
+                              .filter(Boolean)
+                              .join(" • ")}
                           </p>
                         </div>
-                        <div className="text-right">
+                        <div className="flex items-center gap-2">
                           <p className="text-sm font-semibold text-red-600">
                             -${Math.abs(transaction.amount).toLocaleString("es-MX")}
                           </p>
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setEditingTransaction(transaction);
+                            }}
+                            className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-blue-600 transition-colors"
+                            aria-label="Editar transacción"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
                         </div>
                       </div>
                     );
@@ -291,6 +309,13 @@ export function Transactions() {
           })}
         </div>
       )}
+
+      {/* Modal Editar Transacción */}
+      <EditTransactionModal
+        show={!!editingTransaction}
+        transaction={editingTransaction}
+        onClose={() => setEditingTransaction(null)}
+      />
 
       {/* Modal de Filtros Avanzados */}
       {showAdvancedFilters && (
