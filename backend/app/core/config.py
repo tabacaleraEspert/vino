@@ -20,13 +20,17 @@ class Settings(BaseSettings):
     SQL_USER: str | None = None
     SQL_PASSWORD: str | None = None
     SQL_USUARIO_TABLE: str = "MaestroUsuarios"
+    # Cache de usuario por nombre para login (segundos). 0 = desactivado.
+    SQL_LOGIN_CACHE_TTL_SEC: int = 60
     GOOGLE_SHEETS_CREDENTIALS_FILE: str | None = None
     GOOGLE_SHEETS_CREDENTIALS_JSON: str | None = None
     SHEETS_REGISTRY_JSON: str | None = None
     # Fallback solo para scripts/dev; en producción viene de ID_Sheets (MaestroUsuarios)
     SPREADSHEET_ID: str | None = None
     # Cache in-memory para read_table (segundos). 0 = desactivado.
-    SHEETS_CACHE_TTL_SEC: int = 60
+    SHEETS_CACHE_TTL_SEC: int = 120
+    # Refresco periódico de cache (segundos). 0 = desactivado. Solo si SPREADSHEET_ID está set.
+    SHEETS_REFRESH_INTERVAL_SEC: int = 300
 
     class Config:
         env_file = ".env"

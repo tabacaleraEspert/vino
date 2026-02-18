@@ -4,7 +4,7 @@ import re
 import time
 from typing import Any, Dict, List, Optional
 
-from app.sheets.cache import invalidate
+from app.cache.sheets_cache import invalidate
 from app.sheets.client import get_sheets_service
 from app.sheets.registry import SHEETS, get_current_spreadsheet_id
 from app.sheets.service import (

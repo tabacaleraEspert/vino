@@ -133,29 +133,17 @@ export function MerchantDetail() {
                       {currentCategory.icon}
                     </div>
                     <div className="flex-1">
-                      <p className="text-xs text-gray-500">Categoría</p>
-                      <p className="font-medium">{currentCategory.name}</p>
+                      <p className="text-xs text-gray-500">Categoría - Subcategoría</p>
+                      <p className="font-medium">
+                        {currentCategory.name}
+                        {currentSubcategory && ` - ${currentSubcategory.name}`}
+                      </p>
                     </div>
                     <div
                       className="w-4 h-4 rounded-full"
                       style={{ backgroundColor: currentCategory.color }}
                     />
                   </div>
-
-                  {currentSubcategory && (
-                    <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                      <div className="w-12 h-12 rounded-full flex items-center justify-center bg-gray-200">
-                        <div
-                          className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: currentCategory.color }}
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-xs text-gray-500">Subcategoría</p>
-                        <p className="font-medium">{currentSubcategory.name}</p>
-                      </div>
-                    </div>
-                  )}
                 </>
               ) : (
                 <div className="text-center py-6 text-gray-500">
@@ -172,48 +160,43 @@ export function MerchantDetail() {
           ) : (
             // Modo de edición
             <div className="space-y-4">
-              {/* Selector de categoría */}
+              {/* Categoría - Subcategoría */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Categoría
+                  Categoría - Subcategoría
                 </label>
-                <select
-                  value={selectedCategoryId}
-                  onChange={(e) => {
-                    setSelectedCategoryId(e.target.value);
-                    setSelectedSubcategoryId("");
-                  }}
-                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                >
-                  <option value="">Selecciona una categoría</option>
-                  {categories.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.icon} {cat.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Selector de subcategoría */}
-              {selectedCategoryId && availableSubcategories.length > 0 && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Subcategoría (opcional)
-                  </label>
+                <div className="flex gap-3">
                   <select
-                    value={selectedSubcategoryId}
-                    onChange={(e) => setSelectedSubcategoryId(e.target.value)}
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    value={selectedCategoryId}
+                    onChange={(e) => {
+                      setSelectedCategoryId(e.target.value);
+                      setSelectedSubcategoryId("");
+                    }}
+                    className="flex-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                   >
-                    <option value="">Sin subcategoría</option>
-                    {availableSubcategories.map((sub) => (
-                      <option key={sub.id} value={sub.id}>
-                        {sub.name}
+                    <option value="">Selecciona categoría</option>
+                    {categories.map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.icon} {cat.name}
                       </option>
                     ))}
                   </select>
+                  {selectedCategoryId && availableSubcategories.length > 0 && (
+                    <select
+                      value={selectedSubcategoryId}
+                      onChange={(e) => setSelectedSubcategoryId(e.target.value)}
+                      className="flex-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    >
+                      <option value="">Sin subcategoría</option>
+                      {availableSubcategories.map((sub) => (
+                        <option key={sub.id} value={sub.id}>
+                          {sub.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
-              )}
+              </div>
 
               {/* Botones de acción */}
               <div className="flex gap-3 pt-2">

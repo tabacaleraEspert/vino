@@ -100,51 +100,46 @@ export function CreateRuleModal({
             </div>
           )}
 
-          {/* Categoría */}
+          {/* Categoría - Subcategoría */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Categoría *
+              Categoría - Subcategoría *
             </label>
-            <select
-              value={selectedCategoryId}
-              onChange={(e) => {
-                setSelectedCategoryId(e.target.value);
-                setSelectedSubcategoryId("");
-                setError("");
-              }}
-              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-              disabled={!!existingRule}
-            >
-              <option value="">Selecciona una categoría</option>
-              {categories.map((cat) => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.icon} {cat.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Subcategoría */}
-          {selectedCategoryId && availableSubcategories.length > 0 && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Subcategoría (opcional)
-              </label>
+            <div className="flex gap-3">
               <select
-                value={selectedSubcategoryId}
-                onChange={(e) => setSelectedSubcategoryId(e.target.value)}
-                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                value={selectedCategoryId}
+                onChange={(e) => {
+                  setSelectedCategoryId(e.target.value);
+                  setSelectedSubcategoryId("");
+                  setError("");
+                }}
+                className="flex-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
                 disabled={!!existingRule}
               >
-                <option value="">Sin subcategoría</option>
-                {availableSubcategories.map((sub) => (
-                  <option key={sub.id} value={sub.id}>
-                    {sub.name}
+                <option value="">Selecciona categoría</option>
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.icon} {cat.name}
                   </option>
                 ))}
               </select>
+              {selectedCategoryId && availableSubcategories.length > 0 && (
+                <select
+                  value={selectedSubcategoryId}
+                  onChange={(e) => setSelectedSubcategoryId(e.target.value)}
+                  className="flex-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                  disabled={!!existingRule}
+                >
+                  <option value="">Sin subcategoría</option>
+                  {availableSubcategories.map((sub) => (
+                    <option key={sub.id} value={sub.id}>
+                      {sub.name}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
-          )}
+          </div>
 
           {/* Info */}
           <div className="bg-green-50 border border-green-200 rounded-lg p-4">

@@ -12,6 +12,7 @@ export function Merchants() {
   const [showCreateMerchant, setShowCreateMerchant] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortOrder, setSortOrder] = useState<SortOrder>("alfa");
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>("all");
   const [ruleModalMerchant, setRuleModalMerchant] = useState<{
     id: string;
     name: string;
@@ -38,6 +39,10 @@ export function Merchants() {
       const category = rule
         ? categories.find((c) => c.id === rule.categoryId)
         : null;
+      const subcategory =
+        rule?.subcategoryId && category
+          ? category.subcategories?.find((s) => s.id === rule.subcategoryId)
+          : null;
 
       return {
         ...merchant,
@@ -45,16 +50,25 @@ export function Merchants() {
         transactionCount: merchantTransactions.length,
         lastTransactionDate,
         category,
+        subcategory,
         hasRule: !!rule,
       };
     });
 
     const query = searchQuery.trim().toLowerCase();
-    const filtered = query
-      ? withStats.filter((m) =>
-          m.name.toLowerCase().includes(query)
-        )
-      : withStats;
+    let filtered = withStats;
+
+    if (query) {
+      filtered = filtered.filter((m) =>
+        m.name.toLowerCase().includes(query)
+      );
+    }
+
+    if (selectedCategoryId !== "all") {
+      filtered = filtered.filter(
+        (m) => m.category?.id === selectedCategoryId
+      );
+    }
 
     filtered.sort((a, b) => {
       if (sortOrder === "alfa") {
@@ -66,7 +80,7 @@ export function Merchants() {
       return a.lastTransactionDate - b.lastTransactionDate;
     });
     return filtered;
-  }, [merchants, merchantRules, categories, transactions, searchQuery, sortOrder]);
+  }, [merchants, merchantRules, categories, transactions, searchQuery, sortOrder, selectedCategoryId]);
 
   return (
     <div className="p-4 space-y-4">
@@ -113,6 +127,33 @@ export function Merchants() {
         </select>
       </div>
 
+      {/* Filtro por categoría */}
+      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+        <button
+          onClick={() => setSelectedCategoryId("all")}
+          className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+            selectedCategoryId === "all"
+              ? "bg-blue-600 text-white"
+              : "bg-gray-100 text-gray-600"
+          }`}
+        >
+          Todas
+        </button>
+        {categories.map((cat) => (
+          <button
+            key={cat.id}
+            onClick={() => setSelectedCategoryId(cat.id)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+              selectedCategoryId === cat.id
+                ? "bg-blue-600 text-white"
+                : "bg-gray-100 text-gray-600"
+            }`}
+          >
+            {cat.icon} {cat.name}
+          </button>
+        ))}
+      </div>
+
       {/* Lista de comercios */}
       <div className="space-y-3">
         {merchantsWithStats.length === 0 ? (
@@ -120,7 +161,9 @@ export function Merchants() {
             <p className="text-sm">
               {searchQuery.trim()
                 ? "No se encontraron comercios con ese nombre."
-                : "No hay comercios registrados."}
+                : selectedCategoryId !== "all"
+                  ? "No hay comercios con regla en esta categoría."
+                  : "No hay comercios registrados."}
             </p>
           </div>
         ) : (
@@ -149,6 +192,7 @@ export function Merchants() {
                           <span className="text-lg">{merchant.category.icon}</span>
                           <span className="text-xs text-gray-600">
                             {merchant.category.name}
+                            {merchant.subcategory && ` - ${merchant.subcategory.name}`}
                           </span>
                         </div>
                       )}

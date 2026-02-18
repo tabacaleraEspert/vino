@@ -61,21 +61,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
     setError(null);
     try {
-      const [
-        categoriasRaw,
-        subcategoriasRaw,
-        presupuestosRaw,
-        reglasRaw,
-        mers,
-        movs,
-      ] = await Promise.all([
-        api.categories.list(token).catch(() => []),
-        api.subcategorias.list({}, token).catch(() => []),
-        api.budgets.list({}, token).catch(() => []),
-        api.merchantRules.list({}, token).catch(() => []),
-        api.merchants.list(token).catch(() => []),
+      const [boot, movs] = await Promise.all([
+        api.bootstrap(token).catch(() => ({
+          categorias: [],
+          subcategorias: [],
+          reglas: [],
+          presupuestos: [],
+          comercios: [],
+        })),
         api.movimientos.list({ limit: "5000" }, token).catch((): MovimientosPaginatedResponse => ({ items: [], page: 1, limit: 50, total: 0 })),
       ]);
+      const categoriasRaw = boot.categorias || [];
+      const subcategoriasRaw = boot.subcategorias || [];
+      const presupuestosRaw = boot.presupuestos || [];
+      const reglasRaw = boot.reglas || [];
+      const mers = boot.comercios || [];
 
       const cats = mapCatalogToCategories(
         categoriasRaw || [],

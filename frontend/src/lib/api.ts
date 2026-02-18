@@ -161,6 +161,15 @@ export interface PresupuestoRaw {
 export const api = {
   health: () => apiFetch<{ ok: boolean; version: string }>("/health"),
 
+  bootstrap: (token?: string) =>
+    apiFetch<{
+      categorias: CategoriaRaw[];
+      subcategorias: SubcategoriaRaw[];
+      reglas: ReglaRaw[];
+      presupuestos: PresupuestoRaw[];
+      comercios: Merchant[];
+    }>("/bootstrap", { token }),
+
   categories: {
     list: (token?: string) =>
       apiFetch<CategoriaRaw[]>("/categorias", { token }),

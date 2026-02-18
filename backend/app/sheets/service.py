@@ -6,7 +6,7 @@ import re
 import time
 
 from app.core.request_metrics import time_sheets_block
-from app.sheets.cache import _get_cached, _set_cached, invalidate
+from app.cache.sheets_cache import get_table as cache_get_table, invalidate
 from app.sheets.client import get_sheets_service
 from app.sheets.registry import SHEETS, get_current_spreadsheet_id
 
@@ -82,35 +82,36 @@ def _now_timestamp_iso_local() -> str:
 # Lectura (ya la tenías)
 # =========================
 
+def _fetch_table_from_sheets(entity: str) -> Tuple[List[str], List[Dict[str, Any]]]:
+    """Fetch raw desde Google Sheets (sin cache)."""
+    cfg = SHEETS[entity]
+    svc = get_sheets_service()
+    header_range = f"{cfg.worksheet}!A{cfg.header_row}:Z{cfg.header_row}"
+    header_resp = svc.spreadsheets().values().get(
+        spreadsheetId=cfg.spreadsheet_id,
+        range=header_range,
+    ).execute()
+    headers = header_resp.get("values", [[]])[0]
+    if not headers:
+        return [], []
+    data_range = f"{cfg.worksheet}!A{cfg.header_row + 1}:Z"
+    data_resp = svc.spreadsheets().values().get(
+        spreadsheetId=cfg.spreadsheet_id,
+        range=data_range,
+    ).execute()
+    values = data_resp.get("values", [])
+    rows = _values_to_rows(headers, values)
+    return headers, rows
+
+
 def read_table(entity: str) -> Tuple[List[str], List[Dict[str, Any]]]:
     sid = get_current_spreadsheet_id()
-    cached = _get_cached(sid, entity)
-    if cached:
-        return cached
 
-    with time_sheets_block():
-        cfg = SHEETS[entity]
-        svc = get_sheets_service()
+    def _fetch() -> Tuple[List[str], List[Dict[str, Any]]]:
+        with time_sheets_block():
+            return _fetch_table_from_sheets(entity)
 
-        header_range = f"{cfg.worksheet}!A{cfg.header_row}:Z{cfg.header_row}"
-        header_resp = svc.spreadsheets().values().get(
-            spreadsheetId=cfg.spreadsheet_id,
-            range=header_range,
-        ).execute()
-        headers = header_resp.get("values", [[]])[0]
-        if not headers:
-            return [], []
-
-        data_range = f"{cfg.worksheet}!A{cfg.header_row + 1}:Z"
-        data_resp = svc.spreadsheets().values().get(
-            spreadsheetId=cfg.spreadsheet_id,
-            range=data_range,
-        ).execute()
-        values = data_resp.get("values", [])
-
-        rows = _values_to_rows(headers, values)
-        _set_cached(sid, entity, headers, rows)
-    return headers, rows
+    return cache_get_table(sid, entity, _fetch)
 
 
 def _movimiento_to_item(r: Dict[str, Any]) -> Dict[str, Any]:
