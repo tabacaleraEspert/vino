@@ -1,0 +1,29 @@
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings):
+    APP_VERSION: str = "0.1.0"
+    ENV: str = "local"
+
+    JWT_SECRET: str = "dev_change_me"
+    JWT_EXPIRE_MIN: int = 60 * 24
+    MASTER_KEY: str = "dev_master_change_me"
+    CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
+
+    SQL_SERVER: str | None = None
+    SQL_DB: str | None = None
+    SQL_USER: str | None = None
+    SQL_PASSWORD: str | None = None
+    SQL_USUARIO_TABLE: str = "MaestroUsuarios"
+    GOOGLE_SHEETS_CREDENTIALS_FILE: str | None = None
+    GOOGLE_SHEETS_CREDENTIALS_JSON: str | None = None
+    SHEETS_REGISTRY_JSON: str | None = None
+    # Fallback solo para scripts/dev; en producción viene de ID_Sheets (MaestroUsuarios)
+    SPREADSHEET_ID: str | None = None
+
+    class Config:
+        env_file = ".env"
+        extra = "ignore"
+
+
+settings = Settings()
