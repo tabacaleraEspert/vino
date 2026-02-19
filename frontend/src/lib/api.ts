@@ -384,6 +384,18 @@ function parseFecha(s: string | undefined): string {
   return String(s);
 }
 
+/** Parsea YYYY-MM-DD como fecha local (evita shift UTC→local en zonas negativas) */
+export function parseDateLocal(dateStr: string): Date {
+  if (!dateStr || !dateStr.includes("-")) return new Date(NaN);
+  const parts = dateStr.trim().split("-");
+  if (parts.length !== 3) return new Date(NaN);
+  const y = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10) - 1;
+  const d = parseInt(parts[2], 10);
+  if (isNaN(y) || isNaN(m) || isNaN(d)) return new Date(NaN);
+  return new Date(y, m, d);
+}
+
 /** Parsea monto (puede tener comas) */
 function parseMonto(v: string | number | undefined): number {
   if (v === undefined || v === null) return 0;
@@ -473,7 +485,7 @@ export function calcSpentFromTransactions(
 
   return transactions
     .filter((t) => {
-      const d = new Date(t.date);
+      const d = parseDateLocal(t.date);
       if (d.getMonth() !== ref.month || d.getFullYear() !== ref.year) return false;
       if (t.amount >= 0) return false; // solo gastos (negativos)
       if (t.categoryId !== budget.categoryId) return false;

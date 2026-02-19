@@ -4,7 +4,7 @@ import { useMonth } from "../context/MonthContext";
 import { MonthSelector } from "./MonthSelector";
 import { EditTransactionModal } from "./EditTransactionModal";
 import { Search, Filter, X, Calendar, DollarSign, Store, Edit2 } from "lucide-react";
-import type { Transaction } from "../../lib/api";
+import { parseDateLocal, type Transaction } from "../../lib/api";
 
 export function Transactions() {
   const { categories, merchants, transactions } = useData();
@@ -12,7 +12,7 @@ export function Transactions() {
   const { selectedMonth } = useMonth();
 
   const transactionsInMonth = transactions.filter((t) => {
-    const d = new Date(t.date);
+    const d = parseDateLocal(t.date);
     return d.getMonth() === selectedMonth.month && d.getFullYear() === selectedMonth.year;
   });
   const [searchTerm, setSearchTerm] = useState("");
@@ -97,7 +97,7 @@ export function Transactions() {
   };
 
   const groupedByDate = filteredTransactions.reduce((acc, t) => {
-    const date = new Date(t.date).toLocaleDateString("es-MX", {
+    const date = parseDateLocal(t.date).toLocaleDateString("es-MX", {
       weekday: "long",
       day: "numeric",
       month: "long",

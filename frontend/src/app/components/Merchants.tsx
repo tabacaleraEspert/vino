@@ -1,4 +1,5 @@
 import { useData } from "../context/DataContext";
+import { parseDateLocal } from "../../lib/api";
 import { Store, Plus, ChevronRight, Search } from "lucide-react";
 import { Link } from "react-router";
 import { useState, useMemo } from "react";
@@ -31,7 +32,7 @@ export function Merchants() {
         merchantTransactions.length > 0
           ? Math.max(
               ...merchantTransactions.map((t) =>
-                new Date(t.date).getTime()
+                parseDateLocal(t.date).getTime()
               )
             )
           : 0;

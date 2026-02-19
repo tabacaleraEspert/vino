@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router";
 import { useData } from "../context/DataContext";
+import { parseDateLocal } from "../../lib/api";
 import { ArrowLeft, Store, Edit2, X, Check } from "lucide-react";
 
 export function MerchantDetail() {
@@ -253,7 +254,7 @@ export function MerchantDetail() {
                       <p className="font-medium text-sm">{transaction.description}</p>
                       <p className="text-xs text-gray-500">
                         {txSubcategory?.name || txCategory?.name} •{" "}
-                        {new Date(transaction.date).toLocaleDateString("es-MX", {
+                        {parseDateLocal(transaction.date).toLocaleDateString("es-MX", {
                           day: "numeric",
                           month: "short",
                         })}
