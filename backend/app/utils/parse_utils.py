@@ -38,6 +38,29 @@ def parse_period(period: str) -> Tuple[date, date]:
         raise ValueError(f"period inválido: {period}") from e
 
 
+def parse_date_flex(value: any) -> Optional[date]:
+    """
+    Parsea fecha aceptando YYYY-MM-DD o DD/MM/YYYY.
+    Para API y payloads flexibles.
+    """
+    if value is None:
+        return None
+    s = str(value).strip()
+    if not s:
+        return None
+    # YYYY-MM-DD
+    if re.match(r"^\d{4}-\d{1,2}-\d{1,2}", s):
+        parts = s.split("-")
+        if len(parts) >= 3:
+            try:
+                y, m, d = int(parts[0]), int(parts[1]), int(parts[2].split()[0])
+                return date(y, m, d)
+            except (ValueError, TypeError):
+                pass
+    # DD/MM/YYYY
+    return parse_date_ddmmyyyy(value)
+
+
 def parse_date_ddmmyyyy(value: any) -> Optional[date]:
     """
     Parsea fecha en formato DD/MM/YYYY (con espacios posibles).
@@ -80,6 +103,41 @@ def parse_money(value: any) -> float:
         return float(s) if s else 0.0
     except ValueError:
         return 0.0
+
+
+def parse_periodo_mes(mes_anio: str) -> date:
+    """
+    Parsea mesAño a date (primer día del mes).
+    Acepta: "MM/YY" (ej: 12/25), "YYYY-MM" (ej: 2025-12).
+    YY < 50 => 20YY, else 19YY.
+    Raises ValueError si inválido.
+    """
+    import re
+    s = (mes_anio or "").strip()
+    if not s:
+        raise ValueError("mesAño es obligatorio")
+    # YYYY-MM
+    if re.match(r"^\d{4}-\d{1,2}$", s):
+        parts = s.split("-")
+        y, m = int(parts[0]), int(parts[1])
+        if m < 1 or m > 12:
+            raise ValueError(f"mes inválido: {m}")
+        return date(y, m, 1)
+    # MM/YY
+    if re.match(r"^(0[1-9]|1[0-2])/\d{2}$", s):
+        parts = s.split("/")
+        m, yy = int(parts[0]), int(parts[1])
+        y = 2000 + yy if yy < 50 else 1900 + yy
+        return date(y, m, 1)
+    raise ValueError(f"mesAño debe ser MM/YY (ej: 12/25) o YYYY-MM, recibido: {mes_anio}")
+
+
+def periodo_mes_to_mes_anio(periodo: date | None) -> str:
+    """Convierte date (primer día del mes) a "MM/YY"."""
+    if periodo is None:
+        return ""
+    yy = periodo.year % 100
+    return f"{periodo.month:02d}/{yy:02d}"
 
 
 def normalize_mes_anio(s: str) -> str:

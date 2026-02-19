@@ -54,7 +54,7 @@ def _prefetch_tables() -> None:
     from app.sheets.service import read_table
 
     set_current_spreadsheet_id(sid)
-    tables = ["reglas", "categorias", "subcategorias", "presupuestos"]
+    tables = ["reglas", "categorias", "subcategorias"]  # presupuestos ahora en SQL
     for t in tables:
         try:
             read_table(t)
@@ -75,7 +75,7 @@ def _refresh_loop() -> None:
     from app.sheets.service import read_table
 
     set_current_spreadsheet_id(sid)
-    tables = ["reglas", "categorias", "subcategorias", "presupuestos"]
+    tables = ["reglas", "categorias", "subcategorias"]  # presupuestos ahora en SQL
     while True:
         time.sleep(interval)
         for t in tables:

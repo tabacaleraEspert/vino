@@ -2,15 +2,16 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 
-from app.api.deps import set_sheets_context
 from app.core.security import require_user
-from app.sheets.catalog_service import (
-    list_categorias as svc_list_categorias,
-    create_categoria as svc_create_categoria,
-    patch_categoria_by_id as svc_patch_categoria,
-    delete_categoria_by_id as svc_delete_categoria,
-    create_subcategoria as svc_create_subcategoria,
-    get_categoria_by_id as svc_get_categoria,
+from app.db.catalog import (
+    _get_id_usuario,
+    list_categorias_sql,
+    create_categoria_sql,
+    patch_categoria_sql,
+    delete_categoria_sql,
+    create_subcategoria_sql,
+    get_categoria_by_id_sql,
+    list_subcategorias_sql,
 )
 
 router = APIRouter()
@@ -33,26 +34,42 @@ class CategoryPatch(BaseModel):
     color: Optional[str] = None
 
 
+def _to_frontend_categoria(row: dict) -> dict:
+    """Formato compatible con frontend (categorias list)."""
+    return {"id": row["id"], "nombre": row["nombre"], "icon": row["icon"], "color": row["color"]}
+
+
 @router.get("")
 def get_categorias(user: dict = Depends(require_user)):
-    set_sheets_context(user)
-    return svc_list_categorias()
+    """Lista categorías del usuario desde Azure SQL (multi-tenant)."""
+    try:
+        id_usuario = _get_id_usuario(user)
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+    rows = list_categorias_sql(id_usuario)
+    return [_to_frontend_categoria(r) for r in rows]
 
 
 @router.post("")
 def post_categoria(payload: CategoryIn, user: dict = Depends(require_user)):
-    """Crea categoría en Sheets. Devuelve { id, nombre, icon, color }."""
-    set_sheets_context(user)
+    """Crea categoría en SQL. Devuelve { id, nombre, icon, color }."""
     try:
-        created = svc_create_categoria(
+        id_usuario = _get_id_usuario(user)
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+    try:
+        created = create_categoria_sql(
+            id_usuario=id_usuario,
             nombre=payload.name,
             icon=payload.icon,
             color=payload.color,
         )
         if payload.subcategories:
             for s in payload.subcategories:
-                svc_create_subcategoria(categoria_id=created["id"], nombre=s.name)
-        return created
+                create_subcategoria_sql(id_usuario, created["id"], s.name)
+        return _to_frontend_categoria(created)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Categoría no encontrada")
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -60,42 +77,45 @@ def post_categoria(payload: CategoryIn, user: dict = Depends(require_user)):
 @router.patch("/{id}")
 def patch_categoria(id: str, payload: CategoryPatch, user: dict = Depends(require_user)):
     """Actualiza categoría por Id. Solo campos presentes."""
-    set_sheets_context(user)
     try:
-        patch = payload.model_dump(exclude_unset=True)
-        if not patch:
-            cat = svc_get_categoria(id)
-            if not cat:
-                raise HTTPException(status_code=404, detail="Categoría no encontrada")
-            return cat
-        updated = svc_patch_categoria(id, patch)
-        return updated
-    except KeyError:
+        id_usuario = _get_id_usuario(user)
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+    patch = payload.model_dump(exclude_unset=True)
+    if not patch:
+        cat = get_categoria_by_id_sql(id_usuario, id)
+        if not cat:
+            raise HTTPException(status_code=404, detail="Categoría no encontrada")
+        return _to_frontend_categoria(cat)
+    updated = patch_categoria_sql(id_usuario, id, patch)
+    if not updated:
         raise HTTPException(status_code=404, detail="Categoría no encontrada")
-    except RuntimeError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    return _to_frontend_categoria(updated)
 
 
 @router.delete("/{id}")
 def delete_categoria(id: str, user: dict = Depends(require_user)):
-    set_sheets_context(user)
-    if not svc_delete_categoria(id):
+    try:
+        id_usuario = _get_id_usuario(user)
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+    if not delete_categoria_sql(id_usuario, id):
         raise HTTPException(status_code=404, detail="Categoría no encontrada")
     return {"deleted": True, "id": id}
 
 
 @router.post("/{id}/subcategorias")
 def post_subcategoria(id: str, payload: SubcategoryIn, user: dict = Depends(require_user)):
-    """
-    Crea una subcategoría asociada a la categoría {id}.
-    Chequeos: categoría existe, nombre no vacío, no duplicado en la misma categoría.
-    """
-    set_sheets_context(user)
+    """Crea subcategoría asociada a la categoría {id}. Valida pertenencia al usuario."""
+    try:
+        id_usuario = _get_id_usuario(user)
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail=str(e))
     nombre = (payload.name or "").strip()
     if not nombre:
         raise HTTPException(status_code=400, detail="El nombre de la subcategoría no puede estar vacío")
     try:
-        created = svc_create_subcategoria(categoria_id=id, nombre=nombre)
+        created = create_subcategoria_sql(id_usuario, id, nombre)
         return {
             "id": created["id"],
             "name": created["nombre"],

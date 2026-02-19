@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     SPREADSHEET_ID: str | None = None
     # Cache in-memory para read_table (segundos). 0 = desactivado.
     SHEETS_CACHE_TTL_SEC: int = 120
+    # Movimientos desde SQL (True) o Sheets (False). Default SQL.
+    MOVIMIENTOS_USE_SQL: bool = True
     # Refresco periódico de cache (segundos). 0 = desactivado. Solo si SPREADSHEET_ID está set.
     SHEETS_REFRESH_INTERVAL_SEC: int = 300
 

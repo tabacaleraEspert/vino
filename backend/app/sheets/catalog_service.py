@@ -23,8 +23,14 @@ DEFAULT_COLOR = "#6b7280"
 
 
 def list_categorias() -> List[Dict[str, Any]]:
+    """Lista categorías. Usa SQL si hay id_usuario en contexto; si no, Sheets (legacy)."""
+    from app.core.security import get_current_user_id
+    from app.db.catalog import list_categorias_sql
+
+    id_usuario = get_current_user_id()
+    if id_usuario is not None:
+        return list_categorias_sql(id_usuario)
     _, rows = read_table("categorias")
-    # headers: Id, Nombre, [Icon], [Color]
     out = []
     for r in rows:
         if not str(r.get("Id", "")).strip():
@@ -139,6 +145,13 @@ def patch_categoria_by_id(cat_id: str, patch: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def get_categoria_by_id(cat_id: str) -> Optional[Dict[str, Any]]:
+    """Obtiene categoría por Id. Usa SQL si hay id_usuario en contexto."""
+    from app.core.security import get_current_user_id
+    from app.db.catalog import get_categoria_by_id_sql
+
+    id_usuario = get_current_user_id()
+    if id_usuario is not None:
+        return get_categoria_by_id_sql(id_usuario, cat_id)
     _, rows = read_table("categorias")
     for r in rows:
         if str(r.get("Id", "")).strip() == str(cat_id).strip():
@@ -343,8 +356,15 @@ def delete_subcategoria_by_id(sub_id: str) -> bool:
 
 
 def list_subcategorias(categoria_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Lista subcategorías. Usa SQL si hay id_usuario en contexto."""
+    from app.core.security import get_current_user_id
+    from app.db.catalog import list_subcategorias_sql
+
+    id_usuario = get_current_user_id()
+    if id_usuario is not None:
+        cat_id = int(categoria_id) if categoria_id else None
+        return list_subcategorias_sql(id_usuario, categoria_id=cat_id)
     _, rows = read_table("subcategorias")
-    # headers: Id_Categoria, Id, Nombre_SubCategoria
     out = []
     for r in rows:
         sid = str(r.get("Id", "")).strip()

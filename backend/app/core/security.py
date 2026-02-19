@@ -1,3 +1,4 @@
+from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -9,6 +10,9 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from app.core.config import settings
 
 bearer = HTTPBearer(auto_error=False)
+
+# Id_usuario (MaestroUsuarios.id) para catalog SQL multi-tenant
+_current_user_id: ContextVar[Optional[int]] = ContextVar("user_id", default=None)
 
 
 def create_access_token(
@@ -46,7 +50,19 @@ def require_user(creds: HTTPAuthorizationCredentials = Depends(bearer)) -> dict:
     if id_sheets:
         from app.sheets.registry import set_current_spreadsheet_id
         set_current_spreadsheet_id(id_sheets)
+    # Establecer id_usuario para catalog SQL (sub = MaestroUsuarios.id)
+    sub = payload.get("sub") or payload.get("id")
+    if sub:
+        try:
+            _current_user_id.set(int(sub))
+        except (TypeError, ValueError):
+            pass
     return payload
+
+
+def get_current_user_id() -> Optional[int]:
+    """Id_usuario del token (MaestroUsuarios.id). None si no hay contexto."""
+    return _current_user_id.get()
 
 
 def hash_password(password: str) -> str:

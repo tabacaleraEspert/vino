@@ -14,6 +14,7 @@ from app.api.v1 import categorias
 from app.api.v1 import subcategorias
 from app.api.v1 import reglas
 from app.api.v1 import presupuestos
+from app.api.v1 import recategorizaciones
 from app.api.v1 import comercios
 from app.api.v1 import views
 from app.api.v1 import admin
@@ -34,3 +35,4 @@ router.include_router(categorias.router, prefix="/categorias", tags=["catalogo"]
 router.include_router(subcategorias.router, prefix="/subcategorias", tags=["catalogo"], dependencies=[auth_dep])
 router.include_router(reglas.router, prefix="/reglas", tags=["catalogo"], dependencies=[auth_dep])
 router.include_router(presupuestos.router, prefix="/presupuestos", tags=["catalogo"], dependencies=[auth_dep])
+router.include_router(recategorizaciones.router, prefix="/recategorizaciones", tags=["recategorizacion"], dependencies=[auth_dep])

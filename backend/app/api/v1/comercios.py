@@ -1,9 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 
 from app.api.deps import set_sheets_context
 from app.core.security import require_user
+from app.db.catalog import _get_id_usuario
+from app.db.regla_comercio import list_reglas_comercio, create_regla_user, update_regla
+from app.utils.normalize import normalize_text
 from app.storage.store import get_all, add_item, update_item, delete_item
 
 router = APIRouter()
@@ -37,66 +40,71 @@ def create_comercio(payload: MerchantIn, user: dict = Depends(require_user)):
 
 
 @router.patch("/{id}")
-def patch_comercio(id: str, payload: dict, user: dict = Depends(require_user)):
+def patch_comercio(id: str, payload: dict, background_tasks: BackgroundTasks, user: dict = Depends(require_user)):
     set_sheets_context(user)
     updated = update_item("merchants", id, payload)
     if updated:
         return updated
 
-    # Comercio virtual: existe en reglas (Sheets) pero no en store. Buscar por id (nombre derivado) y crear/actualizar.
+    # Comercio virtual: existe en reglas (SQL ReglaComercio) pero no en store.
     if id.startswith(VIRTUAL_MERCHANT_PREFIX):
         name = _id_to_merchant_name(id)
         cat_id = (payload.get("defaultCategoryId") or "").strip()
         sub_id = (payload.get("defaultSubcategoryId") or "").strip()
-        if not cat_id:
+        if not sub_id:
+            sub_id = cat_id
+        if not sub_id:
             raise HTTPException(
                 status_code=400,
-                detail="Para comercios virtuales se requiere defaultCategoryId",
+                detail="Para comercios virtuales se requiere defaultSubcategoryId o defaultCategoryId",
             )
         try:
-            from app.sheets.catalog_service import (
-                create_regla,
-                list_reglas,
-                patch_regla_by_id,
-            )
-
-            def _nombre_normalizado(s: str) -> str:
-                return " ".join(str(s or "").strip().lower().split())
-
-            name_norm = _nombre_normalizado(name)
-            all_reglas = list_reglas(comercio=name)
+            id_usuario = _get_id_usuario(user)
+            name_norm = normalize_text(name)
+            all_reglas = list_reglas_comercio(id_usuario)
             existing = [
-                r
-                for r in all_reglas
-                if _nombre_normalizado(r.get("comercio", "")) == name_norm
+                r for r in all_reglas
+                if normalize_text(r.get("comercio", r.get("patron", ""))) == name_norm
             ]
+            regla_cat_id = cat_id
+            regla_sub_id = sub_id
             if existing:
-                patch_regla_by_id(
-                    existing[0]["id"],
-                    {"categoria_id": cat_id, "subcategoria_id": sub_id or ""},
+                updated = update_regla(
+                    id_usuario=id_usuario,
+                    regla_id=existing[0]["id"],
+                    id_subcategoria=sub_id,
                 )
+                if updated:
+                    regla_cat_id = updated.get("categoria_id", cat_id)
+                    regla_sub_id = updated.get("subcategoria_id", sub_id)
+                    from app.services.recategorizacion import enqueue_recategorization_job, process_job
+                    job = enqueue_recategorization_job(id_usuario, int(updated["id"]), days_back=30)
+                    background_tasks.add_task(process_job, id_usuario, job["id"])
             else:
-                create_regla(
-                    merchant_id=id,
-                    category_id=cat_id,
-                    subcategory_id=sub_id or "",
-                    merchant_name=name,
+                created = create_regla_user(
+                    id_usuario=id_usuario,
+                    patron=name,
+                    id_subcategoria=sub_id,
                 )
+                regla_cat_id = created.get("categoria_id", cat_id)
+                regla_sub_id = created.get("subcategoria_id", sub_id)
         except KeyError as e:
             msg = str(e).strip("'\"")
             raise HTTPException(status_code=404, detail=msg)
-        except RuntimeError as e:
+        except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
         new_merchant = add_item(
             "merchants",
             {
                 "name": name,
-                "defaultCategoryId": cat_id,
-                "defaultSubcategoryId": sub_id or None,
+                "defaultCategoryId": regla_cat_id or cat_id,
+                "defaultSubcategoryId": regla_sub_id or None,
             },
             custom_id=id,
         )
+        if existing and "recategorization_job_id" not in new_merchant:
+            new_merchant["recategorization_job_id"] = job["id"]
         return new_merchant
 
     raise HTTPException(status_code=404, detail="Comercio no encontrado")
