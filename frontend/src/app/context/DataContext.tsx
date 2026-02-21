@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import { useAuth } from "./AuthContext";
+import { useMonth } from "./MonthContext";
 import {
   api,
   mapMovimientoItemToTransaction,
@@ -26,6 +27,7 @@ interface DataContextType {
   deleteSubcategory: (categoryId: string, subcategoryId: string) => Promise<void>;
   transactions: Transaction[];
   updateTransaction: (id: string, updates: Partial<Transaction>) => Promise<void>;
+  deleteTransaction: (id: string) => Promise<void>;
   budgets: Budget[];
   addBudget: (budget: Omit<Budget, "id">) => Promise<void>;
   updateBudget: (id: string, budget: Partial<Budget>) => Promise<void>;
@@ -47,6 +49,7 @@ const DataContext = createContext<DataContextType | undefined>(undefined);
 
 export function DataProvider({ children }: { children: ReactNode }) {
   const { token } = useAuth();
+  const { selectedMonth } = useMonth();
   const [categories, setCategories] = useState<Category[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [merchants, setMerchants] = useState<Merchant[]>([]);
@@ -71,7 +74,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
           presupuestos: [],
           comercios: [],
         })),
-        api.movimientos.list({ limit: "5000" }, token).catch((): MovimientosPaginatedResponse => ({ items: [], page: 1, limit: 50, total: 0 })),
+        api.movimientos.list(
+          {
+            limit: "1000",
+            period: `${selectedMonth.year}-${String(selectedMonth.month + 1).padStart(2, "0")}`,
+          },
+          token
+        ).catch((): MovimientosPaginatedResponse => ({ items: [], page: 1, limit: 100, total: 0 })),
       ]);
       const categoriasRaw = boot.categorias || [];
       const subcategoriasRaw = boot.subcategorias || [];
@@ -86,14 +95,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const buds = mapPresupuestosToBudgets(presupuestosRaw || []);
 
       const mersList = mers || [];
-      const comerciosFromReglas = [
-        ...new Set(
-          (reglasRaw || [])
-            .map((r) => (r.comercio || "").trim())
-            .filter(Boolean)
-        ),
+      const movsRes = movs as MovimientosPaginatedResponse;
+      const items = movsRes?.items ?? [];
+      // Comercios desde reglas + movimientos (transacciones del usuario)
+      const comerciosFromReglas = (reglasRaw || [])
+        .map((r) => (r.comercio || "").trim())
+        .filter(Boolean);
+      const comerciosFromMovimientos = items
+        .map((m) => (m.comercio || m.descripcion || m.Comercio || m.Descripcion || "").trim())
+        .filter(Boolean);
+      const allComercioNames = [
+        ...new Set([...comerciosFromReglas, ...comerciosFromMovimientos]),
       ];
-      const virtualMerchants = comerciosFromReglas
+      const virtualMerchants = allComercioNames
         .filter(
           (nombre) =>
             !mersList.some(
@@ -115,8 +129,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setMerchants(merchantsEnhanced);
       setMerchantRules(rules);
 
-      const movsRes = movs as MovimientosPaginatedResponse;
-      const items = movsRes?.items ?? [];
       const mapped = items.map((m) =>
         mapMovimientoItemToTransaction(m, cats, merchantsEnhanced)
       );
@@ -131,7 +143,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [token]);
+  }, [token, selectedMonth.month, selectedMonth.year]);
 
   useEffect(() => {
     fetchData();
@@ -239,6 +251,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
     await fetchData();
   };
 
+  const deleteTransaction = async (id: string) => {
+    if (!token) return;
+    await api.movimientos.delete(id, token);
+    await fetchData();
+  };
+
   return (
     <DataContext.Provider
       value={{
@@ -251,6 +269,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         deleteSubcategory,
         transactions,
         updateTransaction,
+        deleteTransaction,
         budgets,
         addBudget,
         updateBudget,

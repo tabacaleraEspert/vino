@@ -357,6 +357,8 @@ export const api = {
         body: JSON.stringify(data),
         token,
       }),
+    delete: (id: string, token?: string) =>
+      apiFetch(`/movimientos/${id}`, { method: "DELETE", token }),
   },
 };
 

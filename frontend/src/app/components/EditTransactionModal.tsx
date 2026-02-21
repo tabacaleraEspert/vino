@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { X, Receipt } from "lucide-react";
+import { X, Receipt, Trash2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "../context/AuthContext";
 import { useData } from "../context/DataContext";
@@ -18,7 +18,7 @@ export function EditTransactionModal({
   onClose,
 }: EditTransactionModalProps) {
   const { token } = useAuth();
-  const { updateTransaction, refresh, categories, merchants } = useData();
+  const { updateTransaction, deleteTransaction, refresh, categories, merchants } = useData();
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState("");
@@ -27,6 +27,8 @@ export function EditTransactionModal({
   const [subcategoryId, setSubcategoryId] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     if (show && transaction) {
@@ -37,6 +39,7 @@ export function EditTransactionModal({
       setCategoryId(transaction.categoryId || "");
       setSubcategoryId(transaction.subcategoryId || "");
       setError("");
+      setShowDeleteConfirm(false);
     }
   }, [show, transaction]);
 
@@ -90,6 +93,27 @@ export function EditTransactionModal({
   const handleCategoryChange = (newCatId: string) => {
     setCategoryId(newCatId);
     setSubcategoryId("");
+  };
+
+  const handleDelete = async () => {
+    if (!transaction) return;
+    if (!showDeleteConfirm) {
+      setShowDeleteConfirm(true);
+      return;
+    }
+    setIsDeleting(true);
+    setError("");
+    try {
+      await deleteTransaction(transaction.id);
+      await api.movimientos.invalidateCache(token);
+      await refresh();
+      toast.success("Gasto eliminado correctamente");
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al eliminar");
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   if (!show || !transaction) return null;
@@ -237,6 +261,46 @@ export function EditTransactionModal({
             >
               {isSubmitting ? "Guardando..." : "Guardar Cambios"}
             </button>
+          </div>
+
+          {/* Eliminar gasto */}
+          <div className="pt-4 mt-4 border-t border-gray-200">
+            {showDeleteConfirm ? (
+              <div className="flex flex-col gap-3 p-3 bg-red-50 rounded-lg border border-red-200">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-red-700 flex-1">
+                    ¿Eliminar este gasto? Esta acción no se puede deshacer.
+                  </p>
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setShowDeleteConfirm(false)}
+                    className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDelete}
+                    disabled={isDeleting}
+                    className="px-3 py-1.5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors"
+                  >
+                    {isDeleting ? "Eliminando..." : "Sí, eliminar"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={handleDelete}
+                className="flex items-center justify-center gap-2 w-full py-3 text-red-600 font-medium hover:bg-red-50 rounded-lg transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+                Eliminar gasto
+              </button>
+            )}
           </div>
         </form>
       </div>

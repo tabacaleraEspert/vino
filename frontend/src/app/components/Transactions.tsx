@@ -3,13 +3,44 @@ import { useData } from "../context/DataContext";
 import { useMonth } from "../context/MonthContext";
 import { MonthSelector } from "./MonthSelector";
 import { EditTransactionModal } from "./EditTransactionModal";
-import { Search, Filter, X, Calendar, DollarSign, Store, Edit2 } from "lucide-react";
-import { parseDateLocal, type Transaction } from "../../lib/api";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "./ui/alert-dialog";
+import { Search, Filter, X, Calendar, DollarSign, Store, Edit2, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { useAuth } from "../context/AuthContext";
+import { api, parseDateLocal, type Transaction } from "../../lib/api";
 
 export function Transactions() {
-  const { categories, merchants, transactions } = useData();
+  const { token } = useAuth();
+  const { categories, merchants, transactions, deleteTransaction, refresh } = useData();
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [transactionToDelete, setTransactionToDelete] = useState<Transaction | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const { selectedMonth } = useMonth();
+
+  const handleDeleteFromList = async () => {
+    if (!transactionToDelete) return;
+    setIsDeleting(true);
+    try {
+      await deleteTransaction(transactionToDelete.id);
+      await api.movimientos.invalidateCache(token);
+      await refresh();
+      toast.success("Gasto eliminado correctamente");
+      setTransactionToDelete(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error al eliminar");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const transactionsInMonth = transactions.filter((t) => {
     const d = parseDateLocal(t.date);
@@ -284,7 +315,7 @@ export function Transactions() {
                               .join(" • ")}
                           </p>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1">
                           <p className="text-sm font-semibold text-red-600">
                             -${Math.abs(transaction.amount).toLocaleString("es-MX")}
                           </p>
@@ -298,6 +329,17 @@ export function Transactions() {
                             aria-label="Editar transacción"
                           >
                             <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setTransactionToDelete(transaction);
+                            }}
+                            className="p-2 rounded-lg hover:bg-red-50 text-gray-500 hover:text-red-600 transition-colors"
+                            aria-label="Eliminar transacción"
+                          >
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       </div>
@@ -316,6 +358,39 @@ export function Transactions() {
         transaction={editingTransaction}
         onClose={() => setEditingTransaction(null)}
       />
+
+      {/* Diálogo de confirmación para eliminar */}
+      <AlertDialog open={!!transactionToDelete} onOpenChange={(open) => !open && setTransactionToDelete(null)}>
+        <AlertDialogContent className="max-w-[calc(100%-2rem)] sm:max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar este gasto?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {transactionToDelete && (
+                <>
+                  Se eliminará la transacción de{" "}
+                  <span className="font-medium text-gray-900">
+                    ${Math.abs(transactionToDelete.amount).toLocaleString("es-MX")}
+                  </span>
+                  . Esta acción no se puede deshacer.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                handleDeleteFromList();
+              }}
+              disabled={isDeleting}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {isDeleting ? "Eliminando..." : "Sí, eliminar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Modal de Filtros Avanzados */}
       {showAdvancedFilters && (
