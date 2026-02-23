@@ -115,10 +115,16 @@ export function Dashboard() {
   const totalBudget = summary?.presupuesto_mes ?? budgets.reduce((sum, b) => sum + b.amount, 0);
   const percentageUsed = totalBudget > 0 ? (monthSpent / totalBudget) * 100 : 0;
 
-  const spendingByCategory = (breakdown?.gastos_por_categoria ?? []).slice(0, 4).map((g) => {
+  const spendingByCategory = (breakdown?.gastos_por_categoria ?? []).slice(0, 6).map((g) => {
     const cat = categories.find((c) => c.name.toLowerCase() === g.categoria.toLowerCase());
     return { ...g, ...cat, amount: g.total };
   });
+
+  const totalSpent = spendingByCategory.reduce((sum, g) => sum + g.amount, 0);
+  const maxPctOfTotal =
+    totalSpent > 0
+      ? Math.max(...spendingByCategory.map((g) => (g.amount / totalSpent) * 100), 0)
+      : 0;
 
   const recentTransactions = breakdown?.transacciones_recientes ?? [];
 
@@ -180,25 +186,55 @@ export function Dashboard() {
       {/* Gastos por categoría */}
       <div className="bg-white rounded-xl p-4 shadow-sm">
         <h2 className="font-semibold mb-3">Gastos por Categoría</h2>
-        <div className="space-y-2">
+
+        {/* Barra apilada: proporción del total sin espacio vacío */}
+        {totalSpent > 0 && spendingByCategory.length > 0 && (
+          <div className="mb-4">
+            <div className="h-3 rounded-full overflow-hidden flex">
+              {spendingByCategory.map((item) => {
+                const pct = (item.amount / totalSpent) * 100;
+                return (
+                  <div
+                    key={item.categoria}
+                    className="h-full transition-all min-w-[2px]"
+                    style={{
+                      width: `${Math.max(pct, 0.5)}%`,
+                      backgroundColor: item.color ?? "#6b7280",
+                    }}
+                    title={`${item.categoria}: ${pct.toFixed(1)}%`}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Lista: barra relativa al máximo (la más alta al 100%), % real mostrado */}
+        <div className="space-y-3">
           {spendingByCategory.map((item) => {
-            const budget = item.id ? budgets.find((b) => b.categoryId === item.id) : null;
-            const percentage = budget ? (item.amount / budget.amount) * 100 : (item.pct ?? 0) * 100;
+            const pctOfTotal = totalSpent > 0 ? (item.amount / totalSpent) * 100 : 0;
+            const barWidth =
+              maxPctOfTotal > 0 ? (pctOfTotal / maxPctOfTotal) * 100 : 0;
             return (
               <div key={item.categoria} className="flex items-center gap-3">
-                <div className="text-2xl">{item.icon ?? "📁"}</div>
+                <div className="text-2xl flex-shrink-0">{item.icon ?? "📁"}</div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-sm font-medium truncate">{item.categoria}</span>
-                    <span className="text-sm font-semibold text-gray-900">
-                      ${item.amount.toLocaleString("es-MX")}
-                    </span>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="text-xs text-gray-500 tabular-nums">
+                        {pctOfTotal.toFixed(1)}%
+                      </span>
+                      <span className="text-sm font-semibold text-gray-900">
+                        ${item.amount.toLocaleString("es-MX")}
+                      </span>
+                    </div>
                   </div>
-                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                     <div
-                      className="h-full rounded-full transition-all"
+                      className="h-full rounded-full transition-all duration-500 min-w-[4px]"
                       style={{
-                        width: `${Math.min(percentage, 100)}%`,
+                        width: `${Math.max(barWidth, 2)}%`,
                         backgroundColor: item.color ?? "#6b7280",
                       }}
                     />

@@ -59,17 +59,19 @@ def list_reglas_comercio(id_usuario: int) -> List[Dict[str, Any]]:
     """
     Lista reglas del usuario con nombres de categoría/subcategoría.
     Formato compatible con ReglaRaw: id, comercio (patron), ejemploRazonSocial, categoria_id, subcategoria_id, etc.
+    Usa subconsulta para nombres: si Categoria/SubCategoria no existen para el usuario, devuelve reglas igual.
     """
     with get_connection() as conn:
         cur = conn.cursor()
+        # Query directa: reglas siempre; nombres desde subconsultas (evita problemas si cat/subcat vacíos)
         cur.execute(
             """
-            SELECT rc.Id, rc.Patron, rc.EjemploRazonSocial, rc.Id_Categoria, c.Nombre,
-                   rc.Id_SubCategoria, sc.Nombre_SubCategoria,
-                   rc.Prioridad, rc.Activa, rc.Confianza, rc.ActualizadoEn
+            SELECT
+                rc.Id, rc.Patron, rc.EjemploRazonSocial, rc.Id_Categoria, rc.Id_SubCategoria,
+                rc.Prioridad, rc.Activa, rc.Confianza, rc.ActualizadoEn,
+                (SELECT c.Nombre FROM dbo.Categoria c WHERE c.Id = rc.Id_Categoria AND c.Id_usuario = rc.Id_usuario) AS Nombre_Categoria,
+                (SELECT sc.Nombre_SubCategoria FROM dbo.SubCategoria sc WHERE sc.Id = rc.Id_SubCategoria AND sc.Id_usuario = rc.Id_usuario) AS Nombre_SubCategoria
             FROM dbo.ReglaComercio rc
-            JOIN dbo.Categoria c ON c.Id = rc.Id_Categoria AND c.Id_usuario = rc.Id_usuario
-            JOIN dbo.SubCategoria sc ON sc.Id = rc.Id_SubCategoria AND sc.Id_usuario = rc.Id_usuario
             WHERE rc.Id_usuario = ?
             ORDER BY rc.Prioridad ASC, LEN(rc.PatronNorm) DESC, rc.ActualizadoEn DESC
             """,
@@ -77,27 +79,30 @@ def list_reglas_comercio(id_usuario: int) -> List[Dict[str, Any]]:
         )
         rows = cur.fetchall()
 
+    logger.info("list_reglas_comercio id_usuario=%s rows=%d", id_usuario, len(rows))
+
     out = []
     for r in rows:
+        # Columnas: Id, Patron, EjemploRazonSocial, Id_Categoria, Id_SubCategoria, Prioridad, Activa, Confianza, ActualizadoEn, Nombre_Categoria, Nombre_SubCategoria
         out.append({
             "id": str(r[0]),
             "patron": str(r[1] or "").strip(),
             "ejemploRazonSocial": str(r[2] or "").strip() if r[2] else None,
             "idCategoria": r[3],
-            "nombreCategoria": str(r[4] or "").strip(),
-            "idSubcategoria": r[5],
-            "nombreSubcategoria": str(r[6] or "").strip(),
-            "prioridad": r[7] or 100,
-            "activa": bool(r[8]) if r[8] is not None else True,
-            "confianza": str(r[9] or "AUTO").strip(),
-            "actualizadoEn": r[10].isoformat() if r[10] else None,
+            "nombreCategoria": str(r[9] or "").strip() if len(r) > 9 else "",
+            "idSubcategoria": r[4],
+            "nombreSubcategoria": str(r[10] or "").strip() if len(r) > 10 else "",
+            "prioridad": r[5] or 100,
+            "activa": bool(r[6]) if r[6] is not None else True,
+            "confianza": str(r[7] or "AUTO").strip(),
+            "actualizadoEn": r[8].isoformat() if r[8] else None,
             # Compatibilidad ReglaRaw
             "comercio": str(r[1] or "").strip(),
-            "categoria_id": str(r[3]),
-            "categoria_nombre": str(r[4] or "").strip(),
-            "subcategoria_id": str(r[5]),
-            "subcategoria_nombre": str(r[6] or "").strip(),
-            "timestamp": r[10].isoformat() if r[10] else None,
+            "categoria_id": str(r[3]) if r[3] is not None else "",
+            "categoria_nombre": str(r[9] or "").strip() if len(r) > 9 else "",
+            "subcategoria_id": str(r[4]) if r[4] is not None else "",
+            "subcategoria_nombre": str(r[10] or "").strip() if len(r) > 10 else "",
+            "timestamp": r[8].isoformat() if r[8] else None,
         })
     return out
 
@@ -131,9 +136,9 @@ def create_regla_user(
             """
             INSERT INTO dbo.ReglaComercio
             (Id_usuario, Patron, PatronNorm, EjemploRazonSocial, Id_Categoria, Id_SubCategoria, Prioridad, Activa, Confianza)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'USER')
             OUTPUT INSERTED.Id, INSERTED.Patron, INSERTED.PatronNorm, INSERTED.EjemploRazonSocial,
                    INSERTED.Id_Categoria, INSERTED.Id_SubCategoria, INSERTED.Prioridad, INSERTED.Activa, INSERTED.Confianza, INSERTED.ActualizadoEn
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'USER')
             """,
             (
                 id_usuario,
