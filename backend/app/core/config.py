@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     SQL_USUARIO_TABLE: str = "MaestroUsuarios"
     # Cache de usuario por nombre para login (segundos). 0 = desactivado.
     SQL_LOGIN_CACHE_TTL_SEC: int = 60
+    # Cache de catálogos (categorías, subcategorías, reglas, presupuestos) por id_usuario. 0 = desactivado.
+    SQL_CATALOG_CACHE_TTL_SEC: int = 300
     GOOGLE_SHEETS_CREDENTIALS_FILE: str | None = None
     GOOGLE_SHEETS_CREDENTIALS_JSON: str | None = None
     SHEETS_REGISTRY_JSON: str | None = None

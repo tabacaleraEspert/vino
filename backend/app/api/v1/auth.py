@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
@@ -5,6 +7,7 @@ from app.core.security import create_access_token, require_user, verify_password
 from app.db.users import get_user_by_nombre
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class LoginIn(BaseModel):
@@ -40,15 +43,23 @@ def login(payload: LoginIn):
             detail="Usuario sin ID_Sheets configurado. Contactar administrador.",
         )
 
+    # sub = id de MaestroUsuarios (usado para filtrar movimientos por Id_usuario)
+    user_id = user.get("id") or user.get("Id")  # SQL Server puede devolver "Id"
+    if user_id is None or user_id == "":
+        logger.warning("login_user_id_missing nombre=%s user_keys=%s", payload.username, list(user.keys()))
+        user_id = payload.username  # fallback (causará error en _get_id_usuario si no es numérico)
+    else:
+        user_id = str(user_id)
+    logger.info("login_ok nombre=%s id_usuario=%s", payload.username, user_id)
     token = create_access_token(
-        sub=str(user.get("id", payload.username)),
+        sub=user_id,
         id_sheets=id_sheets,
     )
     return {
         "access_token": token,
         "token_type": "bearer",
         "user": {
-            "id": str(user.get("id", "")),
+            "id": str(user.get("id") or user.get("Id") or ""),
             "nombre": user.get("Nombre", ""),
             "apellido": user.get("Apellido", ""),
             "gmail": user.get("gmail", ""),

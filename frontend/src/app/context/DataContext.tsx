@@ -1,21 +1,22 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import { useAuth } from "./AuthContext";
 import { useMonth } from "./MonthContext";
+import { useCatalog } from "./CatalogContext";
 import {
   api,
   mapMovimientoItemToTransaction,
-  mapCatalogToCategories,
   mapReglasToMerchantRules,
   mapPresupuestosToBudgets,
   transactionToPatchPayload,
   type MovimientosPaginatedResponse,
+  type ReglaRaw,
   Category,
-  Subcategory,
   Transaction,
   Budget,
   Merchant,
   MerchantRule,
 } from "../../lib/api";
+import { fetchDataForPeriod } from "../../lib/dataLayer";
 
 interface DataContextType {
   categories: Category[];
@@ -50,7 +51,19 @@ const DataContext = createContext<DataContextType | undefined>(undefined);
 export function DataProvider({ children }: { children: ReactNode }) {
   const { token } = useAuth();
   const { selectedMonth } = useMonth();
-  const [categories, setCategories] = useState<Category[]>([]);
+  const {
+    categories,
+    addCategory,
+    updateCategory,
+    deleteCategory,
+    addSubcategory,
+    updateSubcategory,
+    deleteSubcategory,
+    refreshCatalog,
+    isLoading: catalogLoading,
+    error: catalogError,
+  } = useCatalog();
+
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [merchants, setMerchants] = useState<Merchant[]>([]);
   const [merchantRules, setMerchantRules] = useState<MerchantRule[]>([]);
@@ -58,189 +71,124 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchData = useCallback(async () => {
+  const period = `${selectedMonth.year}-${String(selectedMonth.month + 1).padStart(2, "0")}`;
+
+  const fetchData = useCallback(
+    async (forceRefresh = false) => {
+      if (!token) {
+        setIsLoading(false);
+        return;
+      }
+      setIsLoading(true);
+      setError(null);
+      try {
+        const { movimientos: movsRes, presupuestos: presupuestosRaw, reglas: reglasRaw, comercios: mers } =
+          await fetchDataForPeriod(token, period, { forceRefresh });
+
+        const items = movsRes?.items ?? [];
+        const mersList = mers ?? [];
+        const reglas = reglasRaw ?? [];
+
+        const comerciosFromReglas = reglas.map((r) => (r.comercio || "").trim()).filter(Boolean);
+        const comerciosFromMovimientos = items
+          .map((m) => (m.comercio || m.descripcion || (m as { Comercio?: string; Descripcion?: string }).Comercio || (m as { Comercio?: string; Descripcion?: string }).Descripcion || "").trim())
+          .filter(Boolean);
+        const allComercioNames = [...new Set([...comerciosFromReglas, ...comerciosFromMovimientos])];
+        const virtualMerchants = allComercioNames
+          .filter((nombre) => !mersList.some((m) => m.name.toLowerCase() === nombre.toLowerCase()))
+          .map((nombre) => ({
+            id: `comercio-${nombre.replace(/\s+/g, "_")}`,
+            name: nombre,
+          }));
+        const merchantsEnhanced = [...mersList, ...virtualMerchants];
+        const rules = mapReglasToMerchantRules(reglas, merchantsEnhanced);
+
+        setBudgets(mapPresupuestosToBudgets(presupuestosRaw ?? []));
+        setMerchants(merchantsEnhanced);
+        setMerchantRules(rules);
+
+        const mapped = items.map((m) =>
+          mapMovimientoItemToTransaction(m, categories, merchantsEnhanced)
+        );
+        setTransactions(mapped);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Error al cargar datos");
+        setBudgets([]);
+        setMerchants([]);
+        setMerchantRules([]);
+        setTransactions([]);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [token, period, categories]
+  );
+
+  useEffect(() => {
     if (!token) {
-      setIsLoading(false);
-      return;
-    }
-    setIsLoading(true);
-    setError(null);
-    try {
-      const [boot, movs] = await Promise.all([
-        api.bootstrap(token).catch(() => ({
-          categorias: [],
-          subcategorias: [],
-          reglas: [],
-          presupuestos: [],
-          comercios: [],
-        })),
-        api.movimientos.list(
-          {
-            limit: "1000",
-            period: `${selectedMonth.year}-${String(selectedMonth.month + 1).padStart(2, "0")}`,
-          },
-          token
-        ).catch((): MovimientosPaginatedResponse => ({ items: [], page: 1, limit: 100, total: 0 })),
-      ]);
-      const categoriasRaw = boot.categorias || [];
-      const subcategoriasRaw = boot.subcategorias || [];
-      const presupuestosRaw = boot.presupuestos || [];
-      const reglasRaw = boot.reglas || [];
-      const mers = boot.comercios || [];
-
-      const cats = mapCatalogToCategories(
-        categoriasRaw || [],
-        subcategoriasRaw || []
-      );
-      const buds = mapPresupuestosToBudgets(presupuestosRaw || []);
-
-      const mersList = mers || [];
-      const movsRes = movs as MovimientosPaginatedResponse;
-      const items = movsRes?.items ?? [];
-      // Comercios desde reglas + movimientos (transacciones del usuario)
-      const comerciosFromReglas = (reglasRaw || [])
-        .map((r) => (r.comercio || "").trim())
-        .filter(Boolean);
-      const comerciosFromMovimientos = items
-        .map((m) => (m.comercio || m.descripcion || m.Comercio || m.Descripcion || "").trim())
-        .filter(Boolean);
-      const allComercioNames = [
-        ...new Set([...comerciosFromReglas, ...comerciosFromMovimientos]),
-      ];
-      const virtualMerchants = allComercioNames
-        .filter(
-          (nombre) =>
-            !mersList.some(
-              (m) => m.name.toLowerCase() === nombre.toLowerCase()
-            )
-        )
-        .map((nombre) => ({
-          id: `comercio-${nombre.replace(/\s+/g, "_")}`,
-          name: nombre,
-        }));
-      const merchantsEnhanced = [...mersList, ...virtualMerchants];
-      const rules = mapReglasToMerchantRules(
-        reglasRaw || [],
-        merchantsEnhanced
-      );
-
-      setCategories(cats);
-      setBudgets(buds);
-      setMerchants(merchantsEnhanced);
-      setMerchantRules(rules);
-
-      const mapped = items.map((m) =>
-        mapMovimientoItemToTransaction(m, cats, merchantsEnhanced)
-      );
-      setTransactions(mapped);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al cargar datos");
-      setCategories([]);
       setBudgets([]);
       setMerchants([]);
       setMerchantRules([]);
       setTransactions([]);
-    } finally {
       setIsLoading(false);
+      return;
     }
-  }, [token, selectedMonth.month, selectedMonth.year]);
-
-  useEffect(() => {
+    if (catalogLoading) return;
     fetchData();
-  }, [fetchData]);
-
-  const addCategory = async (category: Omit<Category, "id">) => {
-    if (!token) return;
-    await api.categories.create(category, token);
-    await fetchData();
-  };
-
-  const updateCategory = async (id: string, updates: Partial<Category>) => {
-    if (!token) return;
-    await api.categories.update(id, updates, token);
-    await fetchData();
-  };
-
-  const deleteCategory = async (id: string) => {
-    if (!token) return;
-    await api.categories.delete(id, token);
-    await fetchData();
-  };
-
-  const addSubcategory = async (categoryId: string, subcategoryName: string) => {
-    if (!token) return;
-    await api.categories.addSubcategory(categoryId, subcategoryName, token);
-    await fetchData();
-  };
-
-  const updateSubcategory = async (
-    categoryId: string,
-    subcategoryId: string,
-    newName: string
-  ) => {
-    if (!token) return;
-    await api.subcategorias.update(subcategoryId, newName, token);
-    await fetchData();
-  };
-
-  const deleteSubcategory = async (categoryId: string, subcategoryId: string) => {
-    if (!token) return;
-    await api.subcategorias.delete(subcategoryId, token);
-    await fetchData();
-  };
+  }, [token, period, catalogLoading, fetchData]);
 
   const addBudget = async (budget: Omit<Budget, "id">) => {
     if (!token) return;
     await api.budgets.create(budget, token);
-    await fetchData();
+    await fetchData(true);
   };
 
   const updateBudget = async (id: string, updates: Partial<Budget>) => {
     if (!token) return;
     await api.budgets.update(id, updates, token);
-    await fetchData();
+    await fetchData(true);
   };
 
   const deleteBudget = async (id: string) => {
     if (!token) return;
     await api.budgets.delete(id, token);
-    await fetchData();
+    await fetchData(true);
   };
 
   const addMerchant = async (merchant: Omit<Merchant, "id">) => {
     if (!token) return;
     await api.merchants.create(merchant, token);
-    await fetchData();
+    await fetchData(true);
   };
 
-  const updateMerchant = async (id: string, updates: Partial<Merchant>) => {
+  const updateMerchant = async (id: string, merchant: Partial<Merchant>) => {
     if (!token) return;
-    await api.merchants.update(id, updates, token);
-    await fetchData();
+    await api.merchants.update(id, merchant, token);
+    await fetchData(true);
   };
 
   const deleteMerchant = async (id: string) => {
     if (!token) return;
     await api.merchants.delete(id, token);
-    await fetchData();
+    await fetchData(true);
   };
 
   const addMerchantRule = async (rule: Omit<MerchantRule, "id">) => {
     if (!token) return;
     await api.merchantRules.create(rule, token);
-    await fetchData();
+    await fetchData(true);
   };
 
-  const updateMerchantRule = async (id: string, updates: Partial<MerchantRule>) => {
+  const updateMerchantRule = async (id: string, rule: Partial<MerchantRule>) => {
     if (!token) return;
-    await api.merchantRules.update(id, updates, token);
-    await fetchData();
+    await api.merchantRules.update(id, rule, token);
+    await fetchData(true);
   };
 
   const deleteMerchantRule = async (id: string) => {
     if (!token) return;
     await api.merchantRules.delete(id, token);
-    await fetchData();
+    await fetchData(true);
   };
 
   const updateTransaction = async (id: string, updates: Partial<Transaction>) => {
@@ -248,14 +196,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const payload = transactionToPatchPayload(updates, categories, merchants);
     if (Object.keys(payload).length === 0) return;
     await api.movimientos.update(id, payload, token);
-    await fetchData();
+    await fetchData(true);
   };
 
   const deleteTransaction = async (id: string) => {
     if (!token) return;
     await api.movimientos.delete(id, token);
-    await fetchData();
+    await fetchData(true);
   };
+
+  const refresh = useCallback(async () => {
+    await refreshCatalog(true);
+    await fetchData(true);
+  }, [refreshCatalog, fetchData]);
 
   return (
     <DataContext.Provider
@@ -282,9 +235,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
         addMerchantRule,
         updateMerchantRule,
         deleteMerchantRule,
-        refresh: fetchData,
-        isLoading,
-        error,
+        refresh,
+        isLoading: isLoading || catalogLoading,
+        error: error || catalogError,
       }}
     >
       {children}

@@ -1,12 +1,20 @@
 import { useData } from "../context/DataContext";
 import { parseDateLocal } from "../../lib/api";
-import { Store, Plus, ChevronRight, Search } from "lucide-react";
+import { Store, Plus, ChevronRight, Search, Calendar } from "lucide-react";
 import { Link } from "react-router";
 import { useState, useMemo } from "react";
 import { CreateMerchantModal } from "./CreateMerchantModal";
 import { CreateRuleModal } from "./CreateRuleModal";
 
 type SortOrder = "alfa" | "nuevo" | "viejo";
+type CreatedFilter = "all" | "7" | "15" | "30";
+
+/** Extrae timestamp de id tipo mer_1234567890_1234 (store) */
+function getCreatedAtFromId(id: string): number | null {
+  const m = /^mer_(\d+)_\d+$/.exec(id);
+  if (m) return parseInt(m[1], 10);
+  return null;
+}
 
 export function Merchants() {
   const { merchants, merchantRules, categories, transactions } = useData();
@@ -14,12 +22,14 @@ export function Merchants() {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortOrder, setSortOrder] = useState<SortOrder>("alfa");
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>("all");
+  const [createdFilter, setCreatedFilter] = useState<CreatedFilter>("all");
   const [ruleModalMerchant, setRuleModalMerchant] = useState<{
     id: string;
     name: string;
   } | null>(null);
 
   const merchantsWithStats = useMemo(() => {
+    const now = Date.now();
     const withStats = merchants.map((merchant) => {
       const merchantTransactions = transactions.filter(
         (t) => t.merchantId === merchant.id
@@ -36,6 +46,17 @@ export function Merchants() {
               )
             )
           : 0;
+      const firstTransactionDate =
+        merchantTransactions.length > 0
+          ? Math.min(
+              ...merchantTransactions.map((t) =>
+                parseDateLocal(t.date).getTime()
+              )
+            )
+          : 0;
+      const storeCreatedAt = getCreatedAtFromId(merchant.id);
+      const createdAt =
+        storeCreatedAt ?? (firstTransactionDate || now);
       const rule = merchantRules.find((r) => r.merchantId === merchant.id);
       const category = rule
         ? categories.find((c) => c.id === rule.categoryId)
@@ -50,6 +71,7 @@ export function Merchants() {
         totalSpent,
         transactionCount: merchantTransactions.length,
         lastTransactionDate,
+        createdAt,
         category,
         subcategory,
         hasRule: !!rule,
@@ -71,6 +93,12 @@ export function Merchants() {
       );
     }
 
+    if (createdFilter !== "all") {
+      const days = parseInt(createdFilter, 10);
+      const cutoff = now - days * 24 * 60 * 60 * 1000;
+      filtered = filtered.filter((m) => m.createdAt >= cutoff);
+    }
+
     filtered.sort((a, b) => {
       if (sortOrder === "alfa") {
         return a.name.localeCompare(b.name, "es", { sensitivity: "base" });
@@ -81,7 +109,28 @@ export function Merchants() {
       return a.lastTransactionDate - b.lastTransactionDate;
     });
     return filtered;
-  }, [merchants, merchantRules, categories, transactions, searchQuery, sortOrder, selectedCategoryId]);
+  }, [merchants, merchantRules, categories, transactions, searchQuery, sortOrder, selectedCategoryId, createdFilter]);
+
+  const groupedByDate = useMemo(() => {
+    const acc = merchantsWithStats.reduce((a, m) => {
+      const d = new Date(m.createdAt);
+      const dateKey = d.toLocaleDateString("es-MX", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+      });
+      if (!a[dateKey]) a[dateKey] = [];
+      a[dateKey].push(m);
+      return a;
+    }, {} as Record<string, typeof merchantsWithStats>);
+    return Object.fromEntries(
+      Object.entries(acc).sort(([_, a], [__, b]) => {
+        const tA = a[0]?.createdAt ?? 0;
+        const tB = b[0]?.createdAt ?? 0;
+        return tB - tA;
+      })
+    );
+  }, [merchantsWithStats]);
 
   return (
     <div className="p-4 space-y-4">
@@ -155,8 +204,29 @@ export function Merchants() {
         ))}
       </div>
 
-      {/* Lista de comercios */}
-      <div className="space-y-3">
+      {/* Filtro por fecha de creación */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <Calendar className="w-4 h-4 text-gray-500" />
+        <span className="text-xs text-gray-600">Creados en:</span>
+        <div className="flex gap-2">
+          {(["all", "7", "15", "30"] as const).map((opt) => (
+            <button
+              key={opt}
+              onClick={() => setCreatedFilter(opt)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+                createdFilter === opt
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-100 text-gray-600"
+              }`}
+            >
+              {opt === "all" ? "Todos" : `Últimos ${opt} días`}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Lista de comercios agrupados por día */}
+      <div className="space-y-4">
         {merchantsWithStats.length === 0 ? (
           <div className="bg-gray-50 rounded-xl p-8 text-center text-gray-500">
             <p className="text-sm">
@@ -164,86 +234,95 @@ export function Merchants() {
                 ? "No se encontraron comercios con ese nombre."
                 : selectedCategoryId !== "all"
                   ? "No hay comercios con regla en esta categoría."
-                  : "No hay comercios registrados."}
+                  : createdFilter !== "all"
+                    ? "No hay comercios creados en ese período."
+                    : "No hay comercios registrados."}
             </p>
           </div>
         ) : (
-          merchantsWithStats.map((merchant) => (
-          <div
-            key={merchant.id}
-            className="bg-white rounded-xl p-4 shadow-sm relative"
-          >
-            <Link
-              to={`/merchants/${merchant.id}`}
-              className="block"
-            >
-              <div className="flex items-start gap-3">
-                {/* Icono */}
-                <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
-                  <Store className="w-6 h-6 text-gray-600" />
-                </div>
-
-                {/* Información */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">{merchant.name}</p>
-                      {merchant.category && (
-                        <div className="flex items-center gap-1.5 mt-1">
-                          <span className="text-lg">{merchant.category.icon}</span>
-                          <span className="text-xs text-gray-600">
-                            {merchant.category.name}
-                            {merchant.subcategory && ` - ${merchant.subcategory.name}`}
+          Object.entries(groupedByDate).map(([date, dateMerchants]) => (
+            <div key={date} className="space-y-2">
+              <div className="flex items-center justify-between px-1">
+                <h3 className="text-sm font-semibold text-gray-700 capitalize">
+                  {date}
+                </h3>
+                <span className="text-xs text-gray-500">
+                  {dateMerchants.length} comercio{dateMerchants.length !== 1 ? "s" : ""}
+                </span>
+              </div>
+              <div className="space-y-3">
+                {dateMerchants.map((merchant) => (
+                  <div
+                    key={merchant.id}
+                    className="bg-white rounded-xl p-4 shadow-sm relative"
+                  >
+                    <Link
+                      to={`/merchants/${merchant.id}`}
+                      className="block"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
+                          <Store className="w-6 h-6 text-gray-600" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-2 mb-2">
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium truncate">{merchant.name}</p>
+                              {merchant.category && (
+                                <div className="flex items-center gap-1.5 mt-1">
+                                  <span className="text-lg">{merchant.category.icon}</span>
+                                  <span className="text-xs text-gray-600">
+                                    {merchant.category.name}
+                                    {merchant.subcategory && ` - ${merchant.subcategory.name}`}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                            <ChevronRight className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                          </div>
+                          <div className="flex items-center gap-4 mt-3">
+                            <div>
+                              <p className="text-xs text-gray-500">Total gastado</p>
+                              <p className="text-sm font-semibold text-gray-900">
+                                ${merchant.totalSpent.toLocaleString("es-MX")}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500">Transacciones</p>
+                              <p className="text-sm font-semibold text-gray-900">
+                                {merchant.transactionCount}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </Link>
+                    <div className="mt-3 pt-3 border-t border-gray-100">
+                      {merchant.hasRule ? (
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-green-500" />
+                          <span className="text-xs text-green-700 font-medium">
+                            Regla activa
                           </span>
                         </div>
+                      ) : (
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setRuleModalMerchant({ id: merchant.id, name: merchant.name });
+                          }}
+                          className="text-xs text-blue-600 font-medium hover:text-blue-700"
+                        >
+                          + Crear regla de categorización
+                        </button>
                       )}
                     </div>
-                    <ChevronRight className="w-5 h-5 text-gray-400 flex-shrink-0" />
                   </div>
-
-                  {/* Estadísticas */}
-                  <div className="flex items-center gap-4 mt-3">
-                    <div>
-                      <p className="text-xs text-gray-500">Total gastado</p>
-                      <p className="text-sm font-semibold text-gray-900">
-                        ${merchant.totalSpent.toLocaleString("es-MX")}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500">Transacciones</p>
-                      <p className="text-sm font-semibold text-gray-900">
-                        {merchant.transactionCount}
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                ))}
               </div>
-            </Link>
-
-            {/* Estado de regla */}
-            <div className="mt-3 pt-3 border-t border-gray-100">
-              {merchant.hasRule ? (
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-green-500" />
-                  <span className="text-xs text-green-700 font-medium">
-                    Regla activa
-                  </span>
-                </div>
-              ) : (
-                <button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setRuleModalMerchant({ id: merchant.id, name: merchant.name });
-                  }}
-                  className="text-xs text-blue-600 font-medium hover:text-blue-700"
-                >
-                  + Crear regla de categorización
-                </button>
-              )}
             </div>
-          </div>
-        ))
+          ))
         )}
       </div>
 

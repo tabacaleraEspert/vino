@@ -226,13 +226,11 @@ export const api = {
 
   budgets: {
     list: (params?: { mes_anio?: string; categoria_id?: string; subcategoria_id?: string }, token?: string) => {
-      const q = params?.mes_anio || params?.categoria_id || params?.subcategoria_id
-        ? "?" + new URLSearchParams(
-            Object.fromEntries(
-              Object.entries(params || {}).filter(([, v]) => v != null && v !== "")
-            )
-          ).toString()
-        : "";
+      const p: Record<string, string> = {};
+      if (params?.mes_anio) p["mesAño"] = params.mes_anio;
+      if (params?.categoria_id) p["categoria_id"] = params.categoria_id;
+      if (params?.subcategoria_id) p["subcategoria_id"] = params.subcategoria_id;
+      const q = Object.keys(p).length ? "?" + new URLSearchParams(p).toString() : "";
       return apiFetch<PresupuestoRaw[]>(`/presupuestos${q}`, { token });
     },
     create: (data: Omit<Budget, "id">, token?: string) =>
@@ -406,24 +404,82 @@ function parseMonto(v: string | number | undefined): number {
   return isNaN(n) ? 0 : n;
 }
 
+/** Normaliza id para comparación (backend puede devolver int o string) */
+function normId(v: unknown): string {
+  if (v == null || v === "") return "";
+  const s = String(v).trim();
+  const n = Number(s);
+  return !Number.isNaN(n) && Number.isInteger(n) ? String(n) : s;
+}
+
+/** Extrae categoria_id de subcategoría (backend puede usar categoria_id, Id_Categoria o categoryId) */
+function getSubCategoriaId(s: Record<string, unknown>): string {
+  const v = s.categoria_id ?? s.Id_Categoria ?? s.categoryId;
+  return normId(v);
+}
+
+/** Extrae nombre de subcategoría (backend puede usar nombre, name o Nombre_SubCategoria) */
+function getSubNombre(s: Record<string, unknown>): string {
+  const v = s.nombre ?? s.name ?? s.Nombre_SubCategoria;
+  return String(v ?? "").trim() || "";
+}
+
+/** Extrae id de subcategoría */
+function getSubId(s: Record<string, unknown>): string {
+  return normId(s.id ?? s.Id);
+}
+
+/** Convierte subcategorias a array (puede venir como array, objeto con índices, o { data: [...] }) */
+function toSubcategoriasArray(subcategorias: unknown): Record<string, unknown>[] {
+  if (Array.isArray(subcategorias)) {
+    return subcategorias.filter((s) => s && typeof s === "object") as Record<string, unknown>[];
+  }
+  if (subcategorias && typeof subcategorias === "object") {
+    const obj = subcategorias as Record<string, unknown>;
+    if (Array.isArray(obj.data)) return toSubcategoriasArray(obj.data);
+    if (Array.isArray(obj.subcategorias)) return toSubcategoriasArray(obj.subcategorias);
+    const vals = Object.values(obj);
+    if (vals.every((v) => v && typeof v === "object" && !Array.isArray(v))) {
+      return vals as Record<string, unknown>[];
+    }
+  }
+  return [];
+}
+
 /** Mapea CategoriaRaw[] + SubcategoriaRaw[] a Category[] */
 export function mapCatalogToCategories(
   categorias: CategoriaRaw[],
-  subcategorias: SubcategoriaRaw[]
+  subcategorias: SubcategoriaRaw[] | unknown
 ): Category[] {
-  return categorias.map((cat) => ({
-    id: cat.id,
-    name: cat.nombre,
-    icon: cat.icon || "📁",
-    color: cat.color || "#6b7280",
-    subcategories: subcategorias
-      .filter((s) => s.categoria_id === cat.id)
-      .map((s) => ({
-        id: s.id,
-        name: s.nombre,
+  const subs = toSubcategoriasArray(subcategorias);
+  const cats = Array.isArray(categorias) ? categorias : [];
+  const catIds = cats.map((c) => normId(c.id));
+  const subCatIds = [...new Set(subs.map((s) => getSubCategoriaId(s)))];
+  console.log("[mapCatalogToCategories] input:", {
+    categoriasCount: cats.length,
+    subcategoriasCount: subs.length,
+    catIds,
+    subCatIdsUnicos: subCatIds,
+    match: catIds.some((cid) => subCatIds.includes(cid)) ? "SÍ hay coincidencias" : "NO hay coincidencias - categoria_id de subs no matchea con id de cats",
+  });
+  return cats.map((cat) => {
+    const catId = normId(cat.id);
+    const subcats = subs.filter((s) => getSubCategoriaId(s) === catId);
+    if (subcats.length > 0) {
+      console.log("[mapCatalogToCategories] ✓", cat.nombre, "id:", cat.id, "→", subcats.length, "subcategorías");
+    }
+    return {
+      id: cat.id,
+      name: cat.nombre,
+      icon: cat.icon || "📁",
+      color: cat.color || "#6b7280",
+      subcategories: subcats.map((s) => ({
+        id: getSubId(s),
+        name: getSubNombre(s),
         categoryId: cat.id,
       })),
-  }));
+    };
+  });
 }
 
 /** Mapea ReglaRaw[] a MerchantRule[] usando merchants para resolver merchantId */

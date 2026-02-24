@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from typing import Optional
 from pydantic import BaseModel
 
+from app.cache.sql_catalog_cache import invalidate
 from app.core.security import require_user
 from app.db.catalog import (
     _get_id_usuario,
@@ -53,6 +54,7 @@ def patch_subcategoria(id: str, payload: SubcategoriaPatch, user: dict = Depends
     updated = patch_subcategoria_sql(id_usuario, id, nombre)
     if not updated:
         raise HTTPException(status_code=404, detail="Subcategoría no encontrada")
+    invalidate(id_usuario)
     return {
         "id": updated["id"],
         "name": updated["nombre"],
@@ -68,4 +70,5 @@ def delete_subcategoria(id: str, user: dict = Depends(require_user)):
         raise HTTPException(status_code=401, detail=str(e))
     if not delete_subcategoria_sql(id_usuario, id):
         raise HTTPException(status_code=404, detail="Subcategoría no encontrada")
+    invalidate(id_usuario)
     return {"deleted": True, "id": id}

@@ -1,6 +1,6 @@
 import { Outlet, NavLink } from "react-router";
 import { useEffect, useState } from "react";
-import { Home, Receipt, FolderOpen, Wallet, Store, TrendingUp, LogOut } from "lucide-react";
+import { Home, Receipt, FolderOpen, Wallet, Store, TrendingUp, LogOut, RefreshCw } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useData } from "../context/DataContext";
 import { useNavigate } from "react-router";
@@ -8,7 +8,7 @@ import { api } from "@/lib/api";
 
 export function RootLayout() {
   const { user, logout } = useAuth();
-  const { isLoading, error } = useData();
+  const { isLoading, error, refresh } = useData();
   const navigate = useNavigate();
   const [backendVersion, setBackendVersion] = useState<string | null>(null);
 
@@ -44,13 +44,23 @@ export function RootLayout() {
               {backendVersion != null && ` · API v${backendVersion}`}
             </p>
           </div>
-          <button
-            onClick={handleLogout}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-            title="Cerrar sesión"
-          >
-            <LogOut className="w-5 h-5 text-gray-600" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={refresh}
+              disabled={isLoading}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
+              title="Actualizar datos"
+            >
+              <RefreshCw className={`w-5 h-5 text-gray-600 ${isLoading ? "animate-spin" : ""}`} />
+            </button>
+            <button
+              onClick={handleLogout}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              title="Cerrar sesión"
+            >
+              <LogOut className="w-5 h-5 text-gray-600" />
+            </button>
+          </div>
         </div>
       </header>
 

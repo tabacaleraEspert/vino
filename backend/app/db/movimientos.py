@@ -180,8 +180,13 @@ def list_movimientos(
         conditions.append("m.MedioCarga = ?")
         params.append(medio_carga.strip())
     if moneda:
-        conditions.append("m.Moneda = ?")
-        params.append(moneda.strip().upper())
+        moneda_norm = moneda.strip().upper()
+        # Incluir Moneda vacía/NULL cuando se filtra por ARS (compatibilidad con datos legacy)
+        if moneda_norm == "ARS":
+            conditions.append("(m.Moneda = ? OR LTRIM(RTRIM(ISNULL(m.Moneda, ''))) = '')")
+        else:
+            conditions.append("m.Moneda = ?")
+        params.append(moneda_norm)
     if min_amount is not None:
         conditions.append("m.Monto >= ?")
         params.append(min_amount)
@@ -200,43 +205,62 @@ def list_movimientos(
 
     where = " AND ".join(conditions)
 
-    # Total count (usa alias m para consistencia con WHERE)
+    # Una sola query: COUNT(*) OVER() + datos paginados (1 round-trip en vez de 2)
+    col_names = [
+        "Id", "Fecha", "Timestamp", "MedioCarga", "TipoMovimiento", "Moneda", "Monto",
+        "Id_Credito_Debito", "Id_Medio_Pago_Final", "Descripcion",
+        "Id_Categoria", "Id_SubCategoria", "Origen", "Origen_Id",
+        "Nombre_Categoria", "Nombre_SubCategoria", "_total",
+    ]
     with get_connection() as conn:
         cur = conn.cursor()
         cur.execute(
-            f"SELECT COUNT(*) FROM dbo.movimientos m WHERE {where}",
-            params,
-        )
-        total = cur.fetchone()[0] or 0
-
-        # Data con JOIN para nombres
-        cur.execute(
             f"""
-            SELECT
-              m.Id, m.Fecha, m.[Timestamp], m.MedioCarga, m.TipoMovimiento, m.Moneda, m.Monto,
-              m.Id_Credito_Debito, m.Id_Medio_Pago_Final, m.Descripcion,
-              m.Id_Categoria, m.Id_SubCategoria, m.Origen, m.Origen_Id,
-              c.Nombre AS Nombre_Categoria,
-              sc.Nombre_SubCategoria
-            FROM dbo.movimientos m
-            LEFT JOIN dbo.Categoria c ON c.Id = m.Id_Categoria AND c.Id_usuario = m.Id_usuario
-            LEFT JOIN dbo.SubCategoria sc ON sc.Id = m.Id_SubCategoria AND sc.Id_usuario = m.Id_usuario
-            WHERE {where}
-            ORDER BY m.Fecha DESC, m.Id DESC
+            SELECT * FROM (
+                SELECT
+                  m.Id, m.Fecha, m.[Timestamp], m.MedioCarga, m.TipoMovimiento, m.Moneda, m.Monto,
+                  m.Id_Credito_Debito, m.Id_Medio_Pago_Final, m.Descripcion,
+                  m.Id_Categoria, m.Id_SubCategoria, m.Origen, m.Origen_Id,
+                  c.Nombre AS Nombre_Categoria,
+                  sc.Nombre_SubCategoria,
+                  COUNT(*) OVER() AS _total
+                FROM dbo.movimientos m
+                LEFT JOIN dbo.Categoria c ON c.Id = m.Id_Categoria AND c.Id_usuario = m.Id_usuario
+                LEFT JOIN dbo.SubCategoria sc ON sc.Id = m.Id_SubCategoria AND sc.Id_usuario = m.Id_usuario
+                WHERE {where}
+            ) AS sub
+            ORDER BY sub.Fecha DESC, sub.Id DESC
             OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
             """,
             params + [offset, limit],
         )
         rows = cur.fetchall()
 
-    col_names = [
-        "Id", "Fecha", "Timestamp", "MedioCarga", "TipoMovimiento", "Moneda", "Monto",
-        "Id_Credito_Debito", "Id_Medio_Pago_Final", "Descripcion",
-        "Id_Categoria", "Id_SubCategoria", "Origen", "Origen_Id",
-        "Nombre_Categoria", "Nombre_SubCategoria",
+    total = int(rows[0][-1]) if rows else 0
+    # Quitar _total del row antes de mapear (no va en el item)
+    items = [
+        _movimiento_to_api(_row_to_item(tuple(r[:-1]), col_names[:-1]))
+        for r in rows
     ]
-    items = [_movimiento_to_api(_row_to_item(r, col_names)) for r in rows]
     return items, total
+
+
+def list_comercios_from_movimientos(id_usuario: int, limit: int = 500) -> List[str]:
+    """Lista nombres únicos de comercio (Descripcion) de los movimientos del usuario."""
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT DISTINCT LTRIM(RTRIM(m.Descripcion))
+            FROM dbo.movimientos m
+            WHERE m.Id_usuario = ? AND m.Descripcion IS NOT NULL AND LTRIM(RTRIM(m.Descripcion)) != ''
+            ORDER BY 1
+            OFFSET 0 ROWS FETCH NEXT ? ROWS ONLY
+            """,
+            (id_usuario, limit),
+        )
+        rows = cur.fetchall()
+    return [str(r[0]).strip() for r in rows if r[0]]
 
 
 def get_movimiento(id_usuario: int, mov_id: int) -> Optional[Dict[str, Any]]:

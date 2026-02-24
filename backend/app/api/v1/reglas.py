@@ -6,6 +6,7 @@ from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Qu
 from pydantic import BaseModel
 from typing import Optional
 
+from app.cache.sql_catalog_cache import invalidate
 from app.core.security import require_user
 from app.db.catalog import _get_id_usuario
 from app.db.regla_comercio import (
@@ -145,6 +146,7 @@ def post_regla(payload: dict = Body(...), user: dict = Depends(require_user)):
                 prioridad=payload.get("prioridad", 100),
                 activa=payload.get("activa", True),
             )
+            invalidate(id_usuario)
             return _regla_to_regla_raw(created)
         except KeyError as e:
             raise HTTPException(status_code=404, detail=str(e))
@@ -167,6 +169,7 @@ def post_regla(payload: dict = Body(...), user: dict = Depends(require_user)):
                 prioridad=100,
                 activa=True,
             )
+            invalidate(id_usuario)
             return {
                 "id": created["id"],
                 "merchantId": payload.get("merchantId"),
@@ -242,6 +245,7 @@ def patch_regla(id: str, payload: dict, background_tasks: BackgroundTasks, user:
             recategorization_job_id = job["id"]
             background_tasks.add_task(process_job, id_usuario, job["id"])
 
+        invalidate(id_usuario)
         result = _regla_to_regla_raw(updated)
         if recategorization_job_id is not None:
             result["recategorization_job_id"] = recategorization_job_id
@@ -262,4 +266,5 @@ def delete_regla_endpoint(id: str, user: dict = Depends(require_user)):
 
     if not delete_regla(id_usuario, id):
         raise HTTPException(status_code=404, detail="Regla no encontrada")
+    invalidate(id_usuario)
     return {"deleted": True, "id": id}

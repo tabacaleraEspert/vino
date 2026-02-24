@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 from app.api.deps import set_sheets_context
+from app.cache.sql_catalog_cache import invalidate
 from app.core.security import require_user
 from app.db.catalog import _get_id_usuario
 from app.db.regla_comercio import list_reglas_comercio, create_regla_user, update_regla
@@ -75,6 +76,7 @@ def patch_comercio(id: str, payload: dict, background_tasks: BackgroundTasks, us
                     id_subcategoria=sub_id,
                 )
                 if updated:
+                    invalidate(id_usuario)
                     regla_cat_id = updated.get("categoria_id", cat_id)
                     regla_sub_id = updated.get("subcategoria_id", sub_id)
                     from app.services.recategorizacion import enqueue_recategorization_job, process_job
@@ -86,6 +88,7 @@ def patch_comercio(id: str, payload: dict, background_tasks: BackgroundTasks, us
                     patron=name,
                     id_subcategoria=sub_id,
                 )
+                invalidate(id_usuario)
                 regla_cat_id = created.get("categoria_id", cat_id)
                 regla_sub_id = created.get("subcategoria_id", sub_id)
         except KeyError as e:

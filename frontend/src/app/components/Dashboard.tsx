@@ -27,7 +27,7 @@ const breakdownCache: Record<
 export function Dashboard() {
   const { categories, budgets } = useData();
   const { selectedMonth } = useMonth();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [summary, setSummary] = useState<{ gasto_mes: number; presupuesto_mes: number } | null>(null);
   const [breakdown, setBreakdown] = useState<{
     gastos_por_categoria: Array<{ categoria: string; total: number; pct: number }>;
@@ -39,6 +39,7 @@ export function Dashboard() {
   const [isLoadingBreakdown, setIsLoadingBreakdown] = useState(false);
 
   const period = `${selectedMonth.year}-${String(selectedMonth.month + 1).padStart(2, "0")}`;
+  const cacheKey = `${user?.id ?? "anon"}-${period}`;
 
   const fetchSummary = useCallback(async () => {
     if (!token) return;
@@ -49,14 +50,14 @@ export function Dashboard() {
         token
       );
       const data = { gasto_mes: res.gasto_mes, presupuesto_mes: res.presupuesto_mes };
-      summaryCache[period] = data;
+      summaryCache[cacheKey] = data;
       setSummary(data);
     } catch {
       setSummary(null);
     } finally {
       setIsLoadingSummary(false);
     }
-  }, [period, token]);
+  }, [period, token, cacheKey]);
 
   const fetchBreakdown = useCallback(async () => {
     if (!token) return;
@@ -72,14 +73,14 @@ export function Dashboard() {
         mayor_gasto: res.mayor_gasto,
         transacciones_count: res.transacciones_count,
       };
-      breakdownCache[period] = data;
+      breakdownCache[cacheKey] = data;
       setBreakdown(data);
     } catch {
       setBreakdown(null);
     } finally {
       setIsLoadingBreakdown(false);
     }
-  }, [period, token]);
+  }, [period, token, cacheKey]);
 
   const fetchAll = useCallback(() => {
     fetchSummary();
@@ -94,22 +95,22 @@ export function Dashboard() {
       setIsLoadingBreakdown(false);
       return;
     }
-    if (summaryCache[period]) {
-      setSummary(summaryCache[period]);
+    if (summaryCache[cacheKey]) {
+      setSummary(summaryCache[cacheKey]);
     } else {
       fetchSummary();
     }
-    if (breakdownCache[period]) {
-      setBreakdown(breakdownCache[period]);
+    if (breakdownCache[cacheKey]) {
+      setBreakdown(breakdownCache[cacheKey]);
     } else {
       fetchBreakdown();
     }
-  }, [period, token, fetchSummary, fetchBreakdown]);
+  }, [period, token, cacheKey, fetchSummary, fetchBreakdown]);
 
   useEffect(() => {
     Object.keys(summaryCache).forEach((k) => delete summaryCache[k]);
     Object.keys(breakdownCache).forEach((k) => delete breakdownCache[k]);
-  }, [token]);
+  }, [user?.id]);
 
   const monthSpent = summary?.gasto_mes ?? 0;
   const totalBudget = summary?.presupuesto_mes ?? budgets.reduce((sum, b) => sum + b.amount, 0);

@@ -2,10 +2,13 @@
 Endpoints de Movimientos (gastos/ingresos).
 Lee/escribe desde Azure SQL cuando MOVIMIENTOS_USE_SQL=True; fallback a Sheets.
 """
+import logging
 from datetime import date
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+
+logger = logging.getLogger(__name__)
 
 from app.api.deps import set_sheets_context
 from app.cache.sheets_cache import invalidate
@@ -74,6 +77,7 @@ def list_movimientos(
     if USE_SQL:
         try:
             id_usuario = _get_id_usuario(user)
+            logger.info("movimientos_list id_usuario=%s sub=%s", id_usuario, user.get("sub"))
         except ValueError as e:
             raise HTTPException(status_code=401, detail=str(e))
 

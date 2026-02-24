@@ -4,9 +4,12 @@ Lee movimientos desde SQL o Sheets según MOVIMIENTOS_USE_SQL; presupuestos desd
 """
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, Optional
 
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 from app.sheets.service import read_table
 from app.utils.parse_utils import (
     parse_date_ddmmyyyy,
@@ -32,7 +35,7 @@ def _get_movimientos_for_period(
             from app.db.movimientos import list_movimientos as sql_list
 
             id_usuario = int(user_id)
-            items, _ = sql_list(
+            items, total = sql_list(
                 id_usuario=id_usuario,
                 from_date=date_from,
                 to_date=date_to,
@@ -40,6 +43,10 @@ def _get_movimientos_for_period(
                 moneda=moneda_upper if moneda_upper else None,
                 limit=10000,
                 offset=0,
+            )
+            logger.info(
+                "home_movimientos_sql user_id=%s period=%s..%s moneda=%s count=%d total=%d",
+                user_id, date_from, date_to, moneda_upper, len(items), total,
             )
             out_items = []
             for it in items:
@@ -55,8 +62,12 @@ def _get_movimientos_for_period(
                     "descripcion": it.get("descripcion") or it.get("Descripcion") or "",
                 })
             return out_items
-        except (ValueError, TypeError, Exception):
-            pass
+        except (ValueError, TypeError, Exception) as e:
+            logger.warning(
+                "home_movimientos_sql_fallback user_id=%s error=%s",
+                user_id, type(e).__name__ + ": " + str(e),
+                exc_info=True,
+            )
 
     _, mov_rows = read_table("movimientos")
     out = []

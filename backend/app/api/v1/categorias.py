@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 
+from app.cache.sql_catalog_cache import invalidate
 from app.core.security import require_user
 from app.db.catalog import (
     _get_id_usuario,
@@ -67,6 +68,7 @@ def post_categoria(payload: CategoryIn, user: dict = Depends(require_user)):
         if payload.subcategories:
             for s in payload.subcategories:
                 create_subcategoria_sql(id_usuario, created["id"], s.name)
+        invalidate(id_usuario)
         return _to_frontend_categoria(created)
     except KeyError:
         raise HTTPException(status_code=404, detail="Categoría no encontrada")
@@ -90,6 +92,7 @@ def patch_categoria(id: str, payload: CategoryPatch, user: dict = Depends(requir
     updated = patch_categoria_sql(id_usuario, id, patch)
     if not updated:
         raise HTTPException(status_code=404, detail="Categoría no encontrada")
+    invalidate(id_usuario)
     return _to_frontend_categoria(updated)
 
 
@@ -101,6 +104,7 @@ def delete_categoria(id: str, user: dict = Depends(require_user)):
         raise HTTPException(status_code=401, detail=str(e))
     if not delete_categoria_sql(id_usuario, id):
         raise HTTPException(status_code=404, detail="Categoría no encontrada")
+    invalidate(id_usuario)
     return {"deleted": True, "id": id}
 
 
@@ -116,6 +120,7 @@ def post_subcategoria(id: str, payload: SubcategoryIn, user: dict = Depends(requ
         raise HTTPException(status_code=400, detail="El nombre de la subcategoría no puede estar vacío")
     try:
         created = create_subcategoria_sql(id_usuario, id, nombre)
+        invalidate(id_usuario)
         return {
             "id": created["id"],
             "name": created["nombre"],

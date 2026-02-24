@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from typing import Literal, Optional
 
+from app.cache.sql_catalog_cache import invalidate
 from app.core.security import require_user
 from app.db.catalog import _get_id_usuario
 from app.db.presupuestos import (
@@ -119,6 +120,7 @@ def post_presupuesto(payload: BudgetIn, user: dict = Depends(require_user)):
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+    invalidate(id_usuario)
     return {
         "id": row["id"],
         "categoryId": row["categoria_id"],
@@ -149,6 +151,7 @@ def patch_presupuesto(id: str, payload: BudgetPatch, user: dict = Depends(requir
     updated = patch_presupuesto_sql(id_usuario, id, monto=monto)
     if not updated:
         raise HTTPException(status_code=404, detail="Presupuesto no encontrado")
+    invalidate(id_usuario)
     return _to_presupuesto_raw(updated)
 
 
@@ -160,4 +163,5 @@ def delete_presupuesto(id: str, user: dict = Depends(require_user)):
         raise HTTPException(status_code=401, detail=str(e))
     if not delete_presupuesto_sql(id_usuario, id):
         raise HTTPException(status_code=404, detail="Presupuesto no encontrado")
+    invalidate(id_usuario)
     return {"deleted": True, "id": id}
