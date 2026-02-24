@@ -428,14 +428,13 @@ def list_reglas(
 # Reglas: create, patch, delete (Sheets)
 # =========================
 
-def _get_merchant_name(merchant_id: str) -> str:
-    """Resuelve merchant_id -> nombre. Los comercios están en store."""
-    from app.storage.store import get_all
-    merchants = get_all("merchants")
-    for m in merchants:
-        if str(m.get("id", "")).strip() == str(merchant_id).strip():
-            return str(m.get("name", "")).strip()
-    return ""
+def _get_merchant_name(merchant_id: str, id_usuario: Optional[int] = None) -> str:
+    """Resuelve merchant_id -> nombre. Usa SQL por Id_usuario si se pasa."""
+    if id_usuario is None:
+        return ""
+    from app.db.comercios import get_comercio_by_id_sql
+    m = get_comercio_by_id_sql(id_usuario, merchant_id)
+    return str(m.get("name", "")).strip() if m else ""
 
 
 def create_regla(

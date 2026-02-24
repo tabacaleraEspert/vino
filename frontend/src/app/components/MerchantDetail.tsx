@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router";
 import { useData } from "../context/DataContext";
 import { parseDateLocal } from "../../lib/api";
 import { ArrowLeft, Store, Edit2, X, Check } from "lucide-react";
+import { toast } from "sonner";
 
 export function MerchantDetail() {
   const { merchantId } = useParams<{ merchantId: string }>();
@@ -62,10 +63,14 @@ export function MerchantDetail() {
 
   const handleSaveEdit = async () => {
     if (selectedCategoryId) {
-      await updateMerchant(merchant.id, {
+      const res = await updateMerchant(merchant.id, {
         defaultCategoryId: selectedCategoryId,
         defaultSubcategoryId: selectedSubcategoryId || undefined,
       });
+      toast.success("Categoría actualizada");
+      if ((res as { recategorization_job_id?: number })?.recategorization_job_id) {
+        toast.info("Actualizando transacciones asociadas... Refresca en unos segundos para ver los cambios.");
+      }
     }
     setIsEditing(false);
   };

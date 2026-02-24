@@ -137,9 +137,12 @@ export interface MovimientoItem {
   moneda: string;
   monto: number;
   comercio: string;
+  comercioId?: string;
   descripcion: string;
   categoria: string;
   subcategoria: string;
+  idCategoria?: string;
+  idSubcategoria?: string;
   medio_pago: string;
 }
 
@@ -612,7 +615,16 @@ export function transactionToPatchPayload(
   if (t.date != null) payload.Fecha = formatDateToBackend(t.date);
   if (t.merchantId != null) {
     const m = merchants.find((mr) => mr.id === t.merchantId);
-    if (m) payload.Comercio = m.name;
+    if (m) {
+      // Si es id numérico (comercio de la base), enviar comercioId; si no, Comercio (nombre)
+      if (/^\d+$/.test(String(t.merchantId))) {
+        payload.comercioId = t.merchantId;
+      } else {
+        payload.Comercio = m.name;
+      }
+    }
+  } else if (t.merchantId === "") {
+    payload.comercioId = "";
   }
   if (t.categoryId != null) {
     const c = categories.find((cat) => cat.id === t.categoryId);
@@ -635,15 +647,35 @@ export function mapMovimientoItemToTransaction(
   merchants: Merchant[]
 ): Transaction {
   const amount = item.tipo === "Gasto" ? -Math.abs(item.monto) : item.monto;
-  const category = categories.find(
+  let category = categories.find(
     (c) => c.name.toLowerCase() === (item.categoria || "").toLowerCase()
   );
-  const subcategory = category?.subcategories?.find(
+  let subcategory = category?.subcategories?.find(
     (s) => s.name.toLowerCase() === (item.subcategoria || "").toLowerCase()
   );
   const merchant = merchants.find(
-    (m) => m.name.toLowerCase() === (item.comercio || "").toLowerCase()
+    (m) => m.id === item.comercioId || m.name.toLowerCase() === (item.comercio || "").toLowerCase()
   );
+  const merchantById = item.comercioId
+    ? merchants.find((m) => m.id === item.comercioId)
+    : null;
+  // Fallback: si no tiene cat/subcat pero tiene comercio, usar las del comercio
+  if ((!category || !subcategory) && (merchantById ?? merchant)) {
+    const m = merchantById ?? merchant;
+    const catId = m?.defaultCategoryId ?? item.idCategoria;
+    const subId = m?.defaultSubcategoryId ?? item.idSubcategoria;
+    if (catId) {
+      const cat = categories.find((c) => c.id === catId);
+      if (cat) {
+        category = cat;
+        subcategory = subId
+          ? cat.subcategories?.find((s) => s.id === subId)
+          : cat.subcategories?.find(
+              (s) => s.name.toLowerCase() === (item.subcategoria || "").toLowerCase()
+            );
+      }
+    }
+  }
 
   return {
     id: item.id,
@@ -653,6 +685,6 @@ export function mapMovimientoItemToTransaction(
     date: item.fecha,
     categoryId: category?.id || "unknown",
     subcategoryId: subcategory?.id,
-    merchantId: merchant?.id || "unknown",
+    merchantId: item.comercioId || merchant?.id || "",
   };
 }

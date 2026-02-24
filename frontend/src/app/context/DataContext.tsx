@@ -35,13 +35,14 @@ interface DataContextType {
   deleteBudget: (id: string) => Promise<void>;
   merchants: Merchant[];
   addMerchant: (merchant: Omit<Merchant, "id">) => Promise<void>;
-  updateMerchant: (id: string, merchant: Partial<Merchant>) => Promise<void>;
+  updateMerchant: (id: string, merchant: Partial<Merchant>) => Promise<Merchant | undefined>;
   deleteMerchant: (id: string) => Promise<void>;
   merchantRules: MerchantRule[];
   addMerchantRule: (rule: Omit<MerchantRule, "id">) => Promise<void>;
   updateMerchantRule: (id: string, rule: Partial<MerchantRule>) => Promise<void>;
   deleteMerchantRule: (id: string) => Promise<void>;
   refresh: () => Promise<void>;
+  refreshTrigger: number;
   isLoading: boolean;
   error: string | null;
 }
@@ -68,13 +69,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [merchants, setMerchants] = useState<Merchant[]>([]);
   const [merchantRules, setMerchantRules] = useState<MerchantRule[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const period = `${selectedMonth.year}-${String(selectedMonth.month + 1).padStart(2, "0")}`;
 
   const fetchData = useCallback(
-    async (forceRefresh = false) => {
+    async (forceRefresh = false, categoriesOverride?: Category[]) => {
       if (!token) {
         setIsLoading(false);
         return;
@@ -107,8 +109,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setMerchants(merchantsEnhanced);
         setMerchantRules(rules);
 
+        const catsToUse = categoriesOverride ?? categories;
         const mapped = items.map((m) =>
-          mapMovimientoItemToTransaction(m, categories, merchantsEnhanced)
+          mapMovimientoItemToTransaction(m, catsToUse, merchantsEnhanced)
         );
         setTransactions(mapped);
       } catch (err) {
@@ -131,11 +134,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setMerchantRules([]);
       setTransactions([]);
       setIsLoading(false);
-      return;
     }
-    if (catalogLoading) return;
-    fetchData();
-  }, [token, period, catalogLoading, fetchData]);
+  }, [token]);
 
   const addBudget = async (budget: Omit<Budget, "id">) => {
     if (!token) return;
@@ -163,8 +163,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const updateMerchant = async (id: string, merchant: Partial<Merchant>) => {
     if (!token) return;
-    await api.merchants.update(id, merchant, token);
+    const res = await api.merchants.update(id, merchant, token);
     await fetchData(true);
+    return res;
   };
 
   const deleteMerchant = async (id: string) => {
@@ -206,8 +207,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
   };
 
   const refresh = useCallback(async () => {
-    await refreshCatalog(true);
-    await fetchData(true);
+    const cats = await refreshCatalog(true);
+    await fetchData(true, cats);
+    setRefreshTrigger((t) => t + 1);
   }, [refreshCatalog, fetchData]);
 
   return (
@@ -236,6 +238,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         updateMerchantRule,
         deleteMerchantRule,
         refresh,
+        refreshTrigger,
         isLoading: isLoading || catalogLoading,
         error: error || catalogError,
       }}

@@ -59,10 +59,6 @@ export function EditTransactionModal({
       setError("La fecha es obligatoria");
       return;
     }
-    if (!merchantId) {
-      setError("Debes seleccionar un comercio");
-      return;
-    }
     if (!categoryId) {
       setError("Debes seleccionar una categoría");
       return;
@@ -191,22 +187,24 @@ export function EditTransactionModal({
             />
           </div>
 
-          {/* Comercio */}
+          {/* Comercio (solo de la base - asociación opcional) */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Comercio *
+              Comercio
             </label>
             <select
               value={merchantId}
               onChange={(e) => setMerchantId(e.target.value)}
               className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
             >
-              <option value="">Selecciona un comercio</option>
-              {merchants.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
+              <option value="">Sin comercio asociado</option>
+              {merchants
+                .filter((m) => /^\d+$/.test(String(m.id)))
+                .map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
             </select>
           </div>
 

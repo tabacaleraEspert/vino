@@ -30,7 +30,7 @@ interface CatalogContextType {
     newName: string
   ) => Promise<void>;
   deleteSubcategory: (categoryId: string, subcategoryId: string) => Promise<void>;
-  refreshCatalog: (skipCache?: boolean) => Promise<void>;
+  refreshCatalog: (skipCache?: boolean) => Promise<Category[]>;
   isLoading: boolean;
   error: string | null;
 }
@@ -40,32 +40,29 @@ const CatalogContext = createContext<CatalogContextType | undefined>(undefined);
 export function CatalogProvider({ children }: { children: ReactNode }) {
   const { token, user } = useAuth();
   const [categories, setCategories] = useState<Category[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const loadCatalog = useCallback(
-    async (skipCache = false) => {
+    async (skipCache = false): Promise<Category[]> => {
       if (!token) {
         setIsLoading(false);
-        return;
+        return [];
       }
       setIsLoading(true);
       setError(null);
       try {
         const data = await fetchCatalog(token, user?.id ?? "", { skipCache });
-        console.log("[CatalogContext] fetchCatalog raw:", {
-          categorias: data.categorias,
-          subcategorias: data.subcategorias,
-        });
         const cats = mapCatalogToCategories(
           data.categorias ?? [],
           data.subcategorias ?? []
         );
-        console.log("[CatalogContext] mapCatalogToCategories result:", cats);
         setCategories(cats);
+        return cats;
       } catch (err) {
         setError(err instanceof Error ? err.message : "Error al cargar catálogo");
         setCategories([]);
+        return [];
       } finally {
         setIsLoading(false);
       }
@@ -78,15 +75,13 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       setCategories([]);
       setIsLoading(false);
       setError(null);
-      return;
     }
-    loadCatalog();
-  }, [token, loadCatalog]);
+  }, [token]);
 
   const refreshCatalog = useCallback(
-    async (skipCache = false) => {
+    async (skipCache = false): Promise<Category[]> => {
       invalidateCatalog(user?.id ?? "", token ?? undefined);
-      await loadCatalog(skipCache);
+      return loadCatalog(skipCache);
     },
     [loadCatalog, user?.id, token]
   );

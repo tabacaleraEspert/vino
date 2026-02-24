@@ -37,10 +37,33 @@ def _row_to_item(r: tuple, col_names: List[str]) -> Dict[str, Any]:
     return out
 
 
-def _movimiento_to_api(row: Dict[str, Any]) -> Dict[str, Any]:
+def _resolve_comercio_id(comercio_raw: Optional[str], id_usuario: Optional[int] = None) -> Optional[str]:
+    """Resuelve nombre de comercio a id (ReglaComercio.Id). Retorna None si no hay comercio asociado."""
+    if not comercio_raw or not str(comercio_raw).strip():
+        return None
+    name = str(comercio_raw).strip()
+    if id_usuario is not None:
+        try:
+            from app.db.comercios import get_comercio_id_by_name_sql
+            cid = get_comercio_id_by_name_sql(id_usuario, name)
+            if cid:
+                return cid
+        except Exception:
+            pass
+    return None
+
+
+def _movimiento_to_api(
+    row: Dict[str, Any],
+    id_usuario: Optional[int] = None,
+    comercio_id_cache: Optional[Dict[str, str]] = None,
+    regla_cat_cache: Optional[Dict[str, tuple[str, str]]] = None,
+) -> Dict[str, Any]:
     """
     Formato compatible con frontend (MovimientoItem / MovimientoRaw).
-    Incluye id, fecha, tipo, moneda, monto, comercio, descripcion, categoria, subcategoria, medio_pago.
+    comercio_id_cache: {PatronNorm: id} para evitar N+1 en listados.
+    regla_cat_cache: {regla_id: (nombre_categoria, nombre_subcategoria)} para enriquecer categoría
+      cuando el SQL no la devuelve pero el movimiento tiene comercio asociado.
     """
     fecha = row.get("Fecha")
     if isinstance(fecha, date):
@@ -50,6 +73,32 @@ def _movimiento_to_api(row: Dict[str, Any]) -> Dict[str, Any]:
     monto = row.get("Monto")
     if monto is not None:
         monto = round(float(monto), 2)
+
+    comercio_raw = str(row.get("ComercioRaw", "") or "").strip()
+    descripcion = str(row.get("Descripcion", "") or "").strip()
+    comercio_str = comercio_raw or descripcion
+    comercio_id = row.get("ComercioId")
+    if not comercio_id and (comercio_raw or descripcion):
+        if comercio_id_cache is not None:
+            from app.utils.normalize import normalize_text
+            key = normalize_text(comercio_raw or descripcion)
+            comercio_id = comercio_id_cache.get(key) if key else None
+        if not comercio_id and id_usuario is not None:
+            comercio_id = _resolve_comercio_id(comercio_raw or descripcion, id_usuario)
+
+    id_cat = row.get("Id_Categoria_Efectivo") or row.get("Id_Categoria")
+    id_sub = row.get("Id_SubCategoria_Efectivo") or row.get("Id_SubCategoria")
+    nom_cat = str(row.get("Nombre_Categoria", "") or "").strip()
+    nom_sub = str(row.get("Nombre_SubCategoria", "") or "").strip()
+
+    # Fallback: si categoría vacía pero hay comercio asociado, usar la de la regla (igual que Gastos)
+    if (not nom_cat or nom_cat.lower() == "sin categoría") and comercio_id and regla_cat_cache:
+        cid = str(comercio_id).strip()
+        if cid.isdigit() and cid in regla_cat_cache:
+            cat_sub = regla_cat_cache[cid]
+            if cat_sub and cat_sub[0]:
+                nom_cat = cat_sub[0]
+                nom_sub = cat_sub[1] or nom_sub
 
     return {
         "id": str(row.get("Id", "")),
@@ -63,19 +112,20 @@ def _movimiento_to_api(row: Dict[str, Any]) -> Dict[str, Any]:
         "Moneda": str(row.get("Moneda", "")).strip(),
         "monto": monto,
         "Monto": monto,
-        "comercio": str(row.get("Descripcion", "") or "").strip(),
-        "Comercio": str(row.get("Descripcion", "") or "").strip(),
-        "descripcion": str(row.get("Descripcion", "") or "").strip(),
-        "Descripcion": str(row.get("Descripcion", "") or "").strip(),
-        "categoria": str(row.get("Nombre_Categoria", "") or "").strip(),
-        "Nombre_Categoria": str(row.get("Nombre_Categoria", "") or "").strip(),
-        "subcategoria": str(row.get("Nombre_SubCategoria", "") or "").strip(),
-        "Nombre_SubCategoria": str(row.get("Nombre_SubCategoria", "") or "").strip(),
+        "comercio": comercio_str,
+        "Comercio": comercio_str,
+        "comercioId": comercio_id,
+        "descripcion": descripcion,
+        "Descripcion": descripcion,
+        "categoria": nom_cat,
+        "Nombre_Categoria": nom_cat,
+        "subcategoria": nom_sub,
+        "Nombre_SubCategoria": nom_sub,
         "medio_pago": str(row.get("Id_Medio_Pago_Final", "") or ""),
-        "idCategoria": str(row.get("Id_Categoria", "")) if row.get("Id_Categoria") else None,
-        "idSubcategoria": str(row.get("Id_SubCategoria", "")) if row.get("Id_SubCategoria") else None,
-        "Id_Categoria": row.get("Id_Categoria"),
-        "Id_SubCategoria": row.get("Id_SubCategoria"),
+        "idCategoria": str(id_cat) if id_cat else None,
+        "idSubcategoria": str(id_sub) if id_sub else None,
+        "Id_Categoria": id_cat,
+        "Id_SubCategoria": id_sub,
         "MedioCarga": str(row.get("MedioCarga", "")).strip(),
         "Id_Credito_Debito": row.get("Id_Credito_Debito"),
         "Id_Medio_Pago_Final": row.get("Id_Medio_Pago_Final"),
@@ -205,11 +255,12 @@ def list_movimientos(
 
     where = " AND ".join(conditions)
 
-    # Una sola query: COUNT(*) OVER() + datos paginados (1 round-trip en vez de 2)
     col_names = [
         "Id", "Fecha", "Timestamp", "MedioCarga", "TipoMovimiento", "Moneda", "Monto",
         "Id_Credito_Debito", "Id_Medio_Pago_Final", "Descripcion",
         "Id_Categoria", "Id_SubCategoria", "Origen", "Origen_Id",
+        "ComercioRaw", "ComercioId", "CategoriaManual", "ReglaComercioId",
+        "Id_Categoria_Efectivo", "Id_SubCategoria_Efectivo",
         "Nombre_Categoria", "Nombre_SubCategoria", "_total",
     ]
     with get_connection() as conn:
@@ -221,12 +272,18 @@ def list_movimientos(
                   m.Id, m.Fecha, m.[Timestamp], m.MedioCarga, m.TipoMovimiento, m.Moneda, m.Monto,
                   m.Id_Credito_Debito, m.Id_Medio_Pago_Final, m.Descripcion,
                   m.Id_Categoria, m.Id_SubCategoria, m.Origen, m.Origen_Id,
+                  m.ComercioRaw, m.ComercioId,
+                  ISNULL(m.CategoriaManual, 0) AS CategoriaManual,
+                  m.ReglaComercioId,
+                  COALESCE(CASE WHEN ISNULL(m.CategoriaManual, 0) = 1 THEN m.Id_Categoria ELSE rc.Id_Categoria END, m.Id_Categoria) AS Id_Categoria_Efectivo,
+                  COALESCE(CASE WHEN ISNULL(m.CategoriaManual, 0) = 1 THEN m.Id_SubCategoria ELSE rc.Id_SubCategoria END, m.Id_SubCategoria) AS Id_SubCategoria_Efectivo,
                   c.Nombre AS Nombre_Categoria,
                   sc.Nombre_SubCategoria,
                   COUNT(*) OVER() AS _total
                 FROM dbo.movimientos m
-                LEFT JOIN dbo.Categoria c ON c.Id = m.Id_Categoria AND c.Id_usuario = m.Id_usuario
-                LEFT JOIN dbo.SubCategoria sc ON sc.Id = m.Id_SubCategoria AND sc.Id_usuario = m.Id_usuario
+                LEFT JOIN dbo.ReglaComercio rc ON rc.Id = COALESCE(m.ReglaComercioId, TRY_CAST(m.ComercioId AS INT)) AND rc.Id_usuario = m.Id_usuario
+                LEFT JOIN dbo.Categoria c ON c.Id = COALESCE(CASE WHEN ISNULL(m.CategoriaManual, 0) = 1 THEN m.Id_Categoria ELSE rc.Id_Categoria END, m.Id_Categoria) AND c.Id_usuario = m.Id_usuario
+                LEFT JOIN dbo.SubCategoria sc ON sc.Id = COALESCE(CASE WHEN ISNULL(m.CategoriaManual, 0) = 1 THEN m.Id_SubCategoria ELSE rc.Id_SubCategoria END, m.Id_SubCategoria) AND sc.Id_usuario = m.Id_usuario
                 WHERE {where}
             ) AS sub
             ORDER BY sub.Fecha DESC, sub.Id DESC
@@ -236,10 +293,72 @@ def list_movimientos(
         )
         rows = cur.fetchall()
 
+        # Pre-resolver comercio_id en la misma conexión (evitar N+1 y agotar pool)
+        comercio_id_cache: Dict[str, str] = {}
+        if rows and id_usuario is not None:
+            from app.utils.normalize import normalize_text
+            seen: set = set()
+            patron_norms: List[str] = []
+            for r in rows:
+                row_dict = _row_to_item(tuple(r[:-1]), col_names[:-1])
+                if not row_dict.get("ComercioId"):
+                    raw = str(row_dict.get("ComercioRaw", "") or "").strip()
+                    desc = str(row_dict.get("Descripcion", "") or "").strip()
+                    n = raw or desc
+                    if n:
+                        pn = normalize_text(n)
+                        if pn and pn not in seen:
+                            patron_norms.append(pn)
+                            seen.add(pn)
+            if patron_norms:
+                ph = ",".join("?" * len(patron_norms))
+                cur.execute(
+                    f"""
+                    SELECT Id, PatronNorm FROM dbo.ReglaComercio
+                    WHERE Id_usuario = ? AND PatronNorm IN ({ph})
+                    """,
+                    [id_usuario] + patron_norms,
+                )
+                for r in cur.fetchall():
+                    comercio_id_cache[str(r[1]).strip()] = str(r[0])
+
+        # Cache categoría por regla (para enriquecer cuando SQL no devuelve cat pero hay comercio)
+        regla_cat_cache: Dict[str, tuple[str, str]] = {}
+        if rows and id_usuario is not None:
+            regla_ids: set = set(comercio_id_cache.values()) if comercio_id_cache else set()
+            for r in rows:
+                row_dict = _row_to_item(tuple(r[:-1]), col_names[:-1])
+                cid = row_dict.get("ComercioId")
+                rid = row_dict.get("ReglaComercioId")
+                if cid and str(cid).strip().isdigit():
+                    regla_ids.add(str(cid).strip())
+                if rid is not None:
+                    regla_ids.add(str(rid))
+            numeric_ids = [int(x) for x in regla_ids if str(x).strip().isdigit()]
+            if numeric_ids:
+                placeholders = ",".join("?" * len(numeric_ids))
+                cur.execute(
+                    f"""
+                    SELECT rc.Id, c.Nombre, sc.Nombre_SubCategoria
+                    FROM dbo.ReglaComercio rc
+                    JOIN dbo.Categoria c ON c.Id = rc.Id_Categoria AND c.Id_usuario = rc.Id_usuario
+                    JOIN dbo.SubCategoria sc ON sc.Id = rc.Id_SubCategoria AND sc.Id_usuario = rc.Id_usuario
+                    WHERE rc.Id_usuario = ? AND rc.Id IN ({placeholders})
+                    """,
+                    [id_usuario] + numeric_ids,
+                )
+                for r in cur.fetchall():
+                    regla_cat_cache[str(r[0])] = (str(r[1] or "").strip(), str(r[2] or "").strip())
+
     total = int(rows[0][-1]) if rows else 0
     # Quitar _total del row antes de mapear (no va en el item)
     items = [
-        _movimiento_to_api(_row_to_item(tuple(r[:-1]), col_names[:-1]))
+        _movimiento_to_api(
+            _row_to_item(tuple(r[:-1]), col_names[:-1]),
+            id_usuario,
+            comercio_id_cache,
+            regla_cat_cache if rows and id_usuario else None,
+        )
         for r in rows
     ]
     return items, total
@@ -265,6 +384,14 @@ def list_comercios_from_movimientos(id_usuario: int, limit: int = 500) -> List[s
 
 def get_movimiento(id_usuario: int, mov_id: int) -> Optional[Dict[str, Any]]:
     """Obtiene un movimiento por Id."""
+    col_names = [
+        "Id", "Fecha", "Timestamp", "MedioCarga", "TipoMovimiento", "Moneda", "Monto",
+        "Id_Credito_Debito", "Id_Medio_Pago_Final", "Descripcion",
+        "Id_Categoria", "Id_SubCategoria", "Origen", "Origen_Id",
+        "ComercioRaw", "ComercioId", "CategoriaManual", "ReglaComercioId",
+        "Id_Categoria_Efectivo", "Id_SubCategoria_Efectivo",
+        "Nombre_Categoria", "Nombre_SubCategoria",
+    ]
     with get_connection() as conn:
         cur = conn.cursor()
         cur.execute(
@@ -273,11 +400,17 @@ def get_movimiento(id_usuario: int, mov_id: int) -> Optional[Dict[str, Any]]:
               m.Id, m.Fecha, m.[Timestamp], m.MedioCarga, m.TipoMovimiento, m.Moneda, m.Monto,
               m.Id_Credito_Debito, m.Id_Medio_Pago_Final, m.Descripcion,
               m.Id_Categoria, m.Id_SubCategoria, m.Origen, m.Origen_Id,
+              m.ComercioRaw, m.ComercioId,
+              ISNULL(m.CategoriaManual, 0) AS CategoriaManual,
+              m.ReglaComercioId,
+              COALESCE(CASE WHEN ISNULL(m.CategoriaManual, 0) = 1 THEN m.Id_Categoria ELSE rc.Id_Categoria END, m.Id_Categoria) AS Id_Categoria_Efectivo,
+              COALESCE(CASE WHEN ISNULL(m.CategoriaManual, 0) = 1 THEN m.Id_SubCategoria ELSE rc.Id_SubCategoria END, m.Id_SubCategoria) AS Id_SubCategoria_Efectivo,
               c.Nombre AS Nombre_Categoria,
               sc.Nombre_SubCategoria
             FROM dbo.movimientos m
-            LEFT JOIN dbo.Categoria c ON c.Id = m.Id_Categoria AND c.Id_usuario = m.Id_usuario
-            LEFT JOIN dbo.SubCategoria sc ON sc.Id = m.Id_SubCategoria AND sc.Id_usuario = m.Id_usuario
+            LEFT JOIN dbo.ReglaComercio rc ON rc.Id = COALESCE(m.ReglaComercioId, TRY_CAST(m.ComercioId AS INT)) AND rc.Id_usuario = m.Id_usuario
+            LEFT JOIN dbo.Categoria c ON c.Id = COALESCE(CASE WHEN ISNULL(m.CategoriaManual, 0) = 1 THEN m.Id_Categoria ELSE rc.Id_Categoria END, m.Id_Categoria) AND c.Id_usuario = m.Id_usuario
+            LEFT JOIN dbo.SubCategoria sc ON sc.Id = COALESCE(CASE WHEN ISNULL(m.CategoriaManual, 0) = 1 THEN m.Id_SubCategoria ELSE rc.Id_SubCategoria END, m.Id_SubCategoria) AND sc.Id_usuario = m.Id_usuario
             WHERE m.Id_usuario = ? AND m.Id = ?
             """,
             (id_usuario, mov_id),
@@ -286,14 +419,27 @@ def get_movimiento(id_usuario: int, mov_id: int) -> Optional[Dict[str, Any]]:
 
     if not row:
         return None
-
-    col_names = [
-        "Id", "Fecha", "Timestamp", "MedioCarga", "TipoMovimiento", "Moneda", "Monto",
-        "Id_Credito_Debito", "Id_Medio_Pago_Final", "Descripcion",
-        "Id_Categoria", "Id_SubCategoria", "Origen", "Origen_Id",
-        "Nombre_Categoria", "Nombre_SubCategoria",
-    ]
-    return _movimiento_to_api(_row_to_item(row, col_names))
+    row_dict = _row_to_item(row, col_names)
+    # Resolver comercio_id si no está (igual que en list_movimientos)
+    if not row_dict.get("ComercioId"):
+        raw = str(row_dict.get("ComercioRaw", "") or "").strip()
+        desc = str(row_dict.get("Descripcion", "") or "").strip()
+        cid_resolved = _resolve_comercio_id(raw or desc, id_usuario)
+        if cid_resolved:
+            row_dict["ComercioId"] = cid_resolved
+    regla_cat_cache: Optional[Dict[str, tuple[str, str]]] = None
+    cid = row_dict.get("ComercioId") or row_dict.get("ReglaComercioId")
+    if cid and str(cid).strip().isdigit():
+        from app.db.regla_comercio import get_regla_by_id
+        regla = get_regla_by_id(id_usuario, cid)
+        if regla:
+            regla_cat_cache = {
+                str(cid): (
+                    str(regla.get("nombreCategoria", "") or "").strip(),
+                    str(regla.get("nombreSubcategoria", "") or "").strip(),
+                )
+            }
+    return _movimiento_to_api(row_dict, id_usuario, None, regla_cat_cache)
 
 
 def create_movimiento(
@@ -381,7 +527,14 @@ def create_movimiento(
     if not skip_duplicate_check and origen and origen_id:
         existing = get_movimiento_by_origen(id_usuario, origen, origen_id)
         if existing:
-            return _movimiento_to_api(existing)
+            return existing
+
+    user_provided_cat = bool(
+        payload.get("Id_Categoria") or payload.get("idCategoria")
+        or payload.get("Nombre_Categoria") or payload.get("Nombre_SubCategoria")
+    )
+    categoria_manual = 1 if user_provided_cat else 0
+    comercio_id = _resolve_comercio_id(comercio_raw or comercio, id_usuario)
 
     with get_connection() as conn:
         cur = conn.cursor()
@@ -391,13 +544,13 @@ def create_movimiento(
             (Id_usuario, Fecha, MedioCarga, TipoMovimiento, Moneda, Monto,
              Id_Credito_Debito, Id_Medio_Pago_Final, Descripcion,
              Id_Categoria, Id_SubCategoria, Origen, Origen_Id,
-             ReglaComercioId, ComercioRaw, ComercioNorm)
+             ReglaComercioId, ComercioRaw, ComercioNorm, ComercioId, CategoriaManual)
             OUTPUT INSERTED.Id, INSERTED.Fecha, INSERTED.[Timestamp], INSERTED.MedioCarga,
                    INSERTED.TipoMovimiento, INSERTED.Moneda, INSERTED.Monto,
                    INSERTED.Id_Credito_Debito, INSERTED.Id_Medio_Pago_Final,
                    INSERTED.Descripcion,
                    INSERTED.Id_Categoria, INSERTED.Id_SubCategoria, INSERTED.Origen, INSERTED.Origen_Id
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 id_usuario,
@@ -416,6 +569,8 @@ def create_movimiento(
                 regla_comercio_id,
                 comercio_raw,
                 comercio_norm,
+                comercio_id,
+                categoria_manual,
             ),
         )
         row = cur.fetchone()
@@ -426,11 +581,15 @@ def create_movimiento(
 
     # Re-fetch con JOIN para nombres
     created = get_movimiento(id_usuario, row[0])
-    return created or _movimiento_to_api(_row_to_item(row, [
+    if created:
+        return created
+    # Fallback si get_movimiento falla (ej. tabla sin ComercioId)
+    row_dict = _row_to_item(row, [
         "Id", "Fecha", "Timestamp", "MedioCarga", "TipoMovimiento", "Moneda", "Monto",
         "Id_Credito_Debito", "Id_Medio_Pago_Final", "Descripcion",
         "Id_Categoria", "Id_SubCategoria", "Origen", "Origen_Id",
-    ]))
+    ])
+    return _movimiento_to_api(row_dict, id_usuario)
 
 
 def get_movimiento_by_origen(id_usuario: int, origen: str, origen_id: str) -> Optional[Dict[str, Any]]:
@@ -501,6 +660,59 @@ def update_movimiento(
         params.append(id_cat_val)
         updates.append("Id_SubCategoria = ?")
         params.append(id_sub_val)
+        updates.append("CategoriaManual = 1")
+    if "comercioId" in payload or "ComercioId" in payload:
+        # Asociar comercio por id (desde dropdown)
+        comercio_id = str(payload.get("comercioId") or payload.get("ComercioId") or "").strip()
+        if comercio_id:
+            from app.db.comercios import get_comercio_by_id_sql
+            comercio = get_comercio_by_id_sql(id_usuario, comercio_id)
+            if comercio:
+                updates.append("ComercioId = ?")
+                params.append(comercio_id)
+                updates.append("ReglaComercioId = ?")
+                params.append(int(comercio_id))
+                nombre = (comercio.get("name") or "").strip()
+                updates.append("ComercioRaw = ?")
+                params.append(nombre[:300] if nombre else None)
+                from app.utils.normalize import normalize_text
+                updates.append("ComercioNorm = ?")
+                params.append(normalize_text(nombre)[:300] if nombre else None)
+                # Si no se asignó cat/subcat explícitamente, usar las del comercio
+                if "idCategoria" not in payload and "Id_Categoria" not in payload and "Nombre_Categoria" not in payload:
+                    id_cat_comercio = comercio.get("defaultCategoryId")
+                    id_sub_comercio = comercio.get("defaultSubcategoryId")
+                    if id_cat_comercio or id_sub_comercio:
+                        try:
+                            id_cat_val = int(id_cat_comercio) if id_cat_comercio else None
+                            id_sub_val = int(id_sub_comercio) if id_sub_comercio else None
+                            id_cat_val, id_sub_val = _validate_categoria_subcategoria(id_usuario, id_cat_val, id_sub_val)
+                            updates.append("Id_Categoria = ?")
+                            params.append(id_cat_val)
+                            updates.append("Id_SubCategoria = ?")
+                            params.append(id_sub_val)
+                            updates.append("CategoriaManual = 0")
+                        except (ValueError, TypeError):
+                            pass
+        else:
+            # Desasociar comercio
+            updates.append("ComercioId = ?")
+            params.append(None)
+            updates.append("ReglaComercioId = ?")
+            params.append(None)
+    elif "Comercio" in payload or "comercio" in payload:
+        comercio_val = str(payload.get("Comercio") or payload.get("comercio") or "").strip()
+        comercio_id = _resolve_comercio_id(comercio_val, id_usuario)
+        updates.append("ComercioId = ?")
+        params.append(comercio_id)
+        updates.append("ComercioRaw = ?")
+        params.append(comercio_val[:300] if comercio_val else None)
+        from app.utils.normalize import normalize_text
+        updates.append("ComercioNorm = ?")
+        params.append(normalize_text(comercio_val)[:300] if comercio_val else None)
+        if comercio_id and str(comercio_id).isdigit():
+            updates.append("ReglaComercioId = ?")
+            params.append(int(comercio_id))
     if "Id_Medio_Pago_Final" in payload or "ID_Medio_de_pago_final" in payload:
         v = payload.get("Id_Medio_Pago_Final") or payload.get("ID_Medio_de_pago_final")
         updates.append("Id_Medio_Pago_Final = ?")

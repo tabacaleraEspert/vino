@@ -41,7 +41,7 @@ def _get_movimientos_for_period(
                 to_date=date_to,
                 tipo="Gasto",
                 moneda=moneda_upper if moneda_upper else None,
-                limit=10000,
+                limit=5000,
                 offset=0,
             )
             logger.info(

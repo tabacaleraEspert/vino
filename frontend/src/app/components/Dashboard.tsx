@@ -25,7 +25,7 @@ const breakdownCache: Record<
 > = {};
 
 export function Dashboard() {
-  const { categories, budgets } = useData();
+  const { categories, budgets, refresh, refreshTrigger } = useData();
   const { selectedMonth } = useMonth();
   const { token, user } = useAuth();
   const [summary, setSummary] = useState<{ gasto_mes: number; presupuesto_mes: number } | null>(null);
@@ -95,17 +95,13 @@ export function Dashboard() {
       setIsLoadingBreakdown(false);
       return;
     }
-    if (summaryCache[cacheKey]) {
-      setSummary(summaryCache[cacheKey]);
-    } else {
-      fetchSummary();
-    }
-    if (breakdownCache[cacheKey]) {
-      setBreakdown(breakdownCache[cacheKey]);
-    } else {
-      fetchBreakdown();
-    }
-  }, [period, token, cacheKey, fetchSummary, fetchBreakdown]);
+    if (refreshTrigger > 0) fetchAll();
+  }, [token, refreshTrigger, fetchAll]);
+
+  useEffect(() => {
+    setSummary(null);
+    setBreakdown(null);
+  }, [period]);
 
   useEffect(() => {
     Object.keys(summaryCache).forEach((k) => delete summaryCache[k]);
@@ -142,7 +138,7 @@ export function Dashboard() {
           <MonthSelector />
         </div>
         <button
-          onClick={fetchAll}
+          onClick={refresh}
           disabled={isLoadingSummary || isLoadingBreakdown}
           className="p-2.5 rounded-xl bg-white shadow-sm text-gray-600 hover:bg-gray-50 hover:text-blue-600 transition-colors disabled:opacity-50"
           title="Actualizar"

@@ -9,6 +9,7 @@ from typing import Optional
 from app.cache.sql_catalog_cache import invalidate
 from app.core.security import require_user
 from app.db.catalog import _get_id_usuario
+from app.db.comercios import get_comercio_by_id_sql
 from app.db.regla_comercio import (
     list_reglas_comercio,
     create_regla_user,
@@ -17,7 +18,6 @@ from app.db.regla_comercio import (
     get_regla_by_id,
     resolve_regla,
 )
-from app.storage.store import get_all
 
 router = APIRouter()
 
@@ -25,19 +25,16 @@ router = APIRouter()
 VIRTUAL_MERCHANT_PREFIX = "comercio-"
 
 
-def _merchant_id_to_patron(merchant_id: str) -> Optional[str]:
-    """Resuelve merchantId a patron (nombre para matching)."""
+def _merchant_id_to_patron(id_usuario: int, merchant_id: str) -> Optional[str]:
+    """Resuelve merchantId a patron (nombre para matching). Usa SQL por Id_usuario."""
     if not merchant_id or not isinstance(merchant_id, str):
         return None
     merchant_id = merchant_id.strip()
     if merchant_id.startswith(VIRTUAL_MERCHANT_PREFIX):
         suffix = merchant_id[len(VIRTUAL_MERCHANT_PREFIX) :]
         return suffix.replace("_", " ")
-    merchants = get_all("merchants")
-    for m in merchants:
-        if str(m.get("id", "")).strip() == merchant_id:
-            return str(m.get("name", "")).strip()
-    return None
+    m = get_comercio_by_id_sql(id_usuario, merchant_id)
+    return str(m.get("name", "")).strip() if m else None
 
 
 class ReglaComercioIn(BaseModel):
@@ -155,7 +152,7 @@ def post_regla(payload: dict = Body(...), user: dict = Depends(require_user)):
 
     # Legacy: merchantId + categoryId + subcategoryId
     if "merchantId" in payload:
-        patron = _merchant_id_to_patron(str(payload.get("merchantId", "")))
+        patron = _merchant_id_to_patron(id_usuario, str(payload.get("merchantId", "")))
         if not patron:
             raise HTTPException(status_code=404, detail="Comercio no encontrado")
         sub_id = str(payload.get("subcategoryId") or payload.get("categoryId") or "").strip()
@@ -220,7 +217,7 @@ def patch_regla(id: str, payload: dict, background_tasks: BackgroundTasks, user:
     patch_activa = payload.get("activa")
 
     if "merchantId" in payload:
-        patron = _merchant_id_to_patron(payload["merchantId"])
+        patron = _merchant_id_to_patron(id_usuario, payload["merchantId"])
         if patron:
             patch_patron = patron
     if "categoryId" in payload and not patch_sub:
