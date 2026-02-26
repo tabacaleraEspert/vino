@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { apiFetch } from "../../lib/api";
+import { clearAllCacheOnLogout } from "../../lib/dataLayer";
 
 interface User {
   id: string;
@@ -11,6 +12,7 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   login: (username: string, password: string) => Promise<boolean>;
+  register: (username: string, password: string, apellido?: string, email?: string) => Promise<{ ok: boolean; error?: string }>;
   logout: () => void;
   isLoading: boolean;
 }
@@ -59,7 +61,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const register = async (
+    username: string,
+    password: string,
+    apellido?: string,
+    email?: string
+  ): Promise<{ ok: boolean; error?: string }> => {
+    try {
+      await apiFetch("/auth/register", {
+        method: "POST",
+        body: JSON.stringify({
+          username: username.trim(),
+          password,
+          apellido: apellido?.trim() || undefined,
+          email: email?.trim() || undefined,
+        }),
+      });
+      return { ok: true };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Error al crear la cuenta";
+      return { ok: false, error: msg };
+    }
+  };
+
   const logout = () => {
+    clearAllCacheOnLogout();
     setUser(null);
     setToken(null);
     localStorage.removeItem(TOKEN_KEY);
@@ -67,7 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, token, login, register, logout, isLoading }}>
       {children}
     </AuthContext.Provider>
   );

@@ -117,6 +117,54 @@ export function invalidateCatalog(userId: string, token?: string): void {
   }
 }
 
+/** Caches del Dashboard (summary, breakdown) - se limpian en logout */
+export const dashboardSummaryCache: Record<string, { gasto_mes: number; presupuesto_mes: number }> = {};
+export const dashboardBreakdownCache: Record<
+  string,
+  {
+    gastos_por_categoria: Array<{ categoria: string; total: number; pct: number }>;
+    transacciones_recientes: Array<{
+      id: string;
+      fecha: string;
+      titulo: string;
+      descripcion: string;
+      monto: number;
+      categoria: string;
+    }>;
+    mayor_gasto: number;
+    transacciones_count: number;
+  }
+> = {};
+
+/**
+ * Limpia TODO el cache al hacer logout.
+ * localStorage (vino_*), inFlight, Dashboard caches.
+ */
+export function clearAllCacheOnLogout(): void {
+  try {
+    // localStorage: vino_catalog_*, etc.
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key?.startsWith("vino_")) keysToRemove.push(key);
+    }
+    keysToRemove.forEach((k) => localStorage.removeItem(k));
+
+    // inFlight: catalog_*, data_period_*
+    for (const key of inFlight.keys()) {
+      if (key.startsWith("catalog_") || key.startsWith("data_period_")) {
+        inFlight.delete(key);
+      }
+    }
+
+    // Dashboard caches
+    Object.keys(dashboardSummaryCache).forEach((k) => delete dashboardSummaryCache[k]);
+    Object.keys(dashboardBreakdownCache).forEach((k) => delete dashboardBreakdownCache[k]);
+  } catch {
+    // Ignorar errores
+  }
+}
+
 /** Datos crudos para DataContext: movimientos, presupuestos, reglas, comercios */
 export interface DataForPeriodRaw {
   movimientos: MovimientosPaginatedResponse;

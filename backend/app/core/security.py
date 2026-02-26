@@ -46,8 +46,9 @@ def require_user(creds: HTTPAuthorizationCredentials = Depends(bearer)) -> dict:
         raise HTTPException(status_code=401, detail="Falta Authorization Bearer")
     payload = decode_token(creds.credentials)
     # Establecer spreadsheet_id en contexto para que Sheets use el del usuario
+    # No setear cuando es "sql-only" (usuarios sin Google Sheet)
     id_sheets = payload.get("id_sheets")
-    if id_sheets:
+    if id_sheets and id_sheets != "sql-only":
         from app.sheets.registry import set_current_spreadsheet_id
         set_current_spreadsheet_id(id_sheets)
     # Establecer id_usuario para catalog SQL (sub = MaestroUsuarios.id)

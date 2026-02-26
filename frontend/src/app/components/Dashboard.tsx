@@ -4,25 +4,8 @@ import { useMonth } from "../context/MonthContext";
 import { useAuth } from "../context/AuthContext";
 import { MonthSelector } from "./MonthSelector";
 import { api } from "../../lib/api";
+import { dashboardSummaryCache, dashboardBreakdownCache } from "../../lib/dataLayer";
 import { TrendingDown, TrendingUp, Receipt, RefreshCw } from "lucide-react";
-
-const summaryCache: Record<string, { gasto_mes: number; presupuesto_mes: number }> = {};
-const breakdownCache: Record<
-  string,
-  {
-    gastos_por_categoria: Array<{ categoria: string; total: number; pct: number }>;
-    transacciones_recientes: Array<{
-      id: string;
-      fecha: string;
-      titulo: string;
-      descripcion: string;
-      monto: number;
-      categoria: string;
-    }>;
-    mayor_gasto: number;
-    transacciones_count: number;
-  }
-> = {};
 
 export function Dashboard() {
   const { categories, budgets, refresh, refreshTrigger } = useData();
@@ -50,7 +33,7 @@ export function Dashboard() {
         token
       );
       const data = { gasto_mes: res.gasto_mes, presupuesto_mes: res.presupuesto_mes };
-      summaryCache[cacheKey] = data;
+      dashboardSummaryCache[cacheKey] = data;
       setSummary(data);
     } catch {
       setSummary(null);
@@ -73,7 +56,7 @@ export function Dashboard() {
         mayor_gasto: res.mayor_gasto,
         transacciones_count: res.transacciones_count,
       };
-      breakdownCache[cacheKey] = data;
+      dashboardBreakdownCache[cacheKey] = data;
       setBreakdown(data);
     } catch {
       setBreakdown(null);
@@ -104,8 +87,8 @@ export function Dashboard() {
   }, [period]);
 
   useEffect(() => {
-    Object.keys(summaryCache).forEach((k) => delete summaryCache[k]);
-    Object.keys(breakdownCache).forEach((k) => delete breakdownCache[k]);
+    Object.keys(dashboardSummaryCache).forEach((k) => delete dashboardSummaryCache[k]);
+    Object.keys(dashboardBreakdownCache).forEach((k) => delete dashboardBreakdownCache[k]);
   }, [user?.id]);
 
   const monthSpent = summary?.gasto_mes ?? 0;

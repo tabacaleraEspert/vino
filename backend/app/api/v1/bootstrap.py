@@ -43,8 +43,9 @@ def bootstrap(user: dict = Depends(require_user)):
     Categorías, subcategorías, presupuestos y reglas desde SQL; comercios desde store.
     """
     sid = user.get("id_sheets")
-    if not sid:
-        raise HTTPException(status_code=400, detail="Usuario sin ID_Sheets configurado")
+    # Permitir usuarios SQL-only (registrados sin Google Sheet)
+    if not sid or sid == "sql-only":
+        sid = None
 
     try:
         id_usuario = _get_id_usuario(user)
