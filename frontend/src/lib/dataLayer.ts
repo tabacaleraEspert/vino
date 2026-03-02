@@ -73,8 +73,8 @@ export async function fetchCatalog(
 
   return coalesce(coalesceKey, async () => {
     const [categoriasRaw, subcategoriasRaw] = await Promise.all([
-      api.categories.list(token),
-      api.subcategorias.list({}, token),
+      api.categories.list(),
+      api.subcategorias.list({}),
     ]);
     const categorias = categoriasRaw ?? [];
     let subcategorias: SubcategoriaRaw[] = [];
@@ -178,24 +178,32 @@ const DATA_COALESCE_PREFIX = "data_period_";
 /**
  * Fetch coalescido de movimientos, presupuestos, reglas y comercios.
  * Evita duplicados por StrictMode, dependencias o re-renders.
+ * @param includeReglas - Si false, no se cargan reglas (solo para vista Merchants).
  */
 export async function fetchDataForPeriod(
   token: string,
   period: string,
-  options?: { forceRefresh?: boolean }
+  options?: { forceRefresh?: boolean; includeReglas?: boolean }
 ): Promise<DataForPeriodRaw> {
-  const key = `${DATA_COALESCE_PREFIX}${token.slice(-24)}_${period}`;
+  const includeReglas = options?.includeReglas !== false;
+  const key = `${DATA_COALESCE_PREFIX}${token.slice(-24)}_${period}_${includeReglas}`;
   return coalesce(
     key,
     async () => {
-      const [movsRes, presupuestosRaw, reglasRaw, mers] = await Promise.all([
+      const promises: [
+        Promise<MovimientosPaginatedResponse>,
+        Promise<unknown[]>,
+        Promise<ReglaRaw[]>,
+        Promise<{ id: string; name: string }[]>
+      ] = [
         api.movimientos
-          .list({ limit: "1000", period }, token)
+          .list({ limit: "1000", period })
           .catch((): MovimientosPaginatedResponse => ({ items: [], page: 1, limit: 100, total: 0 })),
-        api.budgets.list({ mes_anio: period }, token).catch(() => []),
-        api.merchantRules.list({}, token).catch(() => [] as ReglaRaw[]),
-        api.merchants.list(token).catch(() => []),
-      ]);
+        api.budgets.list({ mes_anio: period }).catch(() => []),
+        includeReglas ? api.merchantRules.list({}).catch(() => [] as ReglaRaw[]) : Promise.resolve([] as ReglaRaw[]),
+        api.merchants.list().catch(() => []),
+      ];
+      const [movsRes, presupuestosRaw, reglasRaw, mers] = await Promise.all(promises);
       return {
         movimientos: movsRes as MovimientosPaginatedResponse,
         presupuestos: presupuestosRaw ?? [],

@@ -89,7 +89,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
   const addCategory = useCallback(
     async (category: Omit<Category, "id">) => {
       if (!token) return;
-      await api.categories.create(category, token);
+      await api.categories.create(category);
       invalidateCatalog(user?.id ?? "", token);
       await loadCatalog(true);
     },
@@ -99,7 +99,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
   const updateCategory = useCallback(
     async (id: string, updates: Partial<Category>) => {
       if (!token) return;
-      await api.categories.update(id, updates, token);
+      await api.categories.update(id, updates);
       invalidateCatalog(user?.id ?? "", token);
       await loadCatalog(true);
     },
@@ -109,7 +109,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
   const deleteCategory = useCallback(
     async (id: string) => {
       if (!token) return;
-      await api.categories.delete(id, token);
+      await api.categories.delete(id);
       invalidateCatalog(user?.id ?? "", token);
       await loadCatalog(true);
     },
@@ -119,7 +119,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
   const addSubcategory = useCallback(
     async (categoryId: string, subcategoryName: string) => {
       if (!token) return;
-      await api.categories.addSubcategory(categoryId, subcategoryName, token);
+      await api.categories.addSubcategory(categoryId, subcategoryName);
       invalidateCatalog(user?.id ?? "", token);
       await loadCatalog(true);
     },
@@ -133,7 +133,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       newName: string
     ) => {
       if (!token) return;
-      await api.subcategorias.update(subcategoryId, newName, token);
+      await api.subcategorias.update(subcategoryId, newName);
       invalidateCatalog(user?.id ?? "", token);
       await loadCatalog(true);
     },
@@ -143,7 +143,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
   const deleteSubcategory = useCallback(
     async (_categoryId: string, subcategoryId: string) => {
       if (!token) return;
-      await api.subcategorias.delete(subcategoryId, token);
+      await api.subcategorias.delete(subcategoryId);
       invalidateCatalog(user?.id ?? "", token);
       await loadCatalog(true);
     },

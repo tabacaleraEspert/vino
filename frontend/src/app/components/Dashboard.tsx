@@ -28,10 +28,7 @@ export function Dashboard() {
     if (!token) return;
     setIsLoadingSummary(true);
     try {
-      const res = await api.views.homeSummary(
-        { period, moneda: "ARS" },
-        token
-      );
+      const res = await api.views.homeSummary({ period, moneda: "ARS" });
       const data = { gasto_mes: res.gasto_mes, presupuesto_mes: res.presupuesto_mes };
       dashboardSummaryCache[cacheKey] = data;
       setSummary(data);
@@ -46,10 +43,12 @@ export function Dashboard() {
     if (!token) return;
     setIsLoadingBreakdown(true);
     try {
-      const res = await api.views.homeBreakdown(
-        { period, currency: "ARS", top_categories: 6, recent_limit: 5 },
-        token
-      );
+      const res = await api.views.homeBreakdown({
+        period,
+        currency: "ARS",
+        top_categories: 6,
+        recent_limit: 5,
+      });
       const data = {
         gastos_por_categoria: res.gastos_por_categoria,
         transacciones_recientes: res.transacciones_recientes,
@@ -78,8 +77,8 @@ export function Dashboard() {
       setIsLoadingBreakdown(false);
       return;
     }
-    if (refreshTrigger > 0) fetchAll();
-  }, [token, refreshTrigger, fetchAll]);
+    fetchAll();
+  }, [token, period, refreshTrigger, fetchAll]);
 
   useEffect(() => {
     setSummary(null);
@@ -129,18 +128,19 @@ export function Dashboard() {
           <RefreshCw className={`w-5 h-5 ${(isLoadingSummary || isLoadingBreakdown) ? "animate-spin" : ""}`} />
         </button>
       </div>
-      {(isLoadingSummary || isLoadingBreakdown) && (
-        <div className="absolute inset-0 top-14 left-0 right-0 bottom-0 flex items-start justify-center pt-8 bg-gray-50/80 backdrop-blur-sm z-10 rounded-2xl">
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
-            <p className="text-sm text-gray-600 font-medium">Cargando datos del mes...</p>
-          </div>
-        </div>
-      )}
       {/* Resumen total */}
       <div
-        className={`bg-gradient-to-br ${getCardGradient(percentageUsed)} rounded-2xl p-6 text-white shadow-lg transition-colors duration-500`}
+        className={`bg-gradient-to-br ${getCardGradient(percentageUsed)} rounded-2xl p-6 text-white shadow-lg transition-colors duration-500 min-h-[140px]`}
       >
+        {isLoadingSummary ? (
+          <div className="animate-pulse space-y-3">
+            <div className="h-4 w-24 bg-white/30 rounded" />
+            <div className="h-9 w-32 bg-white/40 rounded" />
+            <div className="h-4 w-full bg-white/20 rounded" />
+            <div className="h-2 w-full bg-white/20 rounded-full" />
+          </div>
+        ) : (
+          <>
         <p className="text-sm opacity-90 mb-1">Balance del mes</p>
         <p className="text-3xl font-bold mb-4">
           ${monthSpent.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
@@ -161,12 +161,28 @@ export function Dashboard() {
             style={{ width: `${Math.min(percentageUsed, 100)}%` }}
           />
         </div>
+          </>
+        )}
       </div>
 
       {/* Gastos por categoría */}
       <div className="bg-white rounded-xl p-4 shadow-sm">
         <h2 className="font-semibold mb-3">Gastos por Categoría</h2>
-
+        {isLoadingBreakdown ? (
+          <div className="animate-pulse space-y-3">
+            <div className="h-3 w-full bg-gray-200 rounded-full" />
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="flex items-center gap-3">
+                <div className="h-8 w-8 bg-gray-200 rounded" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 bg-gray-200 rounded w-3/4" />
+                  <div className="h-2 bg-gray-100 rounded-full" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <>
         {/* Barra apilada: proporción del total sin espacio vacío */}
         {totalSpent > 0 && spendingByCategory.length > 0 && (
           <div className="mb-4">
@@ -224,11 +240,27 @@ export function Dashboard() {
             );
           })}
         </div>
+          </>
+        )}
       </div>
 
       {/* Transacciones recientes */}
       <div className="bg-white rounded-xl p-4 shadow-sm">
         <h2 className="font-semibold mb-3">Transacciones Recientes</h2>
+        {isLoadingBreakdown ? (
+          <div className="animate-pulse space-y-3">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="flex items-center gap-3">
+                <div className="h-8 w-8 bg-gray-200 rounded" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 bg-gray-200 rounded w-2/3" />
+                  <div className="h-3 bg-gray-100 rounded w-1/4" />
+                </div>
+                <div className="h-4 bg-gray-200 rounded w-16" />
+              </div>
+            ))}
+          </div>
+        ) : (
         <div className="space-y-3">
           {recentTransactions.map((t) => {
             const category = categories.find((c) => c.name.toLowerCase() === (t.categoria || "").toLowerCase());
@@ -253,25 +285,44 @@ export function Dashboard() {
             );
           })}
         </div>
+        )}
       </div>
 
       {/* Insights rápidos */}
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-white rounded-xl p-4 shadow-sm">
-          <div className="flex items-center gap-2 mb-2">
-            <TrendingDown className="w-4 h-4 text-red-500" />
-            <p className="text-xs text-gray-600">Mayor gasto</p>
-          </div>
-          <p className="font-semibold text-sm">
-            ${(breakdown?.mayor_gasto ?? 0).toLocaleString("es-MX")}
-          </p>
+          {isLoadingBreakdown ? (
+            <div className="animate-pulse space-y-2">
+              <div className="h-4 w-20 bg-gray-200 rounded" />
+              <div className="h-5 w-16 bg-gray-200 rounded" />
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center gap-2 mb-2">
+                <TrendingDown className="w-4 h-4 text-red-500" />
+                <p className="text-xs text-gray-600">Mayor gasto</p>
+              </div>
+              <p className="font-semibold text-sm">
+                ${(breakdown?.mayor_gasto ?? 0).toLocaleString("es-MX")}
+              </p>
+            </>
+          )}
         </div>
         <div className="bg-white rounded-xl p-4 shadow-sm">
-          <div className="flex items-center gap-2 mb-2">
-            <Receipt className="w-4 h-4 text-blue-500" />
-            <p className="text-xs text-gray-600">Transacciones</p>
-          </div>
-          <p className="font-semibold text-sm">{breakdown?.transacciones_count ?? 0}</p>
+          {isLoadingBreakdown ? (
+            <div className="animate-pulse space-y-2">
+              <div className="h-4 w-24 bg-gray-200 rounded" />
+              <div className="h-5 w-8 bg-gray-200 rounded" />
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center gap-2 mb-2">
+                <Receipt className="w-4 h-4 text-blue-500" />
+                <p className="text-xs text-gray-600">Transacciones</p>
+              </div>
+              <p className="font-semibold text-sm">{breakdown?.transacciones_count ?? 0}</p>
+            </>
+          )}
         </div>
       </div>
     </div>

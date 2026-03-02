@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router";
 import { useData } from "../context/DataContext";
+import { useCatalog } from "../context/CatalogContext";
 import { parseDateLocal } from "../../lib/api";
 import { ArrowLeft, Store, Edit2, X, Check } from "lucide-react";
 import { toast } from "sonner";
@@ -8,7 +9,12 @@ import { toast } from "sonner";
 export function MerchantDetail() {
   const { merchantId } = useParams<{ merchantId: string }>();
   const navigate = useNavigate();
-  const { merchants, categories, updateMerchant, merchantRules, transactions } = useData();
+  const { merchants, categories, updateMerchant, merchantRules, transactions, loadDataForView } = useData();
+  const { refreshCatalog } = useCatalog();
+  useEffect(() => {
+    refreshCatalog();
+    loadDataForView("merchants");
+  }, [refreshCatalog, loadDataForView]);
   
   const [isEditing, setIsEditing] = useState(false);
   const [selectedCategoryId, setSelectedCategoryId] = useState("");

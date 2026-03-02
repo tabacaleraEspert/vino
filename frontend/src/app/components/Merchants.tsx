@@ -1,8 +1,9 @@
 import { useData } from "../context/DataContext";
+import { useCatalog } from "../context/CatalogContext";
 import { parseDateLocal } from "../../lib/api";
 import { Store, Plus, ChevronRight, Search, Calendar } from "lucide-react";
 import { Link } from "react-router";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { CreateMerchantModal } from "./CreateMerchantModal";
 import { CreateRuleModal } from "./CreateRuleModal";
 
@@ -17,7 +18,12 @@ function getCreatedAtFromId(id: string): number | null {
 }
 
 export function Merchants() {
-  const { merchants, merchantRules, categories, transactions } = useData();
+  const { merchants, merchantRules, categories, transactions, loadDataForView } = useData();
+  const { refreshCatalog } = useCatalog();
+  useEffect(() => {
+    refreshCatalog();
+    loadDataForView("merchants");
+  }, [refreshCatalog, loadDataForView]);
   const [showCreateMerchant, setShowCreateMerchant] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortOrder, setSortOrder] = useState<SortOrder>("alfa");

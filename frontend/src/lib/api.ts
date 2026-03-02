@@ -1,31 +1,5 @@
-const API_BASE =
-  import.meta.env.VITE_API_URL ||
-  "https://vino-backend-bkbge8cwfffsdrhc.brazilsouth-01.azurewebsites.net/api/v1";
-
-export async function apiFetch<T = unknown>(
-  path: string,
-  options: RequestInit & { token?: string } = {}
-): Promise<T> {
-  const { token, ...init } = options;
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-    ...(init.headers as Record<string, string>),
-  };
-  if (token) {
-    (headers as Record<string, string>)["Authorization"] = `Bearer ${token}`;
-  }
-  const method = (init.method || "GET").toUpperCase();
-  const cacheOpt = method === "GET" ? { cache: "no-store" as RequestCache } : {};
-  const res = await fetch(`${API_BASE}${path}`, { ...init, ...cacheOpt, headers });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || "Error en la petición");
-  }
-  if (res.status === 204 || res.headers.get("content-length") === "0") {
-    return {} as T;
-  }
-  return res.json();
-}
+import { apiFetch } from "./api/client";
+export { apiFetch, setApiToken, setOnUnauthorized, getApiToken } from "./api/client";
 
 // Tipos
 export interface Category {
@@ -174,12 +148,12 @@ export const api = {
       reglas: ReglaRaw[];
       presupuestos: PresupuestoRaw[];
       comercios: Merchant[];
-    }>("/bootstrap", { token }),
+    }>("/bootstrap"),
 
   categories: {
     list: (token?: string) =>
-      apiFetch<CategoriaRaw[]>("/categorias", { token }),
-    create: (data: Omit<Category, "id">, token?: string) =>
+      apiFetch<CategoriaRaw[]>("/categorias"),
+    create: (data: Omit<Category, "id">) =>
       apiFetch<Category>("/categorias", {
         method: "POST",
         body: JSON.stringify({
@@ -188,9 +162,8 @@ export const api = {
           color: data.color || "#6b7280",
           subcategories: (data.subcategories ?? []).map((s) => ({ name: s.name })),
         }),
-        token,
       }),
-    update: (id: string, data: Partial<Category>, token?: string) =>
+    update: (id: string, data: Partial<Category>) =>
       apiFetch<Category>(`/categorias/${id}`, {
         method: "PATCH",
         body: JSON.stringify({
@@ -198,81 +171,73 @@ export const api = {
           ...(data.icon != null && { icon: data.icon }),
           ...(data.color != null && { color: data.color }),
         }),
-        token,
       }),
-    delete: (id: string, token?: string) =>
-      apiFetch(`/categorias/${id}`, { method: "DELETE", token }),
-    addSubcategory: (categoryId: string, name: string, token?: string) =>
+    delete: (id: string) =>
+      apiFetch(`/categorias/${id}`, { method: "DELETE" }),
+    addSubcategory: (categoryId: string, name: string) =>
       apiFetch<Category>(`/categorias/${categoryId}/subcategorias`, {
         method: "POST",
         body: JSON.stringify({ name }),
-        token,
       }),
   },
 
   subcategorias: {
-    list: (params?: { categoria_id?: string }, token?: string) => {
+    list: (params?: { categoria_id?: string }) => {
       const q = params?.categoria_id
         ? "?" + new URLSearchParams({ categoria_id: params.categoria_id }).toString()
         : "";
-      return apiFetch<SubcategoriaRaw[]>(`/subcategorias${q}`, { token });
+      return apiFetch<SubcategoriaRaw[]>(`/subcategorias${q}`);
     },
-    update: (id: string, name: string, token?: string) =>
+    update: (id: string, name: string) =>
       apiFetch<{ id: string; name: string; categoryId: string }>(`/subcategorias/${id}`, {
         method: "PATCH",
         body: JSON.stringify({ name }),
-        token,
       }),
-    delete: (id: string, token?: string) =>
-      apiFetch(`/subcategorias/${id}`, { method: "DELETE", token }),
+    delete: (id: string) =>
+      apiFetch(`/subcategorias/${id}`, { method: "DELETE" }),
   },
 
   budgets: {
-    list: (params?: { mes_anio?: string; categoria_id?: string; subcategoria_id?: string }, token?: string) => {
+    list: (params?: { mes_anio?: string; categoria_id?: string; subcategoria_id?: string }) => {
       const p: Record<string, string> = {};
       if (params?.mes_anio) p["mesAño"] = params.mes_anio;
       if (params?.categoria_id) p["categoria_id"] = params.categoria_id;
       if (params?.subcategoria_id) p["subcategoria_id"] = params.subcategoria_id;
       const q = Object.keys(p).length ? "?" + new URLSearchParams(p).toString() : "";
-      return apiFetch<PresupuestoRaw[]>(`/presupuestos${q}`, { token });
+      return apiFetch<PresupuestoRaw[]>(`/presupuestos${q}`);
     },
-    create: (data: Omit<Budget, "id">, token?: string) =>
+    create: (data: Omit<Budget, "id">) =>
       apiFetch<Budget>("/presupuestos", {
         method: "POST",
         body: JSON.stringify(data),
-        token,
       }),
-    update: (id: string, data: Partial<Budget>, token?: string) =>
+    update: (id: string, data: Partial<Budget>) =>
       apiFetch<Budget>(`/presupuestos/${id}`, {
         method: "PATCH",
         body: JSON.stringify(data),
-        token,
       }),
-    delete: (id: string, token?: string) =>
-      apiFetch(`/presupuestos/${id}`, { method: "DELETE", token }),
+    delete: (id: string) =>
+      apiFetch(`/presupuestos/${id}`, { method: "DELETE" }),
   },
 
   merchants: {
-    list: (token?: string) =>
-      apiFetch<Merchant[]>("/comercios", { token }),
-    create: (data: Omit<Merchant, "id">, token?: string) =>
+    list: () => apiFetch<Merchant[]>("/comercios"),
+    create: (data: Omit<Merchant, "id">) =>
       apiFetch<Merchant>("/comercios", {
         method: "POST",
         body: JSON.stringify(data),
-        token,
       }),
-    update: (id: string, data: Partial<Merchant>, token?: string) =>
+    update: (id: string, data: Partial<Merchant>) =>
       apiFetch<Merchant>(`/comercios/${id}`, {
         method: "PATCH",
         body: JSON.stringify(data),
-        token,
       }),
-    delete: (id: string, token?: string) =>
-      apiFetch(`/comercios/${id}`, { method: "DELETE", token }),
+    delete: (id: string) =>
+      apiFetch(`/comercios/${id}`, { method: "DELETE" }),
   },
 
   merchantRules: {
-    list: (params?: { comercio?: string; categoria_id?: string; subcategoria_id?: string }, token?: string) => {
+    list: (params?: { comercio?: string; categoria_id?: string; subcategoria_id?: string }) => {
       const q = params?.comercio || params?.categoria_id || params?.subcategoria_id
         ? "?" + new URLSearchParams(
             Object.fromEntries(
@@ -280,22 +245,20 @@ export const api = {
             )
           ).toString()
         : "";
-      return apiFetch<ReglaRaw[]>(`/reglas${q}`, { token });
+      return apiFetch<ReglaRaw[]>(`/reglas${q}`);
     },
-    create: (data: Omit<MerchantRule, "id">, token?: string) =>
+    create: (data: Omit<MerchantRule, "id">) =>
       apiFetch<MerchantRule>("/reglas", {
         method: "POST",
         body: JSON.stringify(data),
-        token,
       }),
-    update: (id: string, data: Partial<MerchantRule>, token?: string) =>
+    update: (id: string, data: Partial<MerchantRule>) =>
       apiFetch<MerchantRule>(`/reglas/${id}`, {
         method: "PATCH",
         body: JSON.stringify(data),
-        token,
       }),
-    delete: (id: string, token?: string) =>
-      apiFetch(`/reglas/${id}`, { method: "DELETE", token }),
+    delete: (id: string) =>
+      apiFetch(`/reglas/${id}`, { method: "DELETE" }),
   },
 
   views: {
@@ -305,7 +268,7 @@ export const api = {
     ) => {
       const q = new URLSearchParams({ period: params.period });
       if (params.moneda) q.set("moneda", params.moneda);
-      return apiFetch<HomeSummaryResponse>(`/views/home/summary?${q}`, { token });
+      return apiFetch<HomeSummaryResponse>(`/views/home/summary?${q}`);
     },
     homeBreakdown: (
       params: {
@@ -322,7 +285,7 @@ export const api = {
       if (params.top_categories != null) q.set("top_categories", String(params.top_categories));
       if (params.recent_limit != null) q.set("recent_limit", String(params.recent_limit));
       if (params.include_zeros != null) q.set("include_zeros", String(params.include_zeros));
-      return apiFetch<HomeBreakdownResponse>(`/views/home/breakdown?${q}`, { token });
+      return apiFetch<HomeBreakdownResponse>(`/views/home/breakdown?${q}`);
     },
   },
 
@@ -339,27 +302,24 @@ export const api = {
       const q = Object.keys(filtered).length
         ? "?" + new URLSearchParams(filtered as Record<string, string>).toString()
         : "";
-      return apiFetch<MovimientosPaginatedResponse>(`/movimientos${q}`, { token });
+      return apiFetch<MovimientosPaginatedResponse>(`/movimientos${q}`);
     },
     invalidateCache: (token?: string) =>
       apiFetch<{ ok: boolean }>("/movimientos/invalidate-cache", {
         method: "POST",
-        token,
       }),
-    create: (data: Record<string, unknown>, token?: string) =>
+    create: (data: Record<string, unknown>) =>
       apiFetch<MovimientoRaw>("/movimientos", {
         method: "POST",
         body: JSON.stringify(data),
-        token,
       }),
-    update: (id: string, data: Record<string, unknown>, token?: string) =>
+    update: (id: string, data: Record<string, unknown>) =>
       apiFetch<MovimientoRaw>(`/movimientos/${id}`, {
         method: "PATCH",
         body: JSON.stringify(data),
-        token,
       }),
-    delete: (id: string, token?: string) =>
-      apiFetch(`/movimientos/${id}`, { method: "DELETE", token }),
+    delete: (id: string) =>
+      apiFetch(`/movimientos/${id}`, { method: "DELETE" }),
   },
 };
 

@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useData } from "../context/DataContext";
+import { useCatalog } from "../context/CatalogContext";
 import { useMonth } from "../context/MonthContext";
 import { MonthSelector } from "./MonthSelector";
 import { EditTransactionModal } from "./EditTransactionModal";
@@ -20,7 +21,12 @@ import { api, parseDateLocal, type Transaction } from "../../lib/api";
 
 export function Transactions() {
   const { token } = useAuth();
-  const { categories, merchants, transactions, deleteTransaction, refresh } = useData();
+  const { categories, merchants, transactions, deleteTransaction, refresh, loadDataForView } = useData();
+  const { refreshCatalog } = useCatalog();
+  useEffect(() => {
+    refreshCatalog();
+    loadDataForView("transactions");
+  }, [refreshCatalog, loadDataForView]);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [transactionToDelete, setTransactionToDelete] = useState<Transaction | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -31,7 +37,7 @@ export function Transactions() {
     setIsDeleting(true);
     try {
       await deleteTransaction(transactionToDelete.id);
-      await api.movimientos.invalidateCache(token);
+      await api.movimientos.invalidateCache();
       await refresh();
       toast.success("Gasto eliminado correctamente");
       setTransactionToDelete(null);

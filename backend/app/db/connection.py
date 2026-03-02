@@ -24,13 +24,15 @@ def _get_connection_string() -> str:
             "Faltan variables de entorno: SQL_SERVER, SQL_DB, SQL_USER, SQL_PASSWORD"
         )
     driver = "{ODBC Driver 18 for SQL Server}"
+    trust = "yes" if settings.SQL_TRUST_SERVER_CERTIFICATE else "no"
+    timeout = settings.SQL_CONNECTION_TIMEOUT
     return (
         f"Driver={driver};"
         f"Server={settings.SQL_SERVER},1433;"
         f"Database={settings.SQL_DB};"
         f"Uid={settings.SQL_USER};"
         f"Pwd={settings.SQL_PASSWORD};"
-        "Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;"
+        f"Encrypt=yes;TrustServerCertificate={trust};Connection Timeout={timeout};"
     )
 
 

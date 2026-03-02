@@ -75,7 +75,7 @@ export function EditTransactionModal({
         categoryId,
         subcategoryId: subcategoryId || undefined,
       });
-      await api.movimientos.invalidateCache(token);
+      await api.movimientos.invalidateCache();
       await refresh();
       toast.success("Gasto actualizado correctamente");
       onClose();
@@ -101,7 +101,7 @@ export function EditTransactionModal({
     setError("");
     try {
       await deleteTransaction(transaction.id);
-      await api.movimientos.invalidateCache(token);
+      await api.movimientos.invalidateCache();
       await refresh();
       toast.success("Gasto eliminado correctamente");
       onClose();

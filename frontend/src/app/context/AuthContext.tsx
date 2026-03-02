@@ -1,5 +1,5 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { apiFetch } from "../../lib/api";
+import { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from "react";
+import { apiFetch, setApiToken, setOnUnauthorized } from "../../lib/api";
 import { clearAllCacheOnLogout } from "../../lib/dataLayer";
 
 interface User {
@@ -33,9 +33,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (savedToken && savedUser) {
       setToken(savedToken);
       setUser(JSON.parse(savedUser));
+      setApiToken(savedToken);
     }
     setIsLoading(false);
   }, []);
+
+  useEffect(() => {
+    setApiToken(token);
+  }, [token]);
+
+  const logout = useCallback(() => {
+    clearAllCacheOnLogout();
+    setUser(null);
+    setToken(null);
+    setApiToken(null);
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+  }, []);
+
+  useEffect(() => {
+    setOnUnauthorized(() => logout());
+    return () => setOnUnauthorized(null);
+  }, [logout]);
 
   const login = async (username: string, password: string): Promise<boolean> => {
     try {
@@ -82,14 +101,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const msg = err instanceof Error ? err.message : "Error al crear la cuenta";
       return { ok: false, error: msg };
     }
-  };
-
-  const logout = () => {
-    clearAllCacheOnLogout();
-    setUser(null);
-    setToken(null);
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
   };
 
   return (

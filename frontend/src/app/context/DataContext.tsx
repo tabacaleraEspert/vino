@@ -42,6 +42,7 @@ interface DataContextType {
   updateMerchantRule: (id: string, rule: Partial<MerchantRule>) => Promise<void>;
   deleteMerchantRule: (id: string) => Promise<void>;
   refresh: () => Promise<void>;
+  loadDataForView: (view: "transactions" | "budgets" | "merchants") => Promise<void>;
   refreshTrigger: number;
   isLoading: boolean;
   error: string | null;
@@ -76,7 +77,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const period = `${selectedMonth.year}-${String(selectedMonth.month + 1).padStart(2, "0")}`;
 
   const fetchData = useCallback(
-    async (forceRefresh = false, categoriesOverride?: Category[]) => {
+    async (
+      forceRefresh = false,
+      categoriesOverride?: Category[],
+      options?: { includeReglas?: boolean }
+    ) => {
       if (!token) {
         setIsLoading(false);
         return;
@@ -85,7 +90,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setError(null);
       try {
         const { movimientos: movsRes, presupuestos: presupuestosRaw, reglas: reglasRaw, comercios: mers } =
-          await fetchDataForPeriod(token, period, { forceRefresh });
+          await fetchDataForPeriod(token, period, {
+            forceRefresh,
+            includeReglas: options?.includeReglas !== false,
+          });
 
         const items = movsRes?.items ?? [];
         const mersList = mers ?? [];
@@ -139,56 +147,56 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const addBudget = async (budget: Omit<Budget, "id">) => {
     if (!token) return;
-    await api.budgets.create(budget, token);
-    await fetchData(true);
+    await api.budgets.create(budget);
+    await fetchData(true, undefined, { includeReglas: true });
   };
 
   const updateBudget = async (id: string, updates: Partial<Budget>) => {
     if (!token) return;
-    await api.budgets.update(id, updates, token);
+    await api.budgets.update(id, updates);
     await fetchData(true);
   };
 
   const deleteBudget = async (id: string) => {
     if (!token) return;
-    await api.budgets.delete(id, token);
+    await api.budgets.delete(id);
     await fetchData(true);
   };
 
   const addMerchant = async (merchant: Omit<Merchant, "id">) => {
     if (!token) return;
-    await api.merchants.create(merchant, token);
+    await api.merchants.create(merchant);
     await fetchData(true);
   };
 
   const updateMerchant = async (id: string, merchant: Partial<Merchant>) => {
     if (!token) return;
-    const res = await api.merchants.update(id, merchant, token);
+    const res = await api.merchants.update(id, merchant);
     await fetchData(true);
     return res;
   };
 
   const deleteMerchant = async (id: string) => {
     if (!token) return;
-    await api.merchants.delete(id, token);
+    await api.merchants.delete(id);
     await fetchData(true);
   };
 
   const addMerchantRule = async (rule: Omit<MerchantRule, "id">) => {
     if (!token) return;
-    await api.merchantRules.create(rule, token);
+    await api.merchantRules.create(rule);
     await fetchData(true);
   };
 
   const updateMerchantRule = async (id: string, rule: Partial<MerchantRule>) => {
     if (!token) return;
-    await api.merchantRules.update(id, rule, token);
+    await api.merchantRules.update(id, rule);
     await fetchData(true);
   };
 
   const deleteMerchantRule = async (id: string) => {
     if (!token) return;
-    await api.merchantRules.delete(id, token);
+    await api.merchantRules.delete(id);
     await fetchData(true);
   };
 
@@ -196,21 +204,29 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (!token) return;
     const payload = transactionToPatchPayload(updates, categories, merchants);
     if (Object.keys(payload).length === 0) return;
-    await api.movimientos.update(id, payload, token);
+    await api.movimientos.update(id, payload);
     await fetchData(true);
   };
 
   const deleteTransaction = async (id: string) => {
     if (!token) return;
-    await api.movimientos.delete(id, token);
+    await api.movimientos.delete(id);
     await fetchData(true);
   };
 
   const refresh = useCallback(async () => {
     const cats = await refreshCatalog(true);
-    await fetchData(true, cats);
+    await fetchData(true, cats, { includeReglas: true });
     setRefreshTrigger((t) => t + 1);
   }, [refreshCatalog, fetchData]);
+
+  const loadDataForView = useCallback(
+    async (view: "transactions" | "budgets" | "merchants") => {
+      const includeReglas = view === "merchants";
+      await fetchData(false, undefined, { includeReglas });
+    },
+    [fetchData]
+  );
 
   return (
     <DataContext.Provider
@@ -238,6 +254,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         updateMerchantRule,
         deleteMerchantRule,
         refresh,
+        loadDataForView,
         refreshTrigger,
         isLoading: isLoading || catalogLoading,
         error: error || catalogError,
