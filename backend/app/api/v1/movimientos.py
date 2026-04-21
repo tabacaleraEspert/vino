@@ -1,266 +1,228 @@
-"""
-Endpoints de Movimientos (gastos/ingresos).
-Lee/escribe desde Azure SQL cuando MOVIMIENTOS_USE_SQL=True; fallback a Sheets.
-"""
+"""Endpoints de Movimientos (async, mobile-first)."""
 import logging
 from datetime import date
+from decimal import Decimal
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db.session import get_db
+from app.deps import get_current_user_id
+from app.repositories.movimiento_repo import (
+    list_movimientos as repo_list,
+    get_movimiento as repo_get,
+    create_movimiento as repo_create,
+    update_movimiento as repo_update,
+    delete_movimiento as repo_delete,
+)
+from app.utils.parse_utils import parse_period, parse_date_flex, parse_money
 
 logger = logging.getLogger(__name__)
-
-from app.api.deps import set_sheets_context
-from app.cache.sheets_cache import invalidate
-from app.core.config import settings
-from app.core.security import require_user
-from app.db.catalog import _get_id_usuario
-from app.db.movimientos import (
-    list_movimientos as sql_list_movimientos,
-    create_movimiento as sql_create_movimiento,
-    update_movimiento as sql_update_movimiento,
-    get_movimiento as sql_get_movimiento,
-    delete_movimiento as sql_delete_movimiento,
-)
-from app.sheets.registry import get_current_spreadsheet_id
-from app.sheets.service import (
-    create_movimiento as sheets_create_movimiento,
-    get_movimiento_by_id as sheets_get_movimiento,
-    list_movimientos_paginated as sheets_list_movimientos_paginated,
-    patch_movimiento_by_id as sheets_patch_movimiento,
-)
-from app.utils.parse_utils import parse_period
-
 router = APIRouter()
-
-USE_SQL = getattr(settings, "MOVIMIENTOS_USE_SQL", True)
-
-
-def _ensure_items_format(items: list) -> list:
-    """Asegura formato MovimientoItem para frontend (id, fecha, tipo, monto, comercio, etc.)."""
-    out = []
-    for it in items:
-        if "id" not in it and "Id" in it:
-            it = {**it, "id": str(it.get("Id", ""))}
-        out.append(it)
-    return out or items
 
 
 @router.get("")
-def list_movimientos(
+async def list_movimientos(
     period: Optional[str] = Query(default=None, description="YYYY-MM, ej: 2026-02"),
     from_date: Optional[date] = Query(default=None, alias="from"),
     to_date: Optional[date] = Query(default=None, alias="to"),
     tipo: str = Query(default="Gasto"),
-    categoria: Optional[str] = None,
-    subcategoria: Optional[str] = None,
+    categoria_id: Optional[str] = None,
+    subcategoria_id: Optional[str] = None,
     comercio: Optional[str] = None,
     moneda: Optional[str] = None,
     min_amount: Optional[float] = Query(default=None),
     max_amount: Optional[float] = Query(default=None),
     q: Optional[str] = Query(default=None, description="Buscar en comercio+descripcion"),
-    categoria_id: Optional[str] = None,
-    subcategoria_id: Optional[str] = None,
     medio_carga: Optional[str] = Query(default=None),
     page: int = Query(default=1, ge=1),
-    limit: int = Query(default=50, ge=1, le=5000),
-    sort: str = Query(
-        default="timestamp_desc",
-        description="timestamp_desc|fecha_desc|monto_desc|monto_asc",
-    ),
-    user: dict = Depends(require_user),
+    limit: int = Query(default=50, ge=1, le=100),
+    id_usuario: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
 ):
-    """
-    Listado paginado de movimientos.
-    Usa SQL cuando MOVIMIENTOS_USE_SQL=True; sino Sheets.
-    """
-    if USE_SQL:
+    """Listado paginado de movimientos (max 100 por página)."""
+    if period:
         try:
-            id_usuario = _get_id_usuario(user)
-            logger.info("movimientos_list id_usuario=%s sub=%s", id_usuario, user.get("sub"))
-        except ValueError as e:
-            raise HTTPException(status_code=401, detail=str(e))
+            fd, td = parse_period(period)
+            from_date = fd
+            to_date = td
+        except ValueError:
+            pass
 
-        if period:
-            try:
-                fd, td = parse_period(period)
-                from_date = fd
-                to_date = td
-            except ValueError:
-                pass
+    tipo_norm = (tipo or "Gasto").strip()
+    tipo_norm = "Ingreso" if tipo_norm.lower() == "ingreso" else "Gasto"
 
-        tipo_norm = (tipo or "Gasto").strip()
-        if tipo_norm.lower() != "ingreso":
-            tipo_norm = "Gasto"
-        else:
-            tipo_norm = "Ingreso"
+    cat_id = int(categoria_id) if categoria_id and str(categoria_id).isdigit() else None
+    sub_id = int(subcategoria_id) if subcategoria_id and str(subcategoria_id).isdigit() else None
+    offset = (page - 1) * limit
 
-        cat_id = int(categoria_id) if categoria_id and str(categoria_id).isdigit() else None
-        sub_id = int(subcategoria_id) if subcategoria_id and str(subcategoria_id).isdigit() else None
-
-        offset = (page - 1) * limit
-        items, total = sql_list_movimientos(
-            id_usuario=id_usuario,
-            from_date=from_date,
-            to_date=to_date,
-            tipo=tipo_norm,
-            categoria_id=cat_id,
-            subcategoria_id=sub_id,
-            medio_carga=medio_carga,
-            moneda=moneda,
-            comercio=comercio,
-            q=q,
-            min_amount=min_amount,
-            max_amount=max_amount,
-            limit=limit,
-            offset=offset,
-        )
-        return {
-            "items": _ensure_items_format(items),
-            "page": page,
-            "limit": limit,
-            "total": total,
-        }
-
-    set_sheets_context(user)
-    try:
-        items, total = sheets_list_movimientos_paginated(
-            period=period,
-            from_date=from_date,
-            to_date=to_date,
-            tipo=tipo or "Gasto",
-            categoria=categoria,
-            subcategoria=subcategoria,
-            comercio=comercio,
-            moneda=moneda,
-            user_id=user["sub"],
-            min_amount=min_amount,
-            max_amount=max_amount,
-            q=q,
-            categoria_id=categoria_id,
-            page=page,
-            limit=limit,
-            sort=sort,
-        )
-        return {"items": items, "page": page, "limit": limit, "total": total}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    items, total = await repo_list(
+        db,
+        id_usuario=id_usuario,
+        from_date=from_date,
+        to_date=to_date,
+        tipo=tipo_norm,
+        categoria_id=cat_id,
+        subcategoria_id=sub_id,
+        medio_carga=medio_carga,
+        moneda=moneda,
+        comercio=comercio,
+        q=q,
+        min_amount=min_amount,
+        max_amount=max_amount,
+        limit=limit,
+        offset=offset,
+    )
+    return {"items": items, "page": page, "limit": limit, "total": total}
 
 
 @router.post("/invalidate-cache")
-def invalidate_movimientos_cache(user: dict = Depends(require_user)):
-    """Invalida cache de Sheets (solo aplica cuando MOVIMIENTOS_USE_SQL=False)."""
-    if not USE_SQL:
-        set_sheets_context(user)
-        sid = get_current_spreadsheet_id()
-        invalidate(sid, "movimientos")
+async def invalidate_movimientos_cache():
+    """No-op: mantenido por compatibilidad con frontend."""
     return {"ok": True}
 
 
 @router.get("/{id}")
-def get_movimiento(id: str, user: dict = Depends(require_user)):
-    """Obtiene un movimiento por Id."""
-    if USE_SQL:
-        try:
-            id_usuario = _get_id_usuario(user)
-            mov_id = int(id)
-        except (ValueError, TypeError):
-            raise HTTPException(status_code=404, detail="Movimiento no encontrado")
-        row = sql_get_movimiento(id_usuario, mov_id)
-        if not row:
-            raise HTTPException(status_code=404, detail="Movimiento no encontrado")
-        return row
-
-    set_sheets_context(user)
-    row = sheets_get_movimiento(id)
+async def get_movimiento(
+    id: int,
+    id_usuario: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    row = await repo_get(db, id_usuario, id)
     if not row:
         raise HTTPException(status_code=404, detail="Movimiento no encontrado")
     return row
 
 
 @router.post("")
-def post_movimiento(payload: Dict[str, Any], user: dict = Depends(require_user)):
-    """
-    Crea movimiento.
-    Usa SQL cuando MOVIMIENTOS_USE_SQL=True.
-    Acepta Fecha (YYYY-MM-DD o DD/MM/YYYY), Monto, Comercio, idCategoria/idSubcategoria o Nombre_Categoria/Nombre_SubCategoria.
-    """
-    if USE_SQL:
-        try:
-            id_usuario = _get_id_usuario(user)
-        except ValueError as e:
-            raise HTTPException(status_code=401, detail=str(e))
-        try:
-            created = sql_create_movimiento(id_usuario, {**payload, "Id_usuario": id_usuario})
-            return created
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-        except RuntimeError as e:
-            raise HTTPException(status_code=500, detail=str(e))
+async def post_movimiento(
+    payload: Dict[str, Any],
+    id_usuario: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Crea movimiento."""
+    fecha = parse_date_flex(payload.get("Fecha") or payload.get("fecha"))
+    if not fecha:
+        raise HTTPException(status_code=400, detail="Fecha es requerida (YYYY-MM-DD o DD/MM/YYYY)")
 
-    set_sheets_context(user)
-    try:
-        from app.db.regla_comercio import resolve_regla
+    monto = parse_money(payload.get("Monto") or payload.get("monto"))
+    if monto < 0:
+        raise HTTPException(status_code=400, detail="Monto debe ser >= 0")
 
-        payload_with_user = {**payload, "Id_usuario": user["sub"]}
-        razon = str(payload.get("Comercio", "") or payload.get("comercio", "")).strip()
-        cat_nombre = str(payload.get("Nombre_Categoria", "") or "").strip()
-        sub_nombre = str(payload.get("Nombre_SubCategoria", "") or "").strip()
-        if razon and (not cat_nombre or not sub_nombre):
-            try:
-                uid = _get_id_usuario(user)
-                resolved = resolve_regla(uid, razon, create_auto_if_no_match=True)
-                payload_with_user["Nombre_Categoria"] = resolved.get("nombre_categoria", "")
-                payload_with_user["Nombre_SubCategoria"] = resolved.get("nombre_subcategoria", "")
-            except (ValueError, Exception):
-                pass
-        created = sheets_create_movimiento(payload_with_user)
-        return created
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    tipo = str(payload.get("TipoMovimiento") or payload.get("tipo") or "Gasto").strip()
+    tipo = "Ingreso" if tipo.lower() == "ingreso" else "Gasto"
+
+    medio_carga = str(payload.get("MedioCarga") or "Manual").strip() or "Manual"
+    moneda = str(payload.get("Moneda") or payload.get("moneda") or "ARS").strip() or "ARS"
+
+    id_cat = payload.get("Id_Categoria") or payload.get("idCategoria")
+    id_sub = payload.get("Id_SubCategoria") or payload.get("idSubcategoria")
+    if id_cat is not None:
+        try:
+            id_cat = int(id_cat)
+        except (TypeError, ValueError):
+            id_cat = None
+    if id_sub is not None:
+        try:
+            id_sub = int(id_sub)
+        except (TypeError, ValueError):
+            id_sub = None
+
+    descripcion = str(payload.get("Descripcion") or payload.get("descripcion") or "").strip() or None
+    comercio = str(payload.get("Comercio") or payload.get("comercio") or "").strip()
+    if comercio and descripcion:
+        descripcion = f"{comercio} {descripcion}".strip()
+    elif comercio:
+        descripcion = comercio
+
+    # Resolve category from regla if not provided
+    if comercio and id_cat is None and id_sub is None:
+        from app.repositories.regla_repo import resolve_regla
+        resolved = await resolve_regla(db, id_usuario, comercio)
+        if resolved:
+            id_cat = resolved["categoria_id"]
+            id_sub = resolved["subcategoria_id"]
+
+    created = await repo_create(
+        db,
+        id_usuario=id_usuario,
+        fecha=fecha,
+        tipo=tipo,
+        moneda=moneda,
+        monto=Decimal(str(round(monto, 2))),
+        medio_carga=medio_carga,
+        descripcion=descripcion,
+        id_categoria=id_cat,
+        id_subcategoria=id_sub,
+        comercio_id=payload.get("ComercioId") or payload.get("comercioId"),
+        categoria_manual=bool(payload.get("Id_Categoria") or payload.get("idCategoria")),
+        origen=str(payload.get("Origen") or "").strip() or None,
+        origen_id=str(payload.get("Origen_Id") or "").strip() or None,
+    )
+    return created
 
 
 @router.patch("/{id}")
-def patch_movimiento(id: str, payload: Dict[str, Any], user: dict = Depends(require_user)):
-    """Actualiza movimiento. Acepta Fecha, Monto, Descripcion, Comercio, Nombre_Categoria, Nombre_SubCategoria, etc."""
-    if USE_SQL:
-        try:
-            id_usuario = _get_id_usuario(user)
-            mov_id = int(id)
-        except (ValueError, TypeError):
-            raise HTTPException(status_code=404, detail="Movimiento no encontrado")
-        updated = sql_update_movimiento(id_usuario, mov_id, payload)
-        if not updated:
-            raise HTTPException(status_code=404, detail="Movimiento no encontrado")
-        return updated
+async def patch_movimiento(
+    id: int,
+    payload: Dict[str, Any],
+    id_usuario: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Actualiza movimiento."""
+    updates: Dict[str, Any] = {}
 
-    set_sheets_context(user)
-    try:
-        updated = sheets_patch_movimiento(id, payload)
-        return updated
-    except KeyError:
+    if "Fecha" in payload or "fecha" in payload:
+        fecha = parse_date_flex(payload.get("Fecha") or payload.get("fecha"))
+        if fecha:
+            updates["Fecha"] = fecha
+    if "Monto" in payload or "monto" in payload:
+        monto = parse_money(payload.get("Monto") or payload.get("monto"))
+        if monto >= 0:
+            updates["Monto"] = Decimal(str(round(monto, 2)))
+    if "Descripcion" in payload or "descripcion" in payload:
+        updates["Descripcion"] = str(payload.get("Descripcion") or payload.get("descripcion") or "").strip() or None
+    if "idCategoria" in payload or "Id_Categoria" in payload:
+        id_cat = payload.get("idCategoria") or payload.get("Id_Categoria")
+        updates["Id_Categoria"] = int(id_cat) if id_cat is not None else None
+        updates["CategoriaManual"] = True
+    if "idSubcategoria" in payload or "Id_SubCategoria" in payload:
+        id_sub = payload.get("idSubcategoria") or payload.get("Id_SubCategoria")
+        updates["Id_SubCategoria"] = int(id_sub) if id_sub is not None else None
+        updates["CategoriaManual"] = True
+    if "comercioId" in payload or "ComercioId" in payload:
+        updates["ComercioId"] = str(payload.get("comercioId") or payload.get("ComercioId") or "").strip() or None
+
+    if not updates:
+        existing = await repo_get(db, id_usuario, id)
+        if not existing:
+            raise HTTPException(status_code=404, detail="Movimiento no encontrado")
+        return existing
+
+    updated = await repo_update(db, id_usuario, id, updates)
+    if not updated:
         raise HTTPException(status_code=404, detail="Movimiento no encontrado")
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    return updated
 
 
 @router.put("/{id}")
-def put_movimiento(id: str, payload: Dict[str, Any], user: dict = Depends(require_user)):
+async def put_movimiento(
+    id: int,
+    payload: Dict[str, Any],
+    id_usuario: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
     """Alias de PATCH para compatibilidad."""
-    return patch_movimiento(id, payload, user)
+    return await patch_movimiento(id, payload, id_usuario, db)
 
 
 @router.delete("/{id}")
-def delete_movimiento(id: str, user: dict = Depends(require_user)):
-    """Elimina movimiento."""
-    if USE_SQL:
-        try:
-            id_usuario = _get_id_usuario(user)
-            mov_id = int(id)
-        except (ValueError, TypeError):
-            raise HTTPException(status_code=404, detail="Movimiento no encontrado")
-        if not sql_delete_movimiento(id_usuario, mov_id):
-            raise HTTPException(status_code=404, detail="Movimiento no encontrado")
-        return {"deleted": True, "id": id}
-
-    raise HTTPException(status_code=501, detail="DELETE solo soportado con MOVIMIENTOS_USE_SQL=True")
+async def delete_movimiento(
+    id: int,
+    id_usuario: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    if not await repo_delete(db, id_usuario, id):
+        raise HTTPException(status_code=404, detail="Movimiento no encontrado")
+    return {"deleted": True, "id": str(id)}

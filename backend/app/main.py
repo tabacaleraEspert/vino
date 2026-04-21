@@ -1,9 +1,9 @@
 import logging
-import threading
-import time
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 from app.api.v1.router import router as v1_router
 from app.core.config import settings
@@ -13,16 +13,29 @@ from app.middleware.metrics import RequestMetricsMiddleware
 configure_logging()
 logger = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("Starting Finanzas API v%s (env=%s)", settings.APP_VERSION, settings.ENV)
+    yield
+    # Cleanup: dispose async engine
+    from app.db.session import _async_engine
+    if _async_engine:
+        await _async_engine.dispose()
+    logger.info("Finanzas API shutdown complete")
+
+
 app = FastAPI(
     title="Finanzas Personales API",
     version=settings.APP_VERSION,
+    lifespan=lifespan,
 )
 
-# Métricas por request: request_id, path, t_total, t_sql, t_sheets (para identificar cuellos)
+# Compresión gzip para responses >500 bytes (mobile-first: ahorra bandwidth)
+app.add_middleware(GZipMiddleware, minimum_size=500)
+
 app.add_middleware(RequestMetricsMiddleware)
 
-# CORS: Azure Portal puede tener su propia CORS que anula esta. Si falla, en Portal → CORS
-# vacía todos los orígenes para que la app maneje CORS.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -44,54 +57,6 @@ app.add_middleware(
 
 app.include_router(v1_router, prefix="/api/v1")
 
-
-def _prefetch_tables() -> None:
-    """Precarga tablas críticas cuando SPREADSHEET_ID está configurado (dev/backfill)."""
-    sid = settings.SPREADSHEET_ID
-    if not sid:
-        return
-    from app.sheets.registry import set_current_spreadsheet_id
-    from app.sheets.service import read_table
-
-    set_current_spreadsheet_id(sid)
-    tables = ["reglas", "categorias", "subcategorias"]  # presupuestos ahora en SQL
-    for t in tables:
-        try:
-            read_table(t)
-            logger.info(f"prefetch ok: {t}")
-        except Exception as e:
-            logger.warning(f"prefetch {t}: {e}")
-
-
-def _refresh_loop() -> None:
-    """Refresco periódico de cache cada SHEETS_REFRESH_INTERVAL_SEC."""
-    interval = settings.SHEETS_REFRESH_INTERVAL_SEC
-    if interval <= 0:
-        return
-    sid = settings.SPREADSHEET_ID
-    if not sid:
-        return
-    from app.sheets.registry import set_current_spreadsheet_id
-    from app.sheets.service import read_table
-
-    set_current_spreadsheet_id(sid)
-    tables = ["reglas", "categorias", "subcategorias"]  # presupuestos ahora en SQL
-    while True:
-        time.sleep(interval)
-        for t in tables:
-            try:
-                read_table(t)
-                logger.info(f"refresh ok: {t}")
-            except Exception as e:
-                logger.warning(f"refresh {t}: {e}")
-
-
-@app.on_event("startup")
-def startup_event() -> None:
-    # Prefetch en background (solo si SPREADSHEET_ID está set)
-    t = threading.Thread(target=_prefetch_tables, daemon=True)
-    t.start()
-    # Refresco periódico en background
-    if settings.SHEETS_REFRESH_INTERVAL_SEC > 0 and settings.SPREADSHEET_ID:
-        tr = threading.Thread(target=_refresh_loop, daemon=True)
-        tr.start()
+# Global error handlers - never leak internal details
+from app.middleware.error_handler import register_error_handlers
+register_error_handlers(app)

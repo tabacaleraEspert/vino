@@ -28,17 +28,6 @@ class Settings(BaseSettings):
     SQL_LOGIN_CACHE_TTL_SEC: int = 60
     # Cache de catálogos (categorías, subcategorías, reglas, presupuestos) por id_usuario. 0 = desactivado.
     SQL_CATALOG_CACHE_TTL_SEC: int = 300
-    GOOGLE_SHEETS_CREDENTIALS_FILE: str | None = None
-    GOOGLE_SHEETS_CREDENTIALS_JSON: str | None = None
-    SHEETS_REGISTRY_JSON: str | None = None
-    # Fallback solo para scripts/dev; en producción viene de ID_Sheets (MaestroUsuarios)
-    SPREADSHEET_ID: str | None = None
-    # Cache in-memory para read_table (segundos). 0 = desactivado.
-    SHEETS_CACHE_TTL_SEC: int = 120
-    # Movimientos desde SQL (True) o Sheets (False). Default SQL.
-    MOVIMIENTOS_USE_SQL: bool = True
-    # Refresco periódico de cache (segundos). 0 = desactivado. Solo si SPREADSHEET_ID está set.
-    SHEETS_REFRESH_INTERVAL_SEC: int = 300
 
     class Config:
         env_file = ".env"

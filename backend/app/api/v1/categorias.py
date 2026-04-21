@@ -2,24 +2,24 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 
-from app.cache.sql_catalog_cache import invalidate
-from app.core.security import require_user
-from app.db.catalog import (
-    _get_id_usuario,
-    list_categorias_sql,
-    create_categoria_sql,
-    patch_categoria_sql,
-    delete_categoria_sql,
-    create_subcategoria_sql,
-    get_categoria_by_id_sql,
-    list_subcategorias_sql,
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db.session import get_db
+from app.deps import get_current_user_id
+from app.repositories.categoria_repo import (
+    list_categorias,
+    get_categoria,
+    create_categoria,
+    update_categoria,
+    delete_categoria,
+    create_subcategoria,
 )
 
 router = APIRouter()
 
 
 class SubcategoryIn(BaseModel):
-    name: str  # min 1 char, no solo espacios
+    name: str
 
 
 class CategoryIn(BaseModel):
@@ -35,100 +35,66 @@ class CategoryPatch(BaseModel):
     color: Optional[str] = None
 
 
-def _to_frontend_categoria(row: dict) -> dict:
-    """Formato compatible con frontend (categorias list)."""
-    return {"id": row["id"], "nombre": row["nombre"], "icon": row["icon"], "color": row["color"]}
-
-
 @router.get("")
-def get_categorias(user: dict = Depends(require_user)):
-    """Lista categorías del usuario desde Azure SQL (multi-tenant)."""
-    try:
-        id_usuario = _get_id_usuario(user)
-    except ValueError as e:
-        raise HTTPException(status_code=401, detail=str(e))
-    rows = list_categorias_sql(id_usuario)
-    return [_to_frontend_categoria(r) for r in rows]
+async def get_categorias(
+    id_usuario: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    return await list_categorias(db, id_usuario)
 
 
 @router.post("")
-def post_categoria(payload: CategoryIn, user: dict = Depends(require_user)):
-    """Crea categoría en SQL. Devuelve { id, nombre, icon, color }."""
-    try:
-        id_usuario = _get_id_usuario(user)
-    except ValueError as e:
-        raise HTTPException(status_code=401, detail=str(e))
-    try:
-        created = create_categoria_sql(
-            id_usuario=id_usuario,
-            nombre=payload.name,
-            icon=payload.icon,
-            color=payload.color,
-        )
-        if payload.subcategories:
-            for s in payload.subcategories:
-                create_subcategoria_sql(id_usuario, created["id"], s.name)
-        invalidate(id_usuario)
-        return _to_frontend_categoria(created)
-    except KeyError:
-        raise HTTPException(status_code=404, detail="Categoría no encontrada")
-    except RuntimeError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+async def post_categoria(
+    payload: CategoryIn,
+    id_usuario: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    created = await create_categoria(db, id_usuario, nombre=payload.name, icon=payload.icon, color=payload.color)
+    if payload.subcategories:
+        for s in payload.subcategories:
+            await create_subcategoria(db, id_usuario, categoria_id=created["id"], nombre=s.name)
+    return created
 
 
 @router.patch("/{id}")
-def patch_categoria(id: str, payload: CategoryPatch, user: dict = Depends(require_user)):
-    """Actualiza categoría por Id. Solo campos presentes."""
-    try:
-        id_usuario = _get_id_usuario(user)
-    except ValueError as e:
-        raise HTTPException(status_code=401, detail=str(e))
+async def patch_categoria(
+    id: int,
+    payload: CategoryPatch,
+    id_usuario: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
     patch = payload.model_dump(exclude_unset=True)
     if not patch:
-        cat = get_categoria_by_id_sql(id_usuario, id)
+        cat = await get_categoria(db, id_usuario, id)
         if not cat:
             raise HTTPException(status_code=404, detail="Categoría no encontrada")
-        return _to_frontend_categoria(cat)
-    updated = patch_categoria_sql(id_usuario, id, patch)
+        return cat
+    updated = await update_categoria(db, id_usuario, id, **patch)
     if not updated:
         raise HTTPException(status_code=404, detail="Categoría no encontrada")
-    invalidate(id_usuario)
-    return _to_frontend_categoria(updated)
+    return updated
 
 
 @router.delete("/{id}")
-def delete_categoria(id: str, user: dict = Depends(require_user)):
-    try:
-        id_usuario = _get_id_usuario(user)
-    except ValueError as e:
-        raise HTTPException(status_code=401, detail=str(e))
-    if not delete_categoria_sql(id_usuario, id):
+async def delete_categoria_endpoint(
+    id: int,
+    id_usuario: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    if not await delete_categoria(db, id_usuario, id):
         raise HTTPException(status_code=404, detail="Categoría no encontrada")
-    invalidate(id_usuario)
-    return {"deleted": True, "id": id}
+    return {"deleted": True, "id": str(id)}
 
 
 @router.post("/{id}/subcategorias")
-def post_subcategoria(id: str, payload: SubcategoryIn, user: dict = Depends(require_user)):
-    """Crea subcategoría asociada a la categoría {id}. Valida pertenencia al usuario."""
-    try:
-        id_usuario = _get_id_usuario(user)
-    except ValueError as e:
-        raise HTTPException(status_code=401, detail=str(e))
+async def post_subcategoria(
+    id: int,
+    payload: SubcategoryIn,
+    id_usuario: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
     nombre = (payload.name or "").strip()
     if not nombre:
         raise HTTPException(status_code=400, detail="El nombre de la subcategoría no puede estar vacío")
-    try:
-        created = create_subcategoria_sql(id_usuario, id, nombre)
-        invalidate(id_usuario)
-        return {
-            "id": created["id"],
-            "name": created["nombre"],
-            "categoryId": created["categoria_id"],
-        }
-    except KeyError:
-        raise HTTPException(status_code=404, detail="Categoría no encontrada")
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except RuntimeError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    created = await create_subcategoria(db, id_usuario, categoria_id=id, nombre=nombre)
+    return {"id": created["id"], "name": created["nombre"], "categoryId": created["categoria_id"]}
