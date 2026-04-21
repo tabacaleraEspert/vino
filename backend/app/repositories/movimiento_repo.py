@@ -9,6 +9,7 @@ from decimal import Decimal
 from typing import Any, Sequence
 
 from sqlalchemy import Select, and_, case, func, or_, select, text
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.movimiento_orm import Movimiento
@@ -291,17 +292,15 @@ async def list_comercios_from_movimientos(
     limit: int = 500,
 ) -> list[str]:
     """List unique merchant names from movimientos."""
-    stmt = (
-        select(func.distinct(func.ltrim(func.rtrim(Movimiento.Descripcion))))
-        .where(and_(
-            Movimiento.Id_usuario == id_usuario,
-            Movimiento.Descripcion.isnot(None),
-            func.ltrim(func.rtrim(Movimiento.Descripcion)) != "",
-        ))
-        .order_by(func.ltrim(func.rtrim(Movimiento.Descripcion)))
-        .limit(limit)
+    stmt = text(
+        "SELECT DISTINCT LTRIM(RTRIM(m.Descripcion)) AS nombre "
+        "FROM dbo.movimientos m "
+        "WHERE m.Id_usuario = :uid AND m.Descripcion IS NOT NULL "
+        "AND LTRIM(RTRIM(m.Descripcion)) != '' "
+        "ORDER BY nombre "
+        "OFFSET 0 ROWS FETCH NEXT :lim ROWS ONLY"
     )
-    result = await session.execute(stmt)
+    result = await session.execute(stmt, {"uid": id_usuario, "lim": limit})
     return [str(row[0]).strip() for row in result.all() if row[0]]
 
 
