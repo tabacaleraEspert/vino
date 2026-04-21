@@ -47,7 +47,7 @@ def get_async_engine():
             max_overflow=30,
             pool_pre_ping=True,
             pool_recycle=1800,
-            echo=settings.ENV == "local",
+            echo=False,
         )
     return _async_engine
 
