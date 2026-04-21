@@ -4,13 +4,12 @@ import { useMonth } from "../context/MonthContext";
 import { useAuth } from "../context/AuthContext";
 import { MonthSelector } from "./MonthSelector";
 import { api } from "../../lib/api";
-import { dashboardSummaryCache, dashboardBreakdownCache } from "../../lib/dataLayer";
 import { TrendingDown, TrendingUp, Receipt, RefreshCw } from "lucide-react";
 
 export function Dashboard() {
   const { categories, budgets, refresh, refreshTrigger } = useData();
   const { selectedMonth } = useMonth();
-  const { token, user } = useAuth();
+  const { token } = useAuth();
   const [summary, setSummary] = useState<{ gasto_mes: number; presupuesto_mes: number } | null>(null);
   const [breakdown, setBreakdown] = useState<{
     gastos_por_categoria: Array<{ categoria: string; total: number; pct: number }>;
@@ -18,77 +17,42 @@ export function Dashboard() {
     mayor_gasto: number;
     transacciones_count: number;
   } | null>(null);
-  const [isLoadingSummary, setIsLoadingSummary] = useState(false);
-  const [isLoadingBreakdown, setIsLoadingBreakdown] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   const period = `${selectedMonth.year}-${String(selectedMonth.month + 1).padStart(2, "0")}`;
-  const cacheKey = `${user?.id ?? "anon"}-${period}`;
 
-  const fetchSummary = useCallback(async () => {
+  const fetchDashboard = useCallback(async () => {
     if (!token) return;
-    setIsLoadingSummary(true);
+    setIsLoading(true);
     try {
-      const res = await api.views.homeSummary({ period, moneda: "ARS" });
-      const data = { gasto_mes: res.gasto_mes, presupuesto_mes: res.presupuesto_mes };
-      dashboardSummaryCache[cacheKey] = data;
-      setSummary(data);
+      // Parallel: summary + breakdown en 1 batch
+      const [summaryRes, breakdownRes] = await Promise.all([
+        api.views.homeSummary({ period, moneda: "ARS" }),
+        api.views.homeBreakdown({ period, currency: "ARS", top_categories: 6, recent_limit: 5 }),
+      ]);
+      setSummary({ gasto_mes: summaryRes.gasto_mes, presupuesto_mes: summaryRes.presupuesto_mes });
+      setBreakdown({
+        gastos_por_categoria: breakdownRes.gastos_por_categoria,
+        transacciones_recientes: breakdownRes.transacciones_recientes,
+        mayor_gasto: breakdownRes.mayor_gasto,
+        transacciones_count: breakdownRes.transacciones_count,
+      });
     } catch {
       setSummary(null);
-    } finally {
-      setIsLoadingSummary(false);
-    }
-  }, [period, token, cacheKey]);
-
-  const fetchBreakdown = useCallback(async () => {
-    if (!token) return;
-    setIsLoadingBreakdown(true);
-    try {
-      const res = await api.views.homeBreakdown({
-        period,
-        currency: "ARS",
-        top_categories: 6,
-        recent_limit: 5,
-      });
-      const data = {
-        gastos_por_categoria: res.gastos_por_categoria,
-        transacciones_recientes: res.transacciones_recientes,
-        mayor_gasto: res.mayor_gasto,
-        transacciones_count: res.transacciones_count,
-      };
-      dashboardBreakdownCache[cacheKey] = data;
-      setBreakdown(data);
-    } catch {
       setBreakdown(null);
     } finally {
-      setIsLoadingBreakdown(false);
+      setIsLoading(false);
     }
-  }, [period, token, cacheKey]);
-
-  const fetchAll = useCallback(() => {
-    fetchSummary();
-    fetchBreakdown();
-  }, [fetchSummary, fetchBreakdown]);
+  }, [period, token]);
 
   useEffect(() => {
     if (!token) {
       setSummary(null);
       setBreakdown(null);
-      setIsLoadingSummary(false);
-      setIsLoadingBreakdown(false);
       return;
     }
-    fetchAll();
-  }, [token, period, refreshTrigger, fetchAll]);
-
-  useEffect(() => {
-    setSummary(null);
-    setBreakdown(null);
-  }, [period]);
-
-  useEffect(() => {
-    Object.keys(dashboardSummaryCache).forEach((k) => delete dashboardSummaryCache[k]);
-    Object.keys(dashboardBreakdownCache).forEach((k) => delete dashboardBreakdownCache[k]);
-  }, [user?.id]);
+    fetchDashboard();
+  }, [token, period, refreshTrigger, fetchDashboard]);
 
   const monthSpent = summary?.gasto_mes ?? 0;
   const totalBudget = summary?.presupuesto_mes ?? budgets.reduce((sum, b) => sum + b.amount, 0);
@@ -121,18 +85,18 @@ export function Dashboard() {
         </div>
         <button
           onClick={refresh}
-          disabled={isLoadingSummary || isLoadingBreakdown}
+          disabled={isLoading}
           className="p-2.5 rounded-xl bg-white shadow-sm text-gray-600 hover:bg-gray-50 hover:text-blue-600 transition-colors disabled:opacity-50"
           title="Actualizar"
         >
-          <RefreshCw className={`w-5 h-5 ${(isLoadingSummary || isLoadingBreakdown) ? "animate-spin" : ""}`} />
+          <RefreshCw className={`w-5 h-5 ${isLoading ? "animate-spin" : ""}`} />
         </button>
       </div>
       {/* Resumen total */}
       <div
         className={`bg-gradient-to-br ${getCardGradient(percentageUsed)} rounded-2xl p-6 text-white shadow-lg transition-colors duration-500 min-h-[140px]`}
       >
-        {isLoadingSummary ? (
+        {isLoading ? (
           <div className="animate-pulse space-y-3">
             <div className="h-4 w-24 bg-white/30 rounded" />
             <div className="h-9 w-32 bg-white/40 rounded" />
@@ -168,7 +132,7 @@ export function Dashboard() {
       {/* Gastos por categoría */}
       <div className="bg-white rounded-xl p-4 shadow-sm">
         <h2 className="font-semibold mb-3">Gastos por Categoría</h2>
-        {isLoadingBreakdown ? (
+        {isLoading ? (
           <div className="animate-pulse space-y-3">
             <div className="h-3 w-full bg-gray-200 rounded-full" />
             {[1, 2, 3, 4, 5].map((i) => (
@@ -183,7 +147,6 @@ export function Dashboard() {
           </div>
         ) : (
           <>
-        {/* Barra apilada: proporción del total sin espacio vacío */}
         {totalSpent > 0 && spendingByCategory.length > 0 && (
           <div className="mb-4">
             <div className="h-3 rounded-full overflow-hidden flex">
@@ -204,13 +167,10 @@ export function Dashboard() {
             </div>
           </div>
         )}
-
-        {/* Lista: barra relativa al máximo (la más alta al 100%), % real mostrado */}
         <div className="space-y-3">
           {spendingByCategory.map((item) => {
             const pctOfTotal = totalSpent > 0 ? (item.amount / totalSpent) * 100 : 0;
-            const barWidth =
-              maxPctOfTotal > 0 ? (pctOfTotal / maxPctOfTotal) * 100 : 0;
+            const barWidth = maxPctOfTotal > 0 ? (pctOfTotal / maxPctOfTotal) * 100 : 0;
             return (
               <div key={item.categoria} className="flex items-center gap-3">
                 <div className="text-2xl flex-shrink-0">{item.icon ?? "📁"}</div>
@@ -247,7 +207,7 @@ export function Dashboard() {
       {/* Transacciones recientes */}
       <div className="bg-white rounded-xl p-4 shadow-sm">
         <h2 className="font-semibold mb-3">Transacciones Recientes</h2>
-        {isLoadingBreakdown ? (
+        {isLoading ? (
           <div className="animate-pulse space-y-3">
             {[1, 2, 3, 4, 5].map((i) => (
               <div key={i} className="flex items-center gap-3">
@@ -291,7 +251,7 @@ export function Dashboard() {
       {/* Insights rápidos */}
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-white rounded-xl p-4 shadow-sm">
-          {isLoadingBreakdown ? (
+          {isLoading ? (
             <div className="animate-pulse space-y-2">
               <div className="h-4 w-20 bg-gray-200 rounded" />
               <div className="h-5 w-16 bg-gray-200 rounded" />
@@ -309,7 +269,7 @@ export function Dashboard() {
           )}
         </div>
         <div className="bg-white rounded-xl p-4 shadow-sm">
-          {isLoadingBreakdown ? (
+          {isLoading ? (
             <div className="animate-pulse space-y-2">
               <div className="h-4 w-24 bg-gray-200 rounded" />
               <div className="h-5 w-8 bg-gray-200 rounded" />

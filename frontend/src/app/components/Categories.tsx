@@ -1,6 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useData } from "../context/DataContext";
-import { useCatalog } from "../context/CatalogContext";
 import { ChevronDown, ChevronRight, Plus, Edit2 } from "lucide-react";
 import { CreateCategoryModal } from "./CreateCategoryModal";
 import { CreateSubcategoryModal } from "./CreateSubcategoryModal";
@@ -9,10 +8,6 @@ import { EditSubcategoryModal } from "./EditSubcategoryModal";
 
 export function Categories() {
   const { categories } = useData();
-  const { refreshCatalog } = useCatalog();
-  useEffect(() => {
-    refreshCatalog();
-  }, [refreshCatalog]);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
     new Set()
   );

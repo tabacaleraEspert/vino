@@ -1,6 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useData } from "../context/DataContext";
-import { useCatalog } from "../context/CatalogContext";
 import { useMonth } from "../context/MonthContext";
 import { MonthSelector } from "./MonthSelector";
 import { AlertCircle, CheckCircle2, Plus, ChevronDown, ChevronRight, Pencil } from "lucide-react";
@@ -93,15 +92,9 @@ function BudgetCard({
 }
 
 export function Budgets() {
-  const { budgets, categories, transactions, loadDataForView } = useData();
-  const { refreshCatalog } = useCatalog();
+  const { budgets, categories, transactions } = useData();
   const { selectedMonth } = useMonth();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-
-  useEffect(() => {
-    refreshCatalog();
-    loadDataForView("budgets");
-  }, [refreshCatalog, loadDataForView]);
   const [editingBudget, setEditingBudget] = useState<Budget | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
 
