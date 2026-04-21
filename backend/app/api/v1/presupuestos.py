@@ -1,33 +1,31 @@
-"""
-Endpoints de Presupuestos desde Azure SQL (multi-tenant por Id_usuario).
-"""
+"""Endpoints de Presupuestos (async)."""
+from datetime import date
+from decimal import Decimal
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from typing import Literal, Optional
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.cache.sql_catalog_cache import invalidate
-from app.core.security import require_user
-from app.db.catalog import _get_id_usuario
-from app.db.presupuestos import (
-    list_presupuestos_sql,
-    upsert_presupuesto_sql,
-    delete_presupuesto_sql,
-    get_presupuesto_by_id_sql,
-    patch_presupuesto_sql,
+from app.db.session import get_db
+from app.deps import get_current_user_id
+from app.repositories.presupuesto_repo import (
+    list_presupuestos,
+    get_presupuesto,
+    upsert_presupuesto,
+    delete_presupuesto,
 )
-from app.utils.parse_utils import parse_periodo_mes, periodo_mes_to_mes_anio
-from datetime import date
+from app.utils.parse_utils import parse_periodo_mes
 
 router = APIRouter()
 
 
 class BudgetIn(BaseModel):
-    """Formato frontend existente (categoryId, subcategoryId, mes_anio, amount)."""
     categoryId: str
     subcategoryId: Optional[str] = None
     mes_anio: Optional[str] = None
     amount: float
-    period: Literal["monthly", "weekly", "yearly"] = "monthly"
+    period: str = "monthly"
     spent: float = 0
 
 
@@ -38,35 +36,26 @@ class BudgetPatch(BaseModel):
     amount: Optional[float] = None
 
 
-def _to_presupuesto_raw(row: dict) -> dict:
-    """Formato PresupuestoRaw para frontend."""
+def _to_raw(row: dict) -> dict:
     return {
         "id": row["id"],
-        "mes_anio": row.get("mes_anio") or row.get("mesAño", ""),
+        "mes_anio": row.get("mes_anio", ""),
         "categoria_id": row.get("categoria_id", ""),
         "categoria_nombre": row.get("categoria_nombre", ""),
         "subcategoria_id": row.get("subcategoria_id", ""),
         "subcategoria_nombre": row.get("subcategoria_nombre", ""),
-        "monto": row.get("monto", str(row.get("Monto", 0))),
+        "monto": row.get("monto", 0),
     }
 
 
 @router.get("")
-def get_presupuestos(
+async def get_presupuestos(
     mes_anio: Optional[str] = Query(default=None, alias="mesAño"),
     categoria_id: Optional[str] = Query(default=None),
     subcategoria_id: Optional[str] = Query(default=None),
-    user: dict = Depends(require_user),
+    id_usuario: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
 ):
-    """
-    Lista presupuestos del usuario.
-    mesAño (MM/YY o YYYY-MM) es el filtro principal. Si no viene, usa mes actual.
-    """
-    try:
-        id_usuario = _get_id_usuario(user)
-    except ValueError as e:
-        raise HTTPException(status_code=401, detail=str(e))
-
     periodo_mes = None
     if mes_anio:
         try:
@@ -74,29 +63,22 @@ def get_presupuestos(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
-    rows = list_presupuestos_sql(id_usuario, periodo_mes)
+    rows = await list_presupuestos(db, id_usuario, periodo_mes)
 
-    # Filtros opcionales
     if categoria_id:
         rows = [r for r in rows if r.get("categoria_id") == str(categoria_id)]
     if subcategoria_id:
         rows = [r for r in rows if r.get("subcategoria_id") == str(subcategoria_id)]
 
-    return [_to_presupuesto_raw(r) for r in rows]
+    return [_to_raw(r) for r in rows]
 
 
 @router.post("")
-def post_presupuesto(payload: BudgetIn, user: dict = Depends(require_user)):
-    """
-    UPSERT de presupuesto.
-    Formato frontend: categoryId, subcategoryId?, mes_anio?, amount.
-    mes_anio en MM/YY o YYYY-MM; si no viene, usa mes actual.
-    """
-    try:
-        id_usuario = _get_id_usuario(user)
-    except ValueError as e:
-        raise HTTPException(status_code=401, detail=str(e))
-
+async def post_presupuesto(
+    payload: BudgetIn,
+    id_usuario: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
     mes = payload.mes_anio
     if not mes:
         today = date.today()
@@ -113,55 +95,63 @@ def post_presupuesto(payload: BudgetIn, user: dict = Depends(require_user)):
     if payload.amount <= 0:
         raise HTTPException(status_code=400, detail="Monto debe ser mayor a 0")
 
-    try:
-        row = upsert_presupuesto_sql(id_usuario, periodo_mes, cat_id, sub_id, payload.amount)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-    invalidate(id_usuario)
+    row = await upsert_presupuesto(
+        db, id_usuario, periodo_mes, Decimal(str(payload.amount)), cat_id, sub_id,
+    )
     return {
         "id": row["id"],
         "categoryId": row["categoria_id"],
         "subcategoryId": row["subcategoria_id"] or None,
         "mes_anio": row["mes_anio"],
-        "amount": float(row.get("Monto", row.get("monto", 0))),
+        "amount": float(row.get("monto", 0)),
         "period": payload.period,
         "spent": payload.spent,
     }
 
 
 @router.patch("/{id}")
-def patch_presupuesto(id: str, payload: BudgetPatch, user: dict = Depends(require_user)):
-    """Actualiza monto del presupuesto."""
-    try:
-        id_usuario = _get_id_usuario(user)
-    except ValueError as e:
-        raise HTTPException(status_code=401, detail=str(e))
+async def patch_presupuesto(
+    id: int,
+    payload: BudgetPatch,
+    id_usuario: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
     patch = payload.model_dump(exclude_unset=True)
     if not patch:
-        pres = get_presupuesto_by_id_sql(id_usuario, id)
+        pres = await get_presupuesto(db, id_usuario, id)
         if not pres:
             raise HTTPException(status_code=404, detail="Presupuesto no encontrado")
-        return _to_presupuesto_raw(pres)
+        return _to_raw(pres)
     monto = patch.get("amount")
     if monto is not None and monto <= 0:
         raise HTTPException(status_code=400, detail="Monto debe ser mayor a 0")
-    updated = patch_presupuesto_sql(id_usuario, id, monto=monto)
-    if not updated:
+    # For now, only monto update is supported
+    pres = await get_presupuesto(db, id_usuario, id)
+    if not pres:
         raise HTTPException(status_code=404, detail="Presupuesto no encontrado")
-    invalidate(id_usuario)
-    return _to_presupuesto_raw(updated)
+    # Re-upsert with new monto
+    if monto is not None:
+        from app.models.presupuesto import Presupuesto
+        from sqlalchemy import and_, select
+        stmt = select(Presupuesto).where(and_(
+            Presupuesto.Id_usuario == id_usuario,
+            Presupuesto.Id == id,
+        ))
+        result = await db.execute(stmt)
+        obj = result.scalar_one_or_none()
+        if obj:
+            obj.Monto = Decimal(str(monto))
+            await db.flush()
+            pres = await get_presupuesto(db, id_usuario, id)
+    return _to_raw(pres)
 
 
 @router.delete("/{id}")
-def delete_presupuesto(id: str, user: dict = Depends(require_user)):
-    try:
-        id_usuario = _get_id_usuario(user)
-    except ValueError as e:
-        raise HTTPException(status_code=401, detail=str(e))
-    if not delete_presupuesto_sql(id_usuario, id):
+async def delete_presupuesto_endpoint(
+    id: int,
+    id_usuario: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    if not await delete_presupuesto(db, id_usuario, id):
         raise HTTPException(status_code=404, detail="Presupuesto no encontrado")
-    invalidate(id_usuario)
-    return {"deleted": True, "id": id}
+    return {"deleted": True, "id": str(id)}

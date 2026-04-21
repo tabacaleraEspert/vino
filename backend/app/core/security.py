@@ -1,4 +1,4 @@
-from contextvars import ContextVar
+"""Authentication and security utilities."""
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -11,15 +11,12 @@ from app.core.config import settings
 
 bearer = HTTPBearer(auto_error=False)
 
-# Id_usuario (MaestroUsuarios.id) para catalog SQL multi-tenant
-_current_user_id: ContextVar[Optional[int]] = ContextVar("user_id", default=None)
-
 
 def create_access_token(
     sub: str,
-    id_sheets: Optional[str] = None,
     expires_min: Optional[int] = None,
 ) -> str:
+    """Create a JWT token with sub claim."""
     exp_minutes = expires_min or settings.JWT_EXPIRE_MIN
     now = datetime.now(timezone.utc)
     payload = {
@@ -27,12 +24,11 @@ def create_access_token(
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(minutes=exp_minutes)).timestamp()),
     }
-    if id_sheets:
-        payload["id_sheets"] = id_sheets
     return jwt.encode(payload, settings.JWT_SECRET, algorithm="HS256")
 
 
 def decode_token(token: str) -> dict:
+    """Decode and validate a JWT token."""
     try:
         return jwt.decode(token, settings.JWT_SECRET, algorithms=["HS256"])
     except jwt.ExpiredSignatureError:
@@ -42,37 +38,23 @@ def decode_token(token: str) -> dict:
 
 
 def require_user(creds: HTTPAuthorizationCredentials = Depends(bearer)) -> dict:
+    """FastAPI dependency: validates JWT and returns payload."""
     if not creds:
         raise HTTPException(status_code=401, detail="Falta Authorization Bearer")
     payload = decode_token(creds.credentials)
-    # Establecer spreadsheet_id en contexto para que Sheets use el del usuario
-    # No setear cuando es "sql-only" (usuarios sin Google Sheet)
-    id_sheets = payload.get("id_sheets")
-    if id_sheets and id_sheets != "sql-only":
-        from app.sheets.registry import set_current_spreadsheet_id
-        set_current_spreadsheet_id(id_sheets)
-    # Establecer id_usuario para catalog SQL (sub = MaestroUsuarios.id)
-    sub = payload.get("sub") or payload.get("id")
-    if sub:
-        try:
-            _current_user_id.set(int(sub))
-        except (TypeError, ValueError):
-            pass
+    sub = payload.get("sub")
+    if not sub:
+        raise HTTPException(status_code=401, detail="Token sin identificador de usuario")
     return payload
 
 
-def get_current_user_id() -> Optional[int]:
-    """Id_usuario del token (MaestroUsuarios.id). None si no hay contexto."""
-    return _current_user_id.get()
-
-
 def hash_password(password: str) -> str:
-    """Genera hash bcrypt para almacenar en BD."""
+    """Generate bcrypt hash for storage."""
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    """Verifica password contra hash bcrypt."""
+    """Verify password against bcrypt hash."""
     if not hashed:
         return False
     try:
@@ -82,7 +64,8 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 def require_master_key(
-    x_master_key: Optional[str] = Header(default=None, alias="X-Master-Key")
+    x_master_key: Optional[str] = Header(default=None, alias="X-Master-Key"),
 ) -> None:
+    """FastAPI dependency: requires valid master key header."""
     if not x_master_key or x_master_key != settings.MASTER_KEY:
         raise HTTPException(status_code=401, detail="Master Key inválida")
