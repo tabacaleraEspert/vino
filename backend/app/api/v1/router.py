@@ -10,6 +10,7 @@ from app.api.v1 import reglas
 from app.api.v1 import presupuestos
 from app.api.v1 import recategorizaciones
 from app.api.v1 import comercios
+from app.api.v1 import ingest
 from app.api.v1.admin import router as admin_router
 from app.api.v1.views import router as views_router
 
@@ -32,3 +33,4 @@ router.include_router(subcategorias.router, prefix="/subcategorias", tags=["cata
 router.include_router(reglas.router, prefix="/reglas", tags=["catalogo"])
 router.include_router(presupuestos.router, prefix="/presupuestos", tags=["catalogo"])
 router.include_router(recategorizaciones.router, prefix="/recategorizaciones", tags=["recategorizacion"])
+router.include_router(ingest.router, prefix="/ingest", tags=["ingest"])

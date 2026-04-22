@@ -21,6 +21,18 @@ async def get_user_by_nombre(
     return _user_to_dict(user)
 
 
+async def get_user_by_gmail(
+    session: AsyncSession,
+    gmail: str,
+) -> dict[str, Any] | None:
+    stmt = select(User).where(User.gmail == gmail)
+    result = await session.execute(stmt)
+    user = result.scalar_one_or_none()
+    if not user:
+        return None
+    return _user_to_dict(user)
+
+
 async def get_user_by_id(
     session: AsyncSession,
     user_id: int,
@@ -63,6 +75,8 @@ def _user_to_dict(user: User) -> dict[str, Any]:
         "Nombre": user.Nombre,
         "Apellido": user.Apellido or "",
         "gmail": user.gmail or "",
+        "WppEntero": user.WppEntero or "",
+        "Whatsapp": user.Whatsapp or "",
         "PasswordHash": user.PasswordHash or "",
         "ID_Sheets": user.ID_Sheets or "",
     }
