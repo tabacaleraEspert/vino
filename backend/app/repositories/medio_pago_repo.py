@@ -41,7 +41,7 @@ async def resolve_medio_pago(
     Retorna dict con id_credito_debito, id_medio_pago_final, etc.
     Si no matchea, retorna dict con valores None.
     """
-    # Cargar catálogo
+    # Cargar catálogo con LEFT JOIN (medios sin crédito/débito incluidos)
     stmt = (
         select(
             CardFundingType.name.label("credito_debito"),
@@ -49,8 +49,9 @@ async def resolve_medio_pago(
             PaymentMethodCatalog.medio_de_pago_final,
             PaymentMethodCatalog.id_medio_de_pago_final,
         )
-        .join(
-            PaymentMethodCatalog,
+        .select_from(PaymentMethodCatalog)
+        .outerjoin(
+            CardFundingType,
             CardFundingType.card_funding_type_id == PaymentMethodCatalog.card_funding_type_id,
         )
         .where(PaymentMethodCatalog.is_active == True)  # noqa: E712
@@ -68,35 +69,36 @@ async def resolve_medio_pago(
     credito_debito = ""
     if re.search(r"credito|credit", texto):
         for c in catalogo:
-            if _norm(c["credito_debito"]) == "credito":
+            if c["credito_debito"] and _norm(c["credito_debito"]) == "credito":
                 id_credito_debito = c["id_credito_debito"]
                 credito_debito = "Credito"
                 break
     elif re.search(r"debito|debit", texto):
         for c in catalogo:
-            if _norm(c["credito_debito"]) == "debito":
+            if c["credito_debito"] and _norm(c["credito_debito"]) == "debito":
                 id_credito_debito = c["id_credito_debito"]
                 credito_debito = "Debito"
                 break
 
-    # 2. Matchear medio de pago por nombre
+    # 2. Matchear medio de pago por nombre (buscar el más largo que matchee)
     id_medio_pago_final = None
     medio_de_pago_final = ""
-    medios_vistos = set()
+    best_len = 0
     for c in catalogo:
         medio = c["medio_de_pago_final"]
-        if medio in medios_vistos:
-            continue
-        medios_vistos.add(medio)
         medio_norm = _norm(medio)
-        if medio_norm and medio_norm in texto:
-            if id_credito_debito is None or c["id_credito_debito"] == id_credito_debito:
+        if not medio_norm:
+            continue
+        # Buscar tokens del medio en el texto (no substring exacto)
+        tokens = medio_norm.replace("-", " ").split()
+        if all(t in texto for t in tokens) and len(medio_norm) > best_len:
+            if id_credito_debito is None or c["id_credito_debito"] is None or c["id_credito_debito"] == id_credito_debito:
                 id_medio_pago_final = c["id_medio_de_pago_final"]
                 medio_de_pago_final = medio
-                if id_credito_debito is None:
+                best_len = len(medio_norm)
+                if id_credito_debito is None and c["id_credito_debito"]:
                     id_credito_debito = c["id_credito_debito"]
-                    credito_debito = c["credito_debito"]
-                break
+                    credito_debito = c["credito_debito"] or ""
 
     # 3. Fallback: intentar por from del email
     if not id_medio_pago_final:
@@ -105,12 +107,12 @@ async def resolve_medio_pago(
             if key in from_norm:
                 for c in catalogo:
                     if search in _norm(c["medio_de_pago_final"]):
-                        if id_credito_debito is None or c["id_credito_debito"] == id_credito_debito:
+                        if id_credito_debito is None or c["id_credito_debito"] is None or c["id_credito_debito"] == id_credito_debito:
                             id_medio_pago_final = c["id_medio_de_pago_final"]
                             medio_de_pago_final = c["medio_de_pago_final"]
-                            if id_credito_debito is None:
+                            if id_credito_debito is None and c["id_credito_debito"]:
                                 id_credito_debito = c["id_credito_debito"]
-                                credito_debito = c["credito_debito"]
+                                credito_debito = c["credito_debito"] or ""
                             break
                 break
 
