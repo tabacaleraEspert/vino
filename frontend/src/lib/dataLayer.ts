@@ -97,6 +97,8 @@ export interface BootstrapData {
 }
 
 export async function fetchBootstrap(token: string): Promise<BootstrapData> {
+  // Asegurar que el token del módulo está seteado antes del request
+  setApiToken(token);
   return coalesce("bootstrap", async () => {
     const res = await api.bootstrap();
     return {
