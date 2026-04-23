@@ -7,9 +7,11 @@ const API_BASE =
 
 let _token: string | null = null;
 let _onUnauthorized: (() => void) | null = null;
+let _tokenSetAt = 0;
 
 export function setApiToken(token: string | null): void {
   _token = token;
+  _tokenSetAt = token ? Date.now() : 0;
 }
 
 export function setOnUnauthorized(cb: (() => void) | null): void {
@@ -38,7 +40,10 @@ export async function apiFetch<T = unknown>(
   const res = await fetch(`${API_BASE}${path}`, { ...init, ...cacheOpt, headers });
 
   if (res.status === 401 && _onUnauthorized) {
-    _onUnauthorized();
+    // No hacer logout si el token se seteó hace menos de 5 segundos (race condition post-login)
+    if (Date.now() - _tokenSetAt > 5000) {
+      _onUnauthorized();
+    }
     const err = await res.json().catch(() => ({ detail: "Sesión expirada" }));
     throw new Error(err.detail || "Sesión expirada");
   }
