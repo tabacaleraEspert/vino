@@ -22,21 +22,20 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const TOKEN_KEY = "finanzas_token";
 const USER_KEY = "finanzas_user";
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+// Restore token synchronously so it's available before any child renders
+const savedTokenSync = localStorage.getItem(TOKEN_KEY);
+const savedUserSync = (() => {
+  try {
+    const raw = localStorage.getItem(USER_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+})();
+if (savedTokenSync) setApiToken(savedTokenSync);
 
-  useEffect(() => {
-    const savedToken = localStorage.getItem(TOKEN_KEY);
-    const savedUser = localStorage.getItem(USER_KEY);
-    if (savedToken && savedUser) {
-      setToken(savedToken);
-      setUser(JSON.parse(savedUser));
-      setApiToken(savedToken);
-    }
-    setIsLoading(false);
-  }, []);
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<User | null>(savedUserSync);
+  const [token, setToken] = useState<string | null>(savedTokenSync);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     setApiToken(token);
@@ -69,6 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         name: u.nombre ? `${u.nombre} ${(u.apellido || "").trim()}`.trim() : username,
         email: u.gmail || "",
       };
+      setApiToken(accessToken);
       setToken(accessToken);
       setUser(newUser);
       localStorage.setItem(TOKEN_KEY, accessToken);

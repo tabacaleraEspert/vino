@@ -7,6 +7,7 @@ import { Budgets } from "./components/Budgets";
 import { Merchants } from "./components/Merchants";
 import { MerchantDetail } from "./components/MerchantDetail";
 import { Stats } from "./components/Stats";
+import { AdminPanel } from "./components/AdminPanel";
 import { Login } from "./components/Login";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
@@ -30,6 +31,7 @@ export const router = createBrowserRouter([
       { path: "merchants", Component: Merchants },
       { path: "merchants/:merchantId", Component: MerchantDetail },
       { path: "stats", Component: Stats },
+      { path: "admin", Component: AdminPanel },
     ],
   },
 ]);

@@ -197,7 +197,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://vino-backend.azurewebsites.net/api/v1/ingest",
+        "url": "https://vino-backend-bkbge8cwfffsdrhc.brazilsouth-01.azurewebsites.net/api/v1/ingest",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -260,7 +260,7 @@
             { "name": "ContentSid", "value": "HX599a222ce2135a307c20f0a9d365b3ed" },
             {
               "name": "ContentVariables",
-              "value": "={\"Moneda\":\"{{ $json.movimiento.moneda || 'ARS' }}\",\"monto\":\"{{ $json.movimiento.monto }}\",\"Comercio\":\"{{ $('Extractor de Datos').first().json.output.Comercio || 'No informado' }}\",\"Medios_de_pago\":\"{{ $('Extractor de Datos').first().json.output['Medios de pago'] || '' }}\",\"Nombre_Categoria\":\"{{ $json.regla.categoria }}\",\"Nombre_SubCategoria\":\"{{ $json.regla.subcategoria }}\"}"
+              "value": "={\"Moneda\":\"{{ $('POST /ingest').first().json.movimiento.moneda || 'ARS' }}\",\"monto\":\"{{ $('POST /ingest').first().json.movimiento.monto }}\",\"Comercio\":\"{{ $('Extractor de Datos').first().json.output.Comercio || 'No informado' }}\",\"Medios_de_pago\":\"{{ $('Extractor de Datos').first().json.output['Medios de pago'] || '' }}\",\"Nombre_Categoria\":\"{{ $('POST /ingest').first().json.regla.categoria || 'Sin categoria' }}\",\"Nombre_SubCategoria\":\"{{ $('POST /ingest').first().json.regla.subcategoria || 'Sin subcategoria' }}\"}"
             }
           ]
         },
@@ -297,7 +297,7 @@
             { "name": "ContentSid", "value": "HX9a8a00bf7f22a4e10a94f144c111b18a" },
             {
               "name": "ContentVariables",
-              "value": "={\"Id\":\"{{ $json.movimiento.id }}\",\"Moneda\":\"{{ $json.movimiento.moneda || 'ARS' }}\",\"Monto\":\"{{ $json.movimiento.monto }}\",\"Comercio\":\"{{ $('Extractor de Datos').first().json.output.Comercio || 'No informado' }}\",\"Medios_de_pago\":\"{{ $('Extractor de Datos').first().json.output['Medios de pago'] || '' }}\",\"Nombre_categoria\":\"Otros\",\"Nombre_subcategoria\":\"Gastos no categorizados\"}"
+              "value": "={\"Id\":\"{{ $('POST /ingest').first().json.movimiento.id }}\",\"Moneda\":\"{{ $('POST /ingest').first().json.movimiento.moneda || 'ARS' }}\",\"Monto\":\"{{ $('POST /ingest').first().json.movimiento.monto }}\",\"Comercio\":\"{{ $('Extractor de Datos').first().json.output.Comercio || 'No informado' }}\",\"Medios_de_pago\":\"{{ $('Extractor de Datos').first().json.output['Medios de pago'] || '' }}\",\"Nombre_categoria\":\"Otros\",\"Nombre_subcategoria\":\"Gastos no categorizados\"}"
             }
           ]
         },
@@ -348,7 +348,7 @@
 
     {
       "parameters": {
-        "content": "## Configurar antes de activar\n\n1. Crear credencial HTTP Header Auth:\n   - Name: X-Master-Key\n   - Value: tu MASTER_KEY del backend\n   - Asignarla al nodo POST /ingest\n\n2. Verificar URL del backend en POST /ingest\n   (default: https://vino-backend.azurewebsites.net)",
+        "content": "## Configurar antes de activar\n\n1. Crear credencial HTTP Header Auth:\n   - Name: X-Master-Key\n   - Value: tu MASTER_KEY del backend\n   - Asignarla al nodo POST /ingest\n\n2. Verificar URL del backend en POST /ingest\n   (default: https://vino-backend-bkbge8cwfffsdrhc.brazilsouth-01.azurewebsites.net)",
         "height": 220,
         "width": 480,
         "color": 3
