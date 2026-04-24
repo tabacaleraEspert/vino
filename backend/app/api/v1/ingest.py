@@ -99,18 +99,11 @@ async def ingest_movimiento(
                 id_medio_pago_final = None
 
     # --- 3. Deduplicar ---
-    if origen_id:
-        existing = await get_movimiento_by_origen(db, id_usuario, origen, origen_id)
-        if existing:
-            return {
-                "status": "duplicado",
-                "movimiento": existing,
-                "usuario": {
-                    "id": user["id"],
-                    "nombre": user.get("Nombre", ""),
-                    "wpp_entero": user.get("WppEntero", ""),
-                },
-            }
+    # TODO(backlog): reactivar deduplicación cuando n8n envíe el Message ID
+    # de Gmail como origen_id en vez del asunto del email.
+    # Por ahora deshabilitado porque asuntos genéricos como "Compra aprobada"
+    # causaban falsos duplicados.
+    origen_id = None  # ignorar hasta que n8n mande un ID real
 
     # --- 4. Resolver categoría por regla ---
     id_categoria = None
