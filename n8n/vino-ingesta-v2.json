@@ -1,0 +1,334 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 1. Triggers Gmail\nPolling cada minuto por cuenta",
+        "height": 744,
+        "width": 432
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [7120, -7312],
+      "typeVersion": 1,
+      "id": "ee608e5a-dbce-44fd-8f5c-0b21ff0632d3",
+      "name": "Note Triggers"
+    },
+    {
+      "parameters": {
+        "content": "## 2. Extracción con IA\nGPT-4.1-mini extrae datos del mail",
+        "height": 600,
+        "width": 400
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [7744, -7312],
+      "typeVersion": 1,
+      "id": "af26cf78-5345-4717-a9c2-12738ae7ad81",
+      "name": "Note Extractor"
+    },
+    {
+      "parameters": {
+        "content": "## 3. Backend API\nPOST /api/v1/ingest\nResuelve usuario, medio pago, reglas, crea movimiento",
+        "height": 600,
+        "width": 400
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [8192, -7312],
+      "typeVersion": 1,
+      "id": "5c6e92bc-310b-4099-9ea2-3ca62bd6a591",
+      "name": "Note Backend"
+    },
+    {
+      "parameters": {
+        "content": "## 4. Notificación WhatsApp\nTemplate según si se categorizó o no",
+        "height": 600,
+        "width": 640
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [8624, -7312],
+      "typeVersion": 1,
+      "id": "5dadf774-4ecd-43b8-9947-a859e8e89454",
+      "name": "Note WhatsApp"
+    },
+    {
+      "parameters": {
+        "pollTimes": { "item": [{ "mode": "everyMinute" }] },
+        "simple": false,
+        "filters": {
+          "q": "((subject:\"Pagaste\" AND from:mensajesyavisos@mails.santander.com.ar) OR (subject:\"Pagaste\" AND from:davor.vindis99@gmail.com) OR (subject:\"Aviso de transferencia\" AND from:mensajesyavisos@mails.santander.com.ar) OR (subject:\"Aviso de transferencia\" AND from:davor.vindis99@gmail.com))"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.3,
+      "position": [7200, -7200],
+      "id": "94a46190-7f0b-4803-affa-cae473ddf3ec",
+      "name": "Gmail DV",
+      "credentials": {
+        "gmailOAuth2": { "id": "PYmg7qFpqcgIdfqF", "name": "Davor Vindis" }
+      }
+    },
+    {
+      "parameters": {
+        "pollTimes": { "item": [{ "mode": "everyMinute" }] },
+        "simple": false,
+        "filters": {
+          "q": "(|(subject:\"Aviso de compra\" AND from:info@notificaciones.bancomacro.com.ar) OR (subject:\"Pagaste\" AND from:davor.vindis99@gmail.com) OR (subject:\"Aviso de transferencia\" AND from:mensajesyavisos@mails.santander.com.ar) OR (subject:\"Aviso de transferencia\" AND from:davor.vindis99@gmail.com))"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.3,
+      "position": [7200, -7040],
+      "id": "7d167023-1e18-4d02-bcba-55e3c0281887",
+      "name": "Gmail MM",
+      "credentials": {
+        "gmailOAuth2": { "id": "q5dlSdV6tcBTVBi0", "name": "Gmail MM" }
+      }
+    },
+    {
+      "parameters": {
+        "pollTimes": { "item": [{ "mode": "everyMinute" }] },
+        "simple": false,
+        "filters": {
+          "q": "((subject:\"Nueva compra\" AND from:avisos-bbva-ar@bbva.com) OR (subject:\"Nueva compra\" AND from:ignamedico@gmail.com) OR (subject:\"Compra aprobada\" AND from:avisos-bbva-ar@bbva.com) OR (subject:\"Compra aprobada\" AND from:ignamedico@gmail.com) OR (subject:\"Realizaste una transferencia\" AND from:avisos-bbva-ar@bbva.com) OR (subject:\"Realizaste una transferencia\" AND from:ignamedico@gmail.com) OR (subject:\"Pago aprobado en\" AND from:info@mercadopago.com) OR (subject:\"Pago aprobado en\" AND from:ignamedico@gmail.com) OR (subject:\"Tu transferencia fue enviada\" AND from:info@mercadopago.com) OR (subject:\"Tu transferencia fue enviada\" AND from:ignamedico@gmail.com))"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.3,
+      "position": [7200, -6880],
+      "id": "18b60311-0c95-4300-8241-0cb37b5b7847",
+      "name": "Gmail IM",
+      "credentials": {
+        "gmailOAuth2": { "id": "wLhrsx2KCc9gzAXc", "name": "IM 22.04" }
+      }
+    },
+    {
+      "parameters": {
+        "pollTimes": { "item": [{ "mode": "everyMinute" }] },
+        "simple": false,
+        "filters": {
+          "q": "((subject:\"Nueva compra\" AND from:avisos-bbva-ar@bbva.com) OR (subject:\"Nueva compra\" AND from:dolorescelloc@gmail.com) OR (subject:\"Realizaste una transferencia\" AND from:avisos-bbva-ar@bbva.com) OR (subject:\"Realizaste una transferencia\" AND from:dolorescelloc@gmail.com) OR (subject:\"Pago aprobado en\" AND from:info@mercadopago.com) OR (subject:\"Pago aprobado en\" AND from:dolorescelloc@gmail.com) OR (subject:\"Tu transferencia fue enviada\" AND from:info@mercadopago.com) OR (subject:\"Tu transferencia fue enviada\" AND from:ignamedico@gmail.com))"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.3,
+      "position": [7200, -6720],
+      "id": "928a9309-b148-46d1-be4e-caf90bd1ca1d",
+      "name": "Gmail Loli",
+      "credentials": {
+        "gmailOAuth2": { "id": "JnMUvOjXsdsBzgoc", "name": "Loli" }
+      }
+    },
+    {
+      "parameters": {
+        "model": { "__rl": true, "mode": "list", "value": "gpt-5.5" },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [7824, -6912],
+      "id": "1037f6b3-f2f9-4aa7-a8bf-dd5f9b5ad7ea",
+      "name": "GPT 4.1 mini",
+      "credentials": {
+        "openAiApi": { "id": "HFN7bgF1UzNi2Nvy", "name": "OpenAi account 2" }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=### CONTENIDO DEL EMAIL\n\nSnippet:\n{{ $json.html }}\n{{ $json.text }}\n\nFrom:\n{{ $json.headers.from }}\n\nTo:\n{{ $json.headers.to }}\nSubject:\n{{ $json.headers.subject }}\n\nFecha:\n{{ $json.headers.date }}\n\n### INSTRUCCION\nExtrae los datos del gasto segun el formato requerido.\n",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "Sos un extractor de datos de gastos personales.\n\nVas a recibir la informacion de emails de aviso de consumo o de resumenes de pago asociados a tarjetas de credito, debito, transferencias u otros medios, enviados por bancos o entidades financieras de Argentina.\n\nTu unica tarea es LEER el contenido del mail y devolver SIEMPRE un unico objeto JSON con EXACTAMENTE estas claves:\n\nfecha, Usuario, Tipo de Movimiento, Medios de pago, monto, Moneda, descripcion, From, Comercio, Asunto del Correo\n\nReglas:\n- monto debe ser number (no string)\n- fecha debe ser string en formato YYYY-MM-DD HH:MM\n- Si solo hay fecha sin hora, usa YYYY-MM-DD 00:00\n- Usuario: email del destinatario (campo To)\n- Tipo de Movimiento: siempre \"gasto\"\n- monto: sin $, sin separadores de miles, decimales con punto\n- Moneda: ARS por defecto si no se especifica\n- descripcion: resumen corto y entendible del gasto\n- Medios de pago: incluir entidad si se identifica\n- From: solo el correo del remitente sin nombre\n- Comercio: nombre del comercio, nunca una entidad bancaria. Si empieza con MERPAGO eliminar esa parte. Si es transferencia, poner el destinatario. Si no se puede inferir: \"No identificado\"\n- Asunto del Correo: copiar textualmente el Subject\n\nDevolver solo JSON valido, sin markdown, sin texto adicional."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [7824, -7120],
+      "id": "b2bb5ff8-a6e1-4361-b945-8d0af0030771",
+      "name": "Extractor de Datos",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://vino-backend-bkbge8cwfffsdrhc.brazilsouth-01.azurewebsites.net/api/v1/ingest",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  usuario_gmail: $('Extractor de Datos').first().json.output.Usuario,\n  fecha: $('Extractor de Datos').first().json.output.fecha,\n  tipo: $('Extractor de Datos').first().json.output['Tipo de Movimiento'] === 'gasto' ? 'Gasto' : 'Ingreso',\n  monto: $('Extractor de Datos').first().json.output.monto,\n  moneda: $('Extractor de Datos').first().json.output.Moneda || 'ARS',\n  comercio_raw: $('Extractor de Datos').first().json.output.Comercio,\n  descripcion: $('Extractor de Datos').first().json.output.descripcion,\n  medio_pago_raw: $('Extractor de Datos').first().json.output['Medios de pago'] || '',\n  from_email: $('Extractor de Datos').first().json.output.From || '',\n  asunto: $('Extractor de Datos').first().json.output['Asunto del Correo'] || '',\n  origen: 'Gmail',\n  origen_id: $('Extractor de Datos').first().json.output.Usuario + '_' + $('Extractor de Datos').first().json.output.fecha + '_' + $('Extractor de Datos').first().json.output.monto + '_' + $('Extractor de Datos').first().json.output.Comercio\n}) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [8352, -7136],
+      "id": "61a647e8-8a7d-4c3b-bc02-a5f90b9957b4",
+      "name": "POST /ingest",
+      "credentials": {
+        "httpHeaderAuth": { "id": "Vs0QI3pE2uopgGVB", "name": "Header Auth account" }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "check-match",
+              "leftValue": "={{ $json.regla.match }}",
+              "rightValue": "true",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [8688, -7152],
+      "id": "9df62be8-fbab-477a-83e1-ed69fcd22f1b",
+      "name": "Categorizado?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.twilio.com/2010-04-01/Accounts/{{ TWILIO_ACCOUNT_SID }}/Messages.json",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Content-Type", "value": "application/x-www-form-urlencoded" }]
+        },
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            { "name": "From", "value": "whatsapp:+15709091218" },
+            { "name": "To", "value": "={{ $('POST /ingest').first().json.usuario.wpp_entero }}" },
+            { "name": "ContentSid", "value": "HX599a222ce2135a307c20f0a9d365b3ed" },
+            { "name": "ContentVariables", "value": "={\"Moneda\":\"{{ $('POST /ingest').first().json.movimiento.moneda || 'ARS' }}\",\"monto\":\"{{ $('POST /ingest').first().json.movimiento.monto }}\",\"Comercio\":\"{{ $('Extractor de Datos').first().json.output.Comercio || 'No informado' }}\",\"Medios_de_pago\":\"{{ $('Extractor de Datos').first().json.output['Medios de pago'] || '' }}\",\"Nombre_Categoria\":\"{{ $('POST /ingest').first().json.regla.categoria || 'Sin categoria' }}\",\"Nombre_SubCategoria\":\"{{ $('POST /ingest').first().json.regla.subcategoria || 'Sin subcategoria' }}\"}" }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [8928, -7216],
+      "id": "01703f0a-3339-4d7b-8b81-762335614660",
+      "name": "WhatsApp Categorizado",
+      "credentials": {
+        "httpBasicAuth": { "id": "qu2pUaLFWnPuyEoT", "name": "Twilio Template Sender" }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.twilio.com/2010-04-01/Accounts/{{ TWILIO_ACCOUNT_SID }}/Messages.json",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Content-Type", "value": "application/x-www-form-urlencoded" }]
+        },
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            { "name": "From", "value": "whatsapp:+15709091218" },
+            { "name": "To", "value": "={{ $('POST /ingest').first().json.usuario.wpp_entero }}" },
+            { "name": "ContentSid", "value": "HX9a8a00bf7f22a4e10a94f144c111b18a" },
+            { "name": "ContentVariables", "value": "={\"Id\":\"{{ $('POST /ingest').first().json.movimiento.id }}\",\"Moneda\":\"{{ $('POST /ingest').first().json.movimiento.moneda || 'ARS' }}\",\"Monto\":\"{{ $('POST /ingest').first().json.movimiento.monto }}\",\"Comercio\":\"{{ $('Extractor de Datos').first().json.output.Comercio || 'No informado' }}\",\"Medios_de_pago\":\"{{ $('Extractor de Datos').first().json.output['Medios de pago'] || '' }}\",\"Nombre_categoria\":\"Otros\",\"Nombre_subcategoria\":\"Gastos no categorizados\"}" }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [8928, -6992],
+      "id": "bbf8ecb3-98da-4898-8008-9545f86e6fe4",
+      "name": "WhatsApp No Categorizado",
+      "credentials": {
+        "httpBasicAuth": { "id": "qu2pUaLFWnPuyEoT", "name": "Twilio Template Sender" }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.twilio.com/2010-04-01/Accounts/{{ TWILIO_ACCOUNT_SID }}/Messages.json",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            { "name": "From", "value": "whatsapp:+15709091218" },
+            { "name": "To", "value": "whatsapp:+5491131500351" },
+            { "name": "Body", "value": "=Error en Vino Ingesta v2.\n\nError: {{ $json.error.message || $json.error || 'Error desconocido' }}\n\nMail subject: {{ $('Extractor de Datos').first().json.output?.['Asunto del Correo'] || 'No disponible' }}" }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [8240, -6880],
+      "id": "bff1ad57-f573-43b4-b34d-6594898dbbc4",
+      "name": "WhatsApp Error",
+      "credentials": {
+        "httpBasicAuth": { "id": "qu2pUaLFWnPuyEoT", "name": "Twilio Template Sender" }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"output\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"fecha\": { \"type\": \"string\" },\n        \"Usuario\": { \"type\": \"string\" },\n        \"Tipo de Movimiento\": { \"type\": \"string\", \"enum\": [\"gasto\"] },\n        \"Medios de pago\": { \"type\": \"string\" },\n        \"monto\": { \"type\": \"number\" },\n        \"Moneda\": { \"type\": \"string\" },\n        \"descripcion\": { \"type\": \"string\" },\n        \"From\": { \"type\": \"string\" },\n        \"Comercio\": { \"type\": \"string\" },\n        \"Asunto del Correo\": { \"type\": \"string\" }\n      },\n      \"required\": [\"monto\", \"fecha\", \"Comercio\"]\n    },\n    \"fecha\": { \"type\": \"string\" },\n    \"Usuario\": { \"type\": \"string\" },\n    \"monto\": { \"type\": \"number\" },\n    \"Comercio\": { \"type\": \"string\" }\n  },\n  \"additionalProperties\": true\n}",
+        "autoFix": true
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [7920, -6912],
+      "id": "547c1af9-e813-41ec-b07a-c730b08d9a10",
+      "name": "Parser - Input Mail"
+    },
+    {
+      "parameters": {
+        "model": { "__rl": true, "mode": "list", "value": "gpt-5.5" },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [7936, -6736],
+      "id": "f0a27b38-89e4-4877-9d45-b5daa60e9c88",
+      "name": "OpenAI Chat Model35",
+      "credentials": {
+        "openAiApi": { "id": "HFN7bgF1UzNi2Nvy", "name": "OpenAi account 2" }
+      }
+    }
+  ],
+  "connections": {
+    "Gmail DV": { "main": [[{ "node": "Extractor de Datos", "type": "main", "index": 0 }]] },
+    "Gmail MM": { "main": [[{ "node": "Extractor de Datos", "type": "main", "index": 0 }]] },
+    "Gmail IM": { "main": [[{ "node": "Extractor de Datos", "type": "main", "index": 0 }]] },
+    "Gmail Loli": { "main": [[{ "node": "Extractor de Datos", "type": "main", "index": 0 }]] },
+    "GPT 4.1 mini": { "ai_languageModel": [[{ "node": "Extractor de Datos", "type": "ai_languageModel", "index": 0 }]] },
+    "Extractor de Datos": { "main": [[{ "node": "POST /ingest", "type": "main", "index": 0 }], [{ "node": "WhatsApp Error", "type": "main", "index": 0 }]] },
+    "POST /ingest": { "main": [[{ "node": "Categorizado?", "type": "main", "index": 0 }]] },
+    "Categorizado?": { "main": [[{ "node": "WhatsApp Categorizado", "type": "main", "index": 0 }], [{ "node": "WhatsApp No Categorizado", "type": "main", "index": 0 }]] },
+    "Parser - Input Mail": { "ai_outputParser": [[{ "node": "Extractor de Datos", "type": "ai_outputParser", "index": 0 }]] },
+    "OpenAI Chat Model35": { "ai_languageModel": [[{ "node": "Parser - Input Mail", "type": "ai_languageModel", "index": 0 }]] }
+  },
+  "pinData": {},
+  "meta": {
+    "templateId": "ready-to-run-ai-workflow-v3",
+    "templateCredsSetupCompleted": true,
+    "instanceId": "01084eed8859cd1edcf3f57a8e428a4f07929780b6da8e0ad4230960e21ab8dc"
+  }
+}
