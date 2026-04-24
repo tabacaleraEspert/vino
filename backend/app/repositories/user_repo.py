@@ -33,6 +33,18 @@ async def get_user_by_gmail(
     return _user_to_dict(user)
 
 
+async def get_user_by_wpp(
+    session: AsyncSession,
+    wpp_entero: str,
+) -> dict[str, Any] | None:
+    stmt = select(User).where(User.WppEntero == wpp_entero)
+    result = await session.execute(stmt)
+    user = result.scalar_one_or_none()
+    if not user:
+        return None
+    return _user_to_dict(user)
+
+
 async def get_user_by_id(
     session: AsyncSession,
     user_id: int,
