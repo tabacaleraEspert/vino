@@ -1,8 +1,9 @@
 import { useData } from "../context/DataContext";
 import { parseDateLocal } from "../../lib/api";
-import { Store, Plus, ChevronRight, Search, Calendar } from "lucide-react";
+import { Store, Plus, ChevronRight, Search, Calendar, Trash2 } from "lucide-react";
 import { Link } from "react-router";
 import { useState, useMemo } from "react";
+import { toast } from "sonner";
 import { CreateMerchantModal } from "./CreateMerchantModal";
 import { CreateRuleModal } from "./CreateRuleModal";
 
@@ -17,7 +18,7 @@ function getCreatedAtFromId(id: string): number | null {
 }
 
 export function Merchants() {
-  const { merchants, merchantRules, categories, transactions } = useData();
+  const { merchants, merchantRules, categories, transactions, deleteMerchant, refresh } = useData();
   const [showCreateMerchant, setShowCreateMerchant] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortOrder, setSortOrder] = useState<SortOrder>("alfa");
@@ -27,6 +28,8 @@ export function Merchants() {
     id: string;
     name: string;
   } | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [isDeletingEmpty, setIsDeletingEmpty] = useState(false);
 
   // Expensive computation: stats per merchant. Only recalculates when merchants/transactions change.
   const merchantStats = useMemo(() => {
@@ -120,13 +123,35 @@ export function Merchants() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="font-semibold">Comercios y Reglas</h2>
-        <button
-          className="flex items-center gap-1 text-sm text-blue-600 font-medium"
-          onClick={() => setShowCreateMerchant(true)}
-        >
-          <Plus className="w-4 h-4" />
-          Agregar
-        </button>
+        <div className="flex items-center gap-2">
+          {merchantStats.filter((m) => m.transactionCount === 0).length > 0 && (
+            <button
+              className="flex items-center gap-1 text-sm text-red-600 font-medium"
+              disabled={isDeletingEmpty}
+              onClick={async () => {
+                const empty = merchantStats.filter((m) => m.transactionCount === 0);
+                if (!confirm(`Borrar ${empty.length} comercios sin transacciones?`)) return;
+                setIsDeletingEmpty(true);
+                let deleted = 0;
+                for (const m of empty) {
+                  try { await deleteMerchant(m.id); deleted++; } catch {}
+                }
+                setIsDeletingEmpty(false);
+                toast.success(`${deleted} comercios eliminados`);
+              }}
+            >
+              <Trash2 className="w-4 h-4" />
+              {isDeletingEmpty ? "Borrando..." : "Limpiar vacíos"}
+            </button>
+          )}
+          <button
+            className="flex items-center gap-1 text-sm text-blue-600 font-medium"
+            onClick={() => setShowCreateMerchant(true)}
+          >
+            <Plus className="w-4 h-4" />
+            Agregar
+          </button>
+        </div>
       </div>
 
       {/* Información */}
@@ -280,26 +305,53 @@ export function Merchants() {
                         </div>
                       </div>
                     </Link>
-                    <div className="mt-3 pt-3 border-t border-gray-100">
-                      {merchant.hasRule ? (
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-green-500" />
-                          <span className="text-xs text-green-700 font-medium">
-                            Regla activa
-                          </span>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setRuleModalMerchant({ id: merchant.id, name: merchant.name });
-                          }}
-                          className="text-xs text-blue-600 font-medium hover:text-blue-700"
-                        >
-                          + Crear regla de categorización
-                        </button>
-                      )}
+                    <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
+                      <div>
+                        {merchant.hasRule ? (
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-green-500" />
+                            <span className="text-xs text-green-700 font-medium">
+                              Regla activa
+                            </span>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setRuleModalMerchant({ id: merchant.id, name: merchant.name });
+                            }}
+                            className="text-xs text-blue-600 font-medium hover:text-blue-700"
+                          >
+                            + Crear regla de categorización
+                          </button>
+                        )}
+                      </div>
+                      <button
+                        onClick={async (e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (deletingId === merchant.id) {
+                            // Second click = confirm
+                            try {
+                              await deleteMerchant(merchant.id);
+                              toast.success(`${merchant.name} eliminado`);
+                            } catch { toast.error("Error al eliminar"); }
+                            setDeletingId(null);
+                          } else {
+                            setDeletingId(merchant.id);
+                            setTimeout(() => setDeletingId((prev) => prev === merchant.id ? null : prev), 3000);
+                          }
+                        }}
+                        className={`p-1.5 rounded-lg transition-colors ${
+                          deletingId === merchant.id
+                            ? "bg-red-100 text-red-600"
+                            : "hover:bg-red-50 text-gray-400 hover:text-red-500"
+                        }`}
+                        title={deletingId === merchant.id ? "Click para confirmar" : "Eliminar comercio"}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
                 ))}
