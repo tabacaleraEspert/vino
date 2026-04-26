@@ -108,6 +108,62 @@ async def suggest_purchase(
 
 
 # ---------------------------------------------------------------------------
+# Query — answer financial questions via WhatsApp
+# ---------------------------------------------------------------------------
+
+class QueryRequest(BaseModel):
+    user_id: int
+    message: str
+    user_name: str = ""
+
+
+@router.post("/query")
+async def whatsapp_query(
+    payload: QueryRequest,
+    _: None = Depends(require_master_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Answer financial questions from WhatsApp.
+    Reuses the chat logic but with master key auth (for n8n).
+
+    Handles: "cuánto gasté este mes?", "en qué categoría gasto más?",
+    "cómo viene mi presupuesto?", etc.
+    """
+    from datetime import date
+    from app.api.v1.chat import _build_context, _SYSTEM_PROMPT
+    from openai import AsyncOpenAI
+    from app.core.config import settings
+
+    message = payload.message.strip()
+    if not message:
+        return {"reply": "No recibí ninguna pregunta."}
+
+    today = date.today()
+    period = f"{today.year}-{today.month:02d}"
+
+    context = await _build_context(db, payload.user_id, period)
+    system = _SYSTEM_PROMPT.replace("{context}", context)
+
+    try:
+        client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+        response = await client.chat.completions.create(
+            model="gpt-5.5",
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": message},
+            ],
+            max_completion_tokens=500,
+        )
+        reply = response.choices[0].message.content or "No pude generar una respuesta."
+    except Exception as e:
+        logger.error("WhatsApp query failed: %s", e)
+        reply = f"Error: {e}"
+
+    return {"reply": reply}
+
+
+# ---------------------------------------------------------------------------
 # Register expense from WhatsApp message
 # ---------------------------------------------------------------------------
 
