@@ -38,6 +38,53 @@ _COMMANDS: list[tuple[re.Pattern, Intent, str]] = [
 ]
 
 
+# Regex patterns to detect DATA (expense) messages without AI
+_EXPENSE_PATTERNS = [
+    # Contains a number that looks like a money amount (500, 1500, 50000, 50k, 300 lucas, etc.)
+    re.compile(r"\b\d{3,}\b", re.IGNORECASE),  # 3+ digit number
+    re.compile(r"\b\d+k\b", re.IGNORECASE),     # "50k"
+    re.compile(r"\b\d+\s*lucas?\b", re.IGNORECASE),  # "300 lucas"
+    re.compile(r"\b\d+\s*palos?\b", re.IGNORECASE),  # "1 palo"
+    re.compile(r"\b\d+\s*gambas?\b", re.IGNORECASE),  # "2 gambas"
+]
+
+_EXPENSE_KEYWORDS = [
+    "gast", "compr", "pagué", "pague", "pagó", "almor", "cené", "cene",
+    "taxi", "uber", "nafta", "super", "delivery", "efectivo", "tarjeta",
+    "debito", "débito", "credito", "crédito", "transferencia",
+    "cargar un gasto", "agregar un gasto", "registrar un gasto", "anotar un gasto",
+]
+
+
+_QUERY_INDICATORS = ["cuanto", "cuánto", "cuantos", "resumen", "en qué", "en que", "último gasto", "ultimo gasto", "cómo vengo", "como vengo"]
+
+def _looks_like_expense(text: str) -> bool:
+    """Check if a message looks like an expense registration (not a query)."""
+    lower = text.lower()
+    # If it looks like a query about spending, NOT data entry
+    if any(q in lower for q in _QUERY_INDICATORS) and "?" in text:
+        return False
+    # Direct expense keywords that always mean DATA
+    direct_keywords = ["cargar un gasto", "agregar un gasto", "registrar un gasto", "anotar un gasto"]
+    if any(kw in lower for kw in direct_keywords):
+        return True
+    # Check for expense action keywords + any number → DATA
+    action_keywords = ["gast", "compr", "pagué", "pague", "pagó", "almor", "cené", "cene"]
+    has_action = any(kw in lower for kw in action_keywords)
+    has_amount = any(p.search(text) for p in _EXPENSE_PATTERNS)
+    if has_action and has_amount:
+        return True
+    # Slang amounts with context
+    has_slang_amount = bool(re.search(r"\b\d+\s*(lucas?|palos?|gambas?|k)\b", lower))
+    if has_slang_amount:
+        return True
+    # Transport/service keywords + amount
+    service_keywords = ["taxi", "uber", "nafta", "delivery"]
+    if any(kw in lower for kw in service_keywords) and has_amount:
+        return True
+    return False
+
+
 def detect_command(body: str, button_payload: str | None = None) -> dict[str, Any] | None:
     """Detect commands via regex or button payload. Returns None if no match."""
     # Check button payload first (e.g., from interactive WhatsApp buttons)
@@ -49,6 +96,10 @@ def detect_command(body: str, button_payload: str | None = None) -> dict[str, An
     text = body.strip()
     if not text:
         return None
+
+    # Detect expense messages (DATA) before other commands
+    if _looks_like_expense(text):
+        return {"intent": Intent.DATA, "command_data": {}}
 
     for pattern, intent, data_key in _COMMANDS:
         m = pattern.match(text)
