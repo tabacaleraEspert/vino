@@ -37,10 +37,11 @@ export function UncategorizedReview() {
   const [totalUncategorized, setTotalUncategorized] = useState(0);
 
   // Per-merchant state
-  const [identifying, setIdentifying] = useState<string | null>(null);
+  const [identifyingSet, setIdentifyingSet] = useState<Set<string>>(new Set());
+  const [identifyingAll, setIdentifyingAll] = useState(false);
   const [suggestions, setSuggestions] = useState<Record<string, Suggestion>>({});
   const [selectedCategories, setSelectedCategories] = useState<Record<string, { catId: string; subId: string }>>({});
-  const [categorizing, setCategorizing] = useState<string | null>(null);
+  const [categorizingSet, setCategorizingSet] = useState<Set<string>>(new Set());
   const [categorized, setCategorized] = useState<Set<string>>(new Set());
 
   const fetchUncategorized = async () => {
@@ -59,7 +60,7 @@ export function UncategorizedReview() {
   useEffect(() => { fetchUncategorized(); }, [period]);
 
   const handleIdentify = async (comercio: string) => {
-    setIdentifying(comercio);
+    setIdentifyingSet((prev) => new Set(prev).add(comercio));
     try {
       const res = await api.merchants.smart.identify(comercio);
       setSuggestions((prev) => ({ ...prev, [comercio]: res }));
@@ -72,14 +73,14 @@ export function UncategorizedReview() {
     } catch (e) {
       console.error("Identification failed:", e);
     } finally {
-      setIdentifying(null);
+      setIdentifyingSet((prev) => { const n = new Set(prev); n.delete(comercio); return n; });
     }
   };
 
   const handleCategorize = async (comercio: string) => {
     const sel = selectedCategories[comercio];
     if (!sel?.catId) return;
-    setCategorizing(comercio);
+    setCategorizingSet((prev) => new Set(prev).add(comercio));
     try {
       await api.merchants.smart.categorize({
         comercio,
@@ -88,20 +89,71 @@ export function UncategorizedReview() {
         create_rule: true,
       });
       setCategorized((prev) => new Set(prev).add(comercio));
-      await refresh();
     } catch (e) {
       console.error("Categorize failed:", e);
     } finally {
-      setCategorizing(null);
+      setCategorizingSet((prev) => { const n = new Set(prev); n.delete(comercio); return n; });
+    }
+  };
+
+  const handleAcceptSuggestion = async (comercio: string) => {
+    const suggestion = suggestions[comercio];
+    if (!suggestion?.categoria_id) return;
+    // Set the category from suggestion and immediately categorize
+    setSelectedCategories((prev) => ({
+      ...prev,
+      [comercio]: {
+        catId: String(suggestion.categoria_id),
+        subId: suggestion.subcategoria_id ? String(suggestion.subcategoria_id) : "",
+      },
+    }));
+    setCategorizingSet((prev) => new Set(prev).add(comercio));
+    try {
+      await api.merchants.smart.categorize({
+        comercio,
+        categoria_id: Number(suggestion.categoria_id),
+        subcategoria_id: suggestion.subcategoria_id ? Number(suggestion.subcategoria_id) : null,
+        create_rule: true,
+      });
+      setCategorized((prev) => new Set(prev).add(comercio));
+    } catch (e) {
+      console.error("Accept suggestion failed:", e);
+    } finally {
+      setCategorizingSet((prev) => { const n = new Set(prev); n.delete(comercio); return n; });
     }
   };
 
   const handleIdentifyAll = async () => {
-    for (const m of merchants) {
-      if (!suggestions[m.comercio] && !categorized.has(m.comercio)) {
-        await handleIdentify(m.comercio);
+    setIdentifyingAll(true);
+    const pending = merchants.filter((m) => !suggestions[m.comercio] && !categorized.has(m.comercio));
+    for (const m of pending) {
+      setIdentifyingSet((prev) => new Set(prev).add(m.comercio));
+      try {
+        const res = await api.merchants.smart.identify(m.comercio);
+        setSuggestions((prev) => ({ ...prev, [m.comercio]: res }));
+        if (res.categoria_id) {
+          setSelectedCategories((prev) => ({
+            ...prev,
+            [m.comercio]: { catId: String(res.categoria_id), subId: res.subcategoria_id ? String(res.subcategoria_id) : "" },
+          }));
+        }
+      } catch (e) {
+        console.error("Identify failed for", m.comercio, e);
+      } finally {
+        setIdentifyingSet((prev) => { const n = new Set(prev); n.delete(m.comercio); return n; });
       }
     }
+    setIdentifyingAll(false);
+  };
+
+  const handleAcceptAll = async () => {
+    const toAccept = merchants.filter((m) =>
+      !categorized.has(m.comercio) && suggestions[m.comercio]?.categoria_id
+    );
+    for (const m of toAccept) {
+      await handleAcceptSuggestion(m.comercio);
+    }
+    await refresh();
   };
 
   const pendingMerchants = merchants.filter((m) => !categorized.has(m.comercio));
@@ -143,14 +195,26 @@ export function UncategorizedReview() {
                 <p className="text-2xl font-bold">{pendingMerchants.length} comercios</p>
                 <p className="text-sm opacity-80">{totalUncategorized} transacciones</p>
               </div>
-              <button
-                onClick={handleIdentifyAll}
-                disabled={identifying !== null}
-                className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-              >
-                <Sparkles className="w-4 h-4 inline mr-1" />
-                Identificar todos
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleIdentifyAll}
+                  disabled={identifyingAll || identifyingSet.size > 0}
+                  className="px-3 py-2 bg-white/20 hover:bg-white/30 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
+                >
+                  {identifyingAll ? <Loader2 className="w-4 h-4 inline mr-1 animate-spin" /> : <Sparkles className="w-4 h-4 inline mr-1" />}
+                  Identificar todos
+                </button>
+                {Object.keys(suggestions).length > 0 && (
+                  <button
+                    onClick={handleAcceptAll}
+                    disabled={categorizingSet.size > 0}
+                    className="px-3 py-2 bg-white/20 hover:bg-white/30 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
+                  >
+                    <Check className="w-4 h-4 inline mr-1" />
+                    Aceptar todos
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -159,8 +223,9 @@ export function UncategorizedReview() {
             {pendingMerchants.map((m) => {
               const suggestion = suggestions[m.comercio];
               const sel = selectedCategories[m.comercio];
-              const isIdentifying = identifying === m.comercio;
-              const isCategorizing = categorizing === m.comercio;
+              const isIdentifying = identifyingSet.has(m.comercio);
+              const isCategorizing = categorizingSet.has(m.comercio);
+              const isAnyLoading = identifyingAll || identifyingSet.size > 0;
               const selectedCat = sel ? categories.find((c) => c.id === sel.catId) : null;
 
               return (
@@ -173,10 +238,10 @@ export function UncategorizedReview() {
                         {m.count} {m.count === 1 ? "transaccion" : "transacciones"} · ${m.total_monto.toLocaleString("es-AR")}
                       </p>
                     </div>
-                    {!suggestion && (
+                    {!suggestion ? (
                       <button
                         onClick={() => handleIdentify(m.comercio)}
-                        disabled={isIdentifying}
+                        disabled={isIdentifying || isAnyLoading}
                         className="px-3 py-1.5 bg-purple-100 text-purple-700 rounded-lg text-xs font-medium hover:bg-purple-200 transition-colors disabled:opacity-50 flex items-center gap-1"
                       >
                         {isIdentifying ? (
@@ -184,9 +249,22 @@ export function UncategorizedReview() {
                         ) : (
                           <Search className="w-3 h-3" />
                         )}
-                        Identificar
+                        {isIdentifying ? "Buscando..." : "Identificar"}
                       </button>
-                    )}
+                    ) : suggestion.categoria_id ? (
+                      <button
+                        onClick={() => handleAcceptSuggestion(m.comercio)}
+                        disabled={isCategorizing}
+                        className="px-3 py-1.5 bg-green-100 text-green-700 rounded-lg text-xs font-medium hover:bg-green-200 transition-colors disabled:opacity-50 flex items-center gap-1"
+                      >
+                        {isCategorizing ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Check className="w-3 h-3" />
+                        )}
+                        Aceptar
+                      </button>
+                    ) : null}
                   </div>
 
                   {/* AI Suggestion */}

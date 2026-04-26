@@ -15,6 +15,8 @@ interface ExtractedTx {
   categoria_nombre: string;
   subcategoria_nombre: string;
   included: boolean;
+  confianza?: "alta" | "media" | "baja";
+  comercio_identificado?: string;
 }
 
 type Step = "upload" | "processing" | "review" | "confirming" | "done";
@@ -200,14 +202,34 @@ export function StatementUpload() {
             </div>
           </div>
 
+          {/* Confidence legend */}
+          <div className="flex items-center gap-3 text-xs text-gray-500">
+            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-green-500" /> Alta</span>
+            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-yellow-500" /> Media</span>
+            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-red-500" /> Baja</span>
+            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-gray-300" /> Sin identificar</span>
+          </div>
+
           {/* Transaction list */}
           <div className="space-y-2">
             {transactions.map((tx, idx) => {
               const cat = categories.find((c) => c.id === String(tx.categoria_id));
+              const conf = tx.confianza;
+              const borderColor =
+                conf === "alta" ? "border-l-green-500" :
+                conf === "media" ? "border-l-yellow-500" :
+                conf === "baja" ? "border-l-red-500" :
+                "border-l-gray-300";
+              const bgColor =
+                conf === "alta" ? "bg-green-50/50" :
+                conf === "media" ? "bg-yellow-50/50" :
+                conf === "baja" ? "bg-red-50/30" :
+                "bg-white";
+
               return (
                 <div
                   key={idx}
-                  className={`bg-white rounded-xl p-3 shadow-sm transition-opacity ${
+                  className={`rounded-xl p-3 shadow-sm transition-opacity border-l-4 ${borderColor} ${bgColor} ${
                     !tx.included ? "opacity-40" : ""
                   }`}
                 >
@@ -224,7 +246,7 @@ export function StatementUpload() {
 
                     {/* Content */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center justify-between mb-0.5">
                         <p className="font-medium text-gray-800 text-sm truncate">{tx.descripcion}</p>
                         <p className={`font-semibold text-sm flex-shrink-0 ml-2 ${
                           tx.tipo === "Ingreso" ? "text-green-600" : "text-gray-800"
@@ -232,6 +254,14 @@ export function StatementUpload() {
                           {tx.tipo === "Ingreso" ? "+" : "-"}${tx.monto.toLocaleString("es-AR")}
                         </p>
                       </div>
+
+                      {/* AI identification */}
+                      {tx.comercio_identificado && tx.comercio_identificado !== tx.descripcion && (
+                        <p className="text-xs text-purple-600 mb-0.5">
+                          Identificado: {tx.comercio_identificado}
+                        </p>
+                      )}
+
                       <p className="text-xs text-gray-400 mb-2">{tx.fecha} · {tx.moneda}</p>
 
                       {/* Category selectors */}
@@ -240,11 +270,13 @@ export function StatementUpload() {
                           <select
                             value={tx.categoria_id || ""}
                             onChange={(e) => updateTxCategory(idx, e.target.value)}
-                            className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-gray-50 flex-1 min-w-0"
+                            className={`text-xs border rounded-lg px-2 py-1.5 flex-1 min-w-0 ${
+                              !tx.categoria_id ? "border-red-300 bg-red-50" : "border-gray-200 bg-gray-50"
+                            }`}
                           >
                             <option value="">Sin categoria</option>
                             {categories.map((c) => (
-                              <option key={c.id} value={c.id}>{c.name}</option>
+                              <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
                             ))}
                           </select>
                           {cat?.subcategories && cat.subcategories.length > 0 && (

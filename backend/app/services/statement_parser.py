@@ -346,13 +346,20 @@ async def extract_from_excel(excel_bytes: bytes, categories: list[dict]) -> dict
 
 
 async def _ai_categorize_batch(transactions: list[dict], categories: list[dict]) -> list[dict]:
-    """Use AI to suggest categories for a batch of transactions."""
+    """Use AI to suggest categories for a batch of transactions, with confidence levels."""
     cats_json = _build_categories_json(categories)
     descs = [t["descripcion"] for t in transactions]
     descs_text = "\n".join(f"{i+1}. {d}" for i, d in enumerate(descs))
 
-    prompt = f"""Tengo estas transacciones de un resumen de tarjeta de crédito argentino.
-Para cada una, sugerí la categoría y subcategoría más apropiada.
+    prompt = f"""Sos un experto en identificar comercios argentinos de resúmenes de tarjeta de crédito.
+Para cada transacción, identificá qué comercio es y sugerí la categoría más apropiada.
+
+Los nombres pueden ser razones sociales, abreviaciones o nombres de fantasía. Ejemplos:
+- "Nike alcorta" → tienda Nike en Alcorta Shopping → Ropa
+- "Merpago*spotify" → Spotify vía MercadoPago → Suscripciones/Streaming
+- "YPF ESTACION" → estación de servicio → Transporte/Combustible
+- "Disney plus" → streaming → Entretenimiento/Streaming
+- "Apple.com/bill" → suscripción Apple → Suscripciones
 
 Transacciones:
 {descs_text}
@@ -360,7 +367,14 @@ Transacciones:
 Categorías disponibles:
 {cats_json}
 
-Respondé SOLO con JSON: {{"suggestions": [{{"index": 1, "categoria_id": <int o null>, "subcategoria_id": <int o null>}}, ...]}}"""
+Para cada transacción respondé con:
+- index: número de la transacción (1-based)
+- comercio_identificado: nombre real/legible del comercio
+- categoria_id: ID de la categoría sugerida (int o null)
+- subcategoria_id: ID de la subcategoría sugerida (int o null)
+- confianza: "alta" si estás seguro, "media" si es probable, "baja" si no sabés
+
+Respondé SOLO JSON: {{"suggestions": [...]}}"""
 
     try:
         client = _get_client()
@@ -368,7 +382,7 @@ Respondé SOLO con JSON: {{"suggestions": [{{"index": 1, "categoria_id": <int o 
             model="gpt-5.5",
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
-            max_completion_tokens=2000,
+            max_completion_tokens=4000,
         )
         raw = response.choices[0].message.content or "{}"
         result = json.loads(raw)
@@ -377,8 +391,11 @@ Respondé SOLO con JSON: {{"suggestions": [{{"index": 1, "categoria_id": <int o 
             if 0 <= idx < len(transactions):
                 transactions[idx]["categoria_id"] = s.get("categoria_id")
                 transactions[idx]["subcategoria_id"] = s.get("subcategoria_id")
+                transactions[idx]["confianza"] = s.get("confianza", "baja")
+                if s.get("comercio_identificado"):
+                    transactions[idx]["comercio_identificado"] = s["comercio_identificado"]
     except Exception as e:
-        logger.warning("AI batch categorization failed: %s", e)
+        logger.error("AI batch categorization failed: %s", e, exc_info=True)
 
     return transactions
 
