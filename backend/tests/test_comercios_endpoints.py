@@ -135,10 +135,12 @@ class TestDeleteComercio:
         body = resp.json()
         assert body["deleted"] is True
 
-    async def test_should_return_404_when_no_matching_regla(self, client, auth_headers):
+    async def test_should_return_200_when_no_matching_regla(self, client, auth_headers):
+        """Delete succeeds even without a regla — virtual merchant disappears on refresh."""
         with patch(f"{COM_MOD}.list_reglas", new_callable=AsyncMock, return_value=[]):
             resp = await client.delete(f"{BASE}/comercio-unknown", headers=auth_headers)
-        assert resp.status_code == 404
+        assert resp.status_code == 200
+        assert resp.json()["reglas_deleted"] == 0
 
     async def test_should_require_auth(self, client):
         resp = await client.delete(f"{BASE}/comercio-x")

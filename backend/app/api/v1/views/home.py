@@ -3,6 +3,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.deps import get_current_user_id
+from app.utils.parse_utils import parse_period, parse_periodo_mes
+from app.repositories.movimiento_agg import (
+    sum_gastos_mes,
+    gastos_por_categoria,
+    mayor_gasto_mes,
+    count_gastos_mes,
+)
+from app.repositories.presupuesto_repo import list_presupuestos
+from app.repositories.movimiento_repo import list_movimientos
+from app.repositories.categoria_repo import list_categorias
 
 router = APIRouter()
 
@@ -14,24 +24,17 @@ async def get_home_summary(
     id_usuario: int = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    """Resumen para la tarjeta de Inicio: gasto del mes y presupuesto."""
-    from app.utils.parse_utils import parse_period, parse_periodo_mes, normalize_mes_anio
-    from app.repositories.movimiento_repo import list_movimientos
-    from app.repositories.presupuesto_repo import list_presupuestos
-
+    """Resumen: gasto del mes y presupuesto. Uses SQL SUM, not Python loop."""
     try:
         date_from, date_to = parse_period(period)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    # Gasto del mes
-    items, _ = await list_movimientos(
-        db, id_usuario, from_date=date_from, to_date=date_to,
-        tipo="Gasto", moneda=moneda.strip().upper(), limit=5000, offset=0,
-    )
-    gasto_mes = sum(float(it.get("monto", 0)) for it in items)
+    currency = moneda.strip().upper()
 
-    # Presupuesto del mes
+    # SQL-level aggregation — single query each
+    gasto_mes = await sum_gastos_mes(db, id_usuario, date_from, date_to, currency)
+
     presupuesto_mes = 0.0
     try:
         periodo_mes = parse_periodo_mes(period)
@@ -43,7 +46,7 @@ async def get_home_summary(
     return {
         "period": period,
         "user_id": str(id_usuario),
-        "moneda": moneda or "ARS",
+        "moneda": currency,
         "gasto_mes": round(gasto_mes, 2),
         "presupuesto_mes": round(presupuesto_mes, 2),
     }
@@ -59,46 +62,57 @@ async def get_home_breakdown(
     id_usuario: int = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    """Gastos por categoría (top N), transacciones recientes."""
-    from app.utils.parse_utils import parse_period
-    from app.repositories.movimiento_repo import list_movimientos
-    from app.repositories.categoria_repo import list_categorias
-
+    """Gastos por categoría + transacciones recientes. SQL GROUP BY, not Python loop."""
     try:
         date_from, date_to = parse_period(period)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    items, _ = await list_movimientos(
-        db, id_usuario, from_date=date_from, to_date=date_to,
-        tipo="Gasto", moneda=currency.strip().upper(), limit=5000, offset=0,
-    )
+    cur = currency.strip().upper()
 
-    total_gastos = 0.0
-    by_cat = {}
-    for it in items:
-        monto = float(it.get("monto", 0))
-        total_gastos += monto
-        cat = it.get("categoria") or it.get("Nombre_Categoria") or "Sin categoría"
-        by_cat[cat] = by_cat.get(cat, 0) + monto
+    # SQL-level aggregations — much faster than loading all rows
+    cat_rows = await gastos_por_categoria(db, id_usuario, date_from, date_to, cur, top_categories)
+    total_gastos = sum(r["total"] for r in cat_rows)
+    mayor = await mayor_gasto_mes(db, id_usuario, date_from, date_to, cur)
+    tx_count = await count_gastos_mes(db, id_usuario, date_from, date_to, cur)
 
-    sorted_cats = sorted(by_cat.items(), key=lambda x: -x[1])
-    gastos_por_categoria = []
-    for cat, total in sorted_cats[:top_categories]:
-        pct = round(total / total_gastos, 2) if total_gastos > 0 else 0.0
-        gastos_por_categoria.append({"categoria": cat, "total": round(total, 2), "pct": pct})
+    # Build category breakdown with percentages
+    # Get all categories for icon/color mapping
+    all_cats = await list_categorias(db, id_usuario)
+    cat_map = {c["id"]: c for c in all_cats}
+
+    gastos_por_cat = []
+    for r in cat_rows:
+        cat_info = cat_map.get(r["categoria_id"], {})
+        pct = round(r["total"] / total_gastos, 2) if total_gastos > 0 else 0.0
+        gastos_por_cat.append({
+            "categoria": r["categoria"],
+            "total": round(r["total"], 2),
+            "pct": pct,
+            "icon": cat_info.get("icon", "📁"),
+            "color": cat_info.get("color", "#6b7280"),
+        })
 
     if include_zeros:
-        cats_db = await list_categorias(db, id_usuario)
-        for c in cats_db:
-            if c["nombre"] not in by_cat:
-                gastos_por_categoria.append({"categoria": c["nombre"], "total": 0.0, "pct": 0.0})
-        gastos_por_categoria.sort(key=lambda x: -x["total"])
+        existing = {r["categoria"] for r in cat_rows}
+        for c in all_cats:
+            if c["nombre"] not in existing:
+                gastos_por_cat.append({
+                    "categoria": c["nombre"],
+                    "total": 0.0,
+                    "pct": 0.0,
+                    "icon": c.get("icon", "📁"),
+                    "color": c.get("color", "#6b7280"),
+                })
 
-    # Recent transactions
-    sorted_items = sorted(items, key=lambda g: (g.get("fecha", ""), g.get("timestamp", "")), reverse=True)
+    # Recent transactions — only fetch the few we need
+    items, _ = await list_movimientos(
+        db, id_usuario, from_date=date_from, to_date=date_to,
+        tipo="Gasto", moneda=cur, limit=recent_limit, offset=0,
+    )
+
     transacciones_recientes = []
-    for it in sorted_items[:recent_limit]:
+    for it in sorted(items, key=lambda g: (g.get("fecha", ""), g.get("timestamp", "")), reverse=True)[:recent_limit]:
         comercio = str(it.get("comercio") or it.get("Comercio") or "").strip()
         desc = str(it.get("descripcion") or it.get("Descripcion") or "").strip()
         titulo = comercio or desc or "Sin descripción"
@@ -114,14 +128,12 @@ async def get_home_breakdown(
             "monto": round(float(it.get("monto", 0)), 2),
         })
 
-    mayor_gasto = max((float(it.get("monto", 0)) for it in items), default=0.0)
-
     return {
         "period": period,
         "user_id": str(id_usuario),
-        "currency": currency or "ARS",
-        "gastos_por_categoria": gastos_por_categoria,
+        "currency": cur,
+        "gastos_por_categoria": gastos_por_cat,
         "transacciones_recientes": transacciones_recientes,
-        "mayor_gasto": round(mayor_gasto, 2),
-        "transacciones_count": len(items),
+        "mayor_gasto": round(mayor, 2),
+        "transacciones_count": tx_count,
     }

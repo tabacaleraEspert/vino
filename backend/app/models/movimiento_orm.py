@@ -47,4 +47,6 @@ class Movimiento(Base):
         Index("IX_movimientos_Id_usuario", "Id_usuario"),
         Index("IX_movimientos_Fecha", "Id_usuario", "Fecha"),
         Index("IX_movimientos_Origen", "Id_usuario", "Origen", "Origen_Id"),
+        Index("IX_movimientos_Tipo_Fecha", "Id_usuario", "TipoMovimiento", "Fecha", "Moneda"),
+        Index("IX_movimientos_Categoria", "Id_usuario", "Id_Categoria", "Fecha"),
     )
