@@ -95,8 +95,13 @@ class TestDetectCommand:
         assert result is not None
         assert result["intent"] == Intent.SUGERENCIAS
 
-    def test_normal_text_no_command(self):
+    def test_expense_text_detected_as_data(self):
         result = detect_command("Gasté 5000 en Carrefour")
+        assert result is not None
+        assert result["intent"] == Intent.DATA
+
+    def test_normal_text_no_command(self):
+        result = detect_command("hola como andas")
         assert result is None
 
     def test_empty_body_no_command(self):
@@ -231,7 +236,8 @@ class TestWhatsAppIntakeCommands:
 
 
 class TestWhatsAppIntakeClassification:
-    async def test_classifies_via_ai_when_no_command(self, client):
+    async def test_expense_detected_by_regex_not_ai(self, client):
+        """Expense messages are caught by regex, AI is not called."""
         payload = {**BASE_PAYLOAD, "Body": "Gasté 5000 en Carrefour"}
         with patch(
             "app.api.v1.whatsapp.get_user_by_wpp",
@@ -240,7 +246,7 @@ class TestWhatsAppIntakeClassification:
         ), patch(
             "app.api.v1.whatsapp.classify_intent",
             new_callable=AsyncMock,
-            return_value=Intent.DATA,
+            return_value=Intent.OTHER,
         ) as mock_classify:
             resp = await client.post(
                 "/api/v1/whatsapp/intake",
@@ -249,8 +255,29 @@ class TestWhatsAppIntakeClassification:
             )
         body = resp.json()
         assert body["intent"] == "DATA"
+        assert body["command_match"] is True
+        mock_classify.assert_not_awaited()
+
+    async def test_classifies_via_ai_when_no_regex_match(self, client):
+        payload = {**BASE_PAYLOAD, "Body": "que onda mis finanzas"}
+        with patch(
+            "app.api.v1.whatsapp.get_user_by_wpp",
+            new_callable=AsyncMock,
+            return_value=_USER,
+        ), patch(
+            "app.api.v1.whatsapp.classify_intent",
+            new_callable=AsyncMock,
+            return_value=Intent.QUERY,
+        ) as mock_classify:
+            resp = await client.post(
+                "/api/v1/whatsapp/intake",
+                json=payload,
+                headers=MASTER_HEADERS,
+            )
+        body = resp.json()
+        assert body["intent"] == "QUERY"
         assert body["command_match"] is False
-        mock_classify.assert_awaited_once_with("Gasté 5000 en Carrefour")
+        mock_classify.assert_awaited_once()
 
     async def test_classifies_query(self, client):
         payload = {**BASE_PAYLOAD, "Body": "Cuanto gasté esta semana?"}
