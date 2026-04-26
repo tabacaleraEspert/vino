@@ -65,21 +65,48 @@ def detect_command(body: str, button_payload: str | None = None) -> dict[str, An
 
 # --- Intent classification via OpenAI ---
 
-_CLASSIFY_SYSTEM_PROMPT = """Sos un clasificador de intención para un asistente financiero por WhatsApp.
-Tu única tarea es clasificar el mensaje del usuario en UNA de estas categorías:
+_CLASSIFY_SYSTEM_PROMPT = """Sos un asistente financiero especializado en detectar la intención del usuario.
+Tu única tarea es clasificar cada mensaje que llega por WhatsApp.
 
-- DATA: el usuario está registrando un gasto/ingreso o completando datos de uno (monto, fecha, comercio, etc.)
-- QUERY: pregunta sobre su situación financiera (cuánto gastó, resumen, análisis)
-- CAT_Y_SUBCATS: consulta sobre categorías o subcategorías disponibles
-- PRESUPUESTO: consulta o acción relacionada con presupuestos
-- SUGERENCIAS: pide sugerencias o consejos financieros
-- CATEGORIZACION: quiere categorizar o recategorizar un movimiento
-- WEEKLY_RESUME: pide un resumen semanal de gastos
-- OTHER: no encaja en ninguna categoría anterior
+No respondés contenido útil. No generás texto de conversación. No registrás gastos.
+Solo devolvés un JSON con la clasificación.
 
-Si hay duda entre DATA y QUERY, priorizá DATA si parece que el usuario está cargando un gasto.
+DEFINICIONES:
 
-Respondé SOLO con la categoría, sin explicación. Ejemplo: DATA"""
+1) DATA — Mensajes que forman parte de un registro de GASTO o INGRESO.
+Incluye:
+- Mensajes que describen gastos o ingresos: "gasté 5000 en el super", "almorcé 3500", "pagué la luz"
+- Mensajes con montos: "300 lucas en Nike", "1500 en un alfajor", "50k en ropa", "taxi 2500"
+- Mensajes sueltos que completan datos: "75 mil", "con débito", "hoy", "Uber", "efectivo"
+- Mensajes parcialmente estructurados: "Fecha: hoy, Monto 5000", "Gasto en YPF"
+- Cualquier mensaje que mencione comprar, gastar, pagar, cobrar, o un monto de dinero
+- "quiero agregar un gasto", "quiero cargar un gasto"
+REGLA CLAVE: Si el mensaje menciona un monto, un comercio, o cualquier indicio de gasto/compra → SIEMPRE DATA.
+
+2) QUERY — Preguntas sobre situación financiera:
+"¿Cuánto gasté?", "¿En qué gasté más?", "¿Me hacés un resumen?", "¿Cuál fue mi último gasto?"
+
+3) CAT_Y_SUBCATS — Consultas sobre categorías/subcategorías del sistema:
+"¿Qué categorías existen?", "¿Qué subcategorías hay en Vivienda?"
+
+4) PRESUPUESTO — Consultas sobre presupuestos:
+"¿Cómo viene mi presupuesto?", "PRESUPUESTO: cuánto me queda?"
+
+5) SUGERENCIAS — Pide consejos o si puede comprar algo:
+"¿Puedo comprarme unas zapatillas de 80k?", "Dame sugerencias para ahorrar"
+
+6) CATEGORIZACION — Quiere categorizar un movimiento existente:
+"Categorizar 123", "recategorizar el último gasto"
+
+7) WEEKLY_RESUME — Resumen semanal: solo si el mensaje es exactamente "weekly_expenses_resume"
+
+8) OTHER — ÚLTIMO RECURSO. Solo si no encaja en NINGUNA de las anteriores.
+Saludos puros ("hola"), charla casual sin contexto financiero.
+
+PRIORIDAD: Si hay dudas entre DATA y cualquier otra → DATA.
+
+Respondé SIEMPRE con JSON válido:
+{"tipo": "<DATA|QUERY|CAT_Y_SUBCATS|PRESUPUESTO|SUGERENCIAS|CATEGORIZACION|WEEKLY_RESUME|OTHER>"}"""
 
 _openai_client: AsyncOpenAI | None = None
 
@@ -93,6 +120,7 @@ def _get_openai_client() -> AsyncOpenAI:
 
 async def classify_intent(body: str) -> Intent:
     """Classify message intent using OpenAI. Falls back to OTHER on error."""
+    import json as _json
     try:
         client = _get_openai_client()
         response = await client.chat.completions.create(
@@ -101,13 +129,20 @@ async def classify_intent(body: str) -> Intent:
                 {"role": "system", "content": _CLASSIFY_SYSTEM_PROMPT},
                 {"role": "user", "content": body},
             ],
-            max_completion_tokens=20,
+            response_format={"type": "json_object"},
+            max_completion_tokens=50,
         )
-        raw = (response.choices[0].message.content or "").strip().upper()
+        raw = (response.choices[0].message.content or "").strip()
+        # Parse JSON response
         try:
-            return Intent(raw)
+            data = _json.loads(raw)
+            tipo = (data.get("tipo") or "").strip().upper()
+        except _json.JSONDecodeError:
+            tipo = raw.upper()
+        try:
+            return Intent(tipo)
         except ValueError:
-            logger.warning("OpenAI returned unknown intent '%s', defaulting to OTHER", raw)
+            logger.warning("OpenAI returned unknown intent '%s' from raw '%s', defaulting to OTHER", tipo, raw[:100])
             return Intent.OTHER
     except Exception as e:
         logger.error("Intent classification failed: %s", e)
