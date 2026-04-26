@@ -11,6 +11,7 @@ from app.db.session import get_db
 from app.repositories.user_repo import get_user_by_wpp
 from app.services.whatsapp_intake import Intent, classify_intent, detect_command
 from app.services.purchase_advisor import advise_purchase
+from app.services.expense_extractor import extract_expense_from_message
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -104,3 +105,210 @@ async def suggest_purchase(
         user_name=payload.user_name,
     )
     return {"reply": reply}
+
+
+# ---------------------------------------------------------------------------
+# Register expense from WhatsApp message
+# ---------------------------------------------------------------------------
+
+class RegisterExpenseRequest(BaseModel):
+    user_id: int
+    message: str
+    user_name: str = ""
+
+
+@router.post("/register-expense")
+async def register_expense(
+    payload: RegisterExpenseRequest,
+    _: None = Depends(require_master_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Register an expense from a natural language WhatsApp message.
+
+    Flow:
+    1. GPT extracts: monto, comercio, descripcion, moneda, tipo, medio_de_pago
+    2. Resolve merchant rule for category
+    3. If no rule: AI identifies merchant + suggests category
+    4. Resolve payment method
+    5. Create movement
+    6. Return WhatsApp-ready confirmation message
+
+    Handles Argentine slang: "300 lucas", "1 palo", "50k", etc.
+    """
+    from datetime import date, timedelta
+    from decimal import Decimal
+
+    from app.repositories.categoria_repo import list_categorias, list_subcategorias
+    from app.repositories.movimiento_repo import create_movimiento
+    from app.repositories.regla_repo import resolve_regla, create_regla
+    from app.repositories.medio_pago_repo import resolve_medio_pago
+    from app.services.merchant_identifier import identify_merchant
+
+    message = payload.message.strip()
+    if not message:
+        return {"status": "error", "reply": "No recibí ningún mensaje."}
+
+    # Step 1: Extract expense data from message
+    extracted = await extract_expense_from_message(message)
+
+    if not extracted.get("datos_completos"):
+        faltante = extracted.get("dato_faltante", "")
+        if faltante == "no_es_gasto":
+            return {
+                "status": "not_expense",
+                "reply": "No parece ser un gasto. Si querés registrar algo, decime algo como: _Gasté 5000 en el super_",
+            }
+        if faltante == "monto":
+            return {
+                "status": "incomplete",
+                "reply": "No pude detectar el monto. Decime cuánto gastaste, ej: _Gasté 5000 en Carrefour_",
+                "extracted": extracted,
+            }
+        return {
+            "status": "incomplete",
+            "reply": f"Me falta info: {faltante}. Probá de vuelta con más detalle.",
+            "extracted": extracted,
+        }
+
+    monto = extracted.get("monto", 0)
+    if not monto or monto <= 0:
+        return {
+            "status": "incomplete",
+            "reply": "El monto tiene que ser mayor a 0. Decime cuánto gastaste.",
+        }
+
+    moneda = extracted.get("moneda", "ARS") or "ARS"
+    comercio_raw = extracted.get("comercio", "") or ""
+    descripcion = extracted.get("descripcion", "") or comercio_raw or "Gasto WhatsApp"
+    tipo = extracted.get("tipo", "Gasto") or "Gasto"
+    medio_pago_raw = extracted.get("medio_de_pago", "") or ""
+
+    # Parse fecha
+    fecha_str = extracted.get("fecha")
+    today = date.today()
+    if fecha_str == "ayer":
+        fecha = today - timedelta(days=1)
+    elif fecha_str and fecha_str != "null":
+        from app.utils.parse_utils import parse_date_flex
+        fecha = parse_date_flex(fecha_str) or today
+    else:
+        fecha = today
+
+    # Step 2: Resolve category via merchant rules
+    id_categoria = None
+    id_subcategoria = None
+    regla_match = None
+    categoria_nombre = ""
+    subcategoria_nombre = ""
+
+    if comercio_raw:
+        regla_match = await resolve_regla(db, payload.user_id, comercio_raw)
+        if regla_match:
+            id_categoria = regla_match["categoria_id"]
+            id_subcategoria = regla_match["subcategoria_id"]
+            categoria_nombre = regla_match.get("categoria_nombre", "")
+            subcategoria_nombre = regla_match.get("subcategoria_nombre", "")
+
+    # Step 3: If no rule match, try AI identification
+    if not id_categoria and comercio_raw:
+        try:
+            cats = await list_categorias(db, payload.user_id)
+            subs = await list_subcategorias(db, payload.user_id)
+            sub_by_cat: dict[int, list] = {}
+            for s in subs:
+                cid = s.get("categoria_id")
+                if cid:
+                    sub_by_cat.setdefault(cid, []).append(s)
+            cats_with_subs = [{**c, "subcategorias": sub_by_cat.get(c["id"], [])} for c in cats]
+
+            ai_result = await identify_merchant(comercio_raw, cats_with_subs, use_web_search=False)
+            if ai_result.get("confianza") in ("alta", "media") and ai_result.get("categoria_id"):
+                id_categoria = ai_result["categoria_id"]
+                id_subcategoria = ai_result.get("subcategoria_id")
+                # Find names
+                for c in cats:
+                    if c["id"] == id_categoria:
+                        categoria_nombre = c.get("nombre", "")
+                        for s in sub_by_cat.get(c["id"], []):
+                            if s["id"] == id_subcategoria:
+                                subcategoria_nombre = s.get("nombre", "")
+                        break
+
+                # Create rule for future
+                try:
+                    await create_regla(
+                        db, id_usuario=payload.user_id, patron=comercio_raw,
+                        id_categoria=id_categoria, id_subcategoria=id_subcategoria,
+                        confianza=f"AI_{ai_result['confianza']}",
+                    )
+                except Exception:
+                    pass
+        except Exception as e:
+            logger.warning("AI merchant identification failed: %s", e)
+
+    # Default category if nothing matched
+    if not id_categoria:
+        id_categoria = 6  # Otros
+        id_subcategoria = 42  # Gastos no categorizados
+        categoria_nombre = "Otros"
+        subcategoria_nombre = "Gastos no categorizados"
+
+    # Step 4: Resolve payment method
+    id_credito_debito = None
+    id_medio_pago_final = None
+    if medio_pago_raw and medio_pago_raw.lower() != "efectivo":
+        try:
+            medio = await resolve_medio_pago(db, medio_pago_raw, "", "")
+            id_credito_debito = medio.get("id_credito_debito")
+            id_medio_pago_final = medio.get("id_medio_pago_final")
+        except Exception:
+            pass
+
+    # Step 5: Create movement
+    try:
+        created = await create_movimiento(
+            db,
+            id_usuario=payload.user_id,
+            fecha=fecha,
+            tipo=tipo,
+            moneda=moneda,
+            monto=Decimal(str(monto)),
+            medio_carga="Wpp",
+            descripcion=descripcion,
+            id_categoria=id_categoria,
+            id_subcategoria=id_subcategoria,
+            comercio_id=str(regla_match["id"]) if regla_match else None,
+            categoria_manual=False,
+            origen="Wpp",
+            origen_id=None,
+            id_credito_debito=id_credito_debito,
+            id_medio_pago_final=id_medio_pago_final,
+        )
+    except Exception as e:
+        logger.error("Failed to create movement: %s", e)
+        return {"status": "error", "reply": f"Error al registrar el gasto: {e}"}
+
+    # Step 6: Build WhatsApp confirmation
+    monto_fmt = f"${monto:,.0f}".replace(",", ".")
+    parts = [f"Registrado *{monto_fmt} {moneda}*"]
+    if comercio_raw:
+        parts.append(f"en *{comercio_raw}*")
+    parts.append(f"({categoria_nombre}")
+    if subcategoria_nombre and subcategoria_nombre != "Gastos no categorizados":
+        parts.append(f"/ {subcategoria_nombre})")
+    else:
+        parts.append(")")
+    if medio_pago_raw and medio_pago_raw.lower() != "efectivo":
+        parts.append(f"con {medio_pago_raw}")
+
+    reply = " ".join(parts)
+
+    return {
+        "status": "created",
+        "reply": reply,
+        "movimiento_id": created.get("id"),
+        "extracted": extracted,
+        "categoria": categoria_nombre,
+        "subcategoria": subcategoria_nombre,
+    }
