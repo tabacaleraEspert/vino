@@ -28,9 +28,10 @@ export function Merchants() {
     name: string;
   } | null>(null);
 
-  const merchantsWithStats = useMemo(() => {
+  // Expensive computation: stats per merchant. Only recalculates when merchants/transactions change.
+  const merchantStats = useMemo(() => {
     const now = Date.now();
-    const withStats = merchants.map((merchant) => {
+    return merchants.map((merchant) => {
       const merchantTransactions = transactions.filter(
         (t) => t.merchantId === merchant.id
       );
@@ -40,27 +41,16 @@ export function Merchants() {
       );
       const lastTransactionDate =
         merchantTransactions.length > 0
-          ? Math.max(
-              ...merchantTransactions.map((t) =>
-                parseDateLocal(t.date).getTime()
-              )
-            )
+          ? Math.max(...merchantTransactions.map((t) => parseDateLocal(t.date).getTime()))
           : 0;
       const firstTransactionDate =
         merchantTransactions.length > 0
-          ? Math.min(
-              ...merchantTransactions.map((t) =>
-                parseDateLocal(t.date).getTime()
-              )
-            )
+          ? Math.min(...merchantTransactions.map((t) => parseDateLocal(t.date).getTime()))
           : 0;
       const storeCreatedAt = getCreatedAtFromId(merchant.id);
-      const createdAt =
-        storeCreatedAt ?? (firstTransactionDate || now);
+      const createdAt = storeCreatedAt ?? (firstTransactionDate || now);
       const rule = merchantRules.find((r) => r.merchantId === merchant.id);
-      const category = rule
-        ? categories.find((c) => c.id === rule.categoryId)
-        : null;
+      const category = rule ? categories.find((c) => c.id === rule.categoryId) : null;
       const subcategory =
         rule?.subcategoryId && category
           ? category.subcategories?.find((s) => s.id === rule.subcategoryId)
@@ -77,39 +67,32 @@ export function Merchants() {
         hasRule: !!rule,
       };
     });
+  }, [merchants, merchantRules, categories, transactions]);
 
+  // Cheap: filtering and sorting on the precomputed stats
+  const merchantsWithStats = useMemo(() => {
+    const now = Date.now();
     const query = searchQuery.trim().toLowerCase();
-    let filtered = withStats;
+    let filtered = merchantStats;
 
     if (query) {
-      filtered = filtered.filter((m) =>
-        m.name.toLowerCase().includes(query)
-      );
+      filtered = filtered.filter((m) => m.name.toLowerCase().includes(query));
     }
-
     if (selectedCategoryId !== "all") {
-      filtered = filtered.filter(
-        (m) => m.category?.id === selectedCategoryId
-      );
+      filtered = filtered.filter((m) => m.category?.id === selectedCategoryId);
     }
-
     if (createdFilter !== "all") {
       const days = parseInt(createdFilter, 10);
       const cutoff = now - days * 24 * 60 * 60 * 1000;
       filtered = filtered.filter((m) => m.createdAt >= cutoff);
     }
 
-    filtered.sort((a, b) => {
-      if (sortOrder === "alfa") {
-        return a.name.localeCompare(b.name, "es", { sensitivity: "base" });
-      }
-      if (sortOrder === "nuevo") {
-        return b.lastTransactionDate - a.lastTransactionDate;
-      }
+    return [...filtered].sort((a, b) => {
+      if (sortOrder === "alfa") return a.name.localeCompare(b.name, "es", { sensitivity: "base" });
+      if (sortOrder === "nuevo") return b.lastTransactionDate - a.lastTransactionDate;
       return a.lastTransactionDate - b.lastTransactionDate;
     });
-    return filtered;
-  }, [merchants, merchantRules, categories, transactions, searchQuery, sortOrder, selectedCategoryId, createdFilter]);
+  }, [merchantStats, searchQuery, sortOrder, selectedCategoryId, createdFilter]);
 
   const groupedByDate = useMemo(() => {
     const acc = merchantsWithStats.reduce((a, m) => {

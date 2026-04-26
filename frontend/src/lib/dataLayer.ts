@@ -4,7 +4,7 @@
  * - Cache localStorage para catálogo (24h TTL)
  * - Sin console.log en producción
  */
-import { api } from "./api";
+import { api, setApiToken } from "./api";
 import type { CategoriaRaw, SubcategoriaRaw, ReglaRaw } from "./api";
 import type { MovimientosPaginatedResponse } from "./api";
 
@@ -122,7 +122,7 @@ export async function fetchMovimientos(
   return coalesce(
     key,
     () => api.movimientos
-      .list({ limit: "1000", period })
+      .list({ limit: "100", period })
       .catch((): MovimientosPaginatedResponse => ({ items: [], page: 1, limit: 100, total: 0 })),
     options?.forceRefresh,
   );

@@ -33,7 +33,6 @@ export function Transactions() {
     setIsDeleting(true);
     try {
       await deleteTransaction(transactionToDelete.id);
-      await api.movimientos.invalidateCache();
       await refresh();
       toast.success("Gasto eliminado correctamente");
       setTransactionToDelete(null);

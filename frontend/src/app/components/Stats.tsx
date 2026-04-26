@@ -1,61 +1,87 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useData } from "../context/DataContext";
+import { useMonth } from "../context/MonthContext";
+import { MonthSelector } from "./MonthSelector";
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from "recharts";
 import { TrendingUp, Award } from "lucide-react";
 
 export function Stats() {
   const { categories, transactions } = useData();
+  const { selectedMonth } = useMonth();
   const [topN, setTopN] = useState(5);
 
+  const period = `${selectedMonth.year}-${String(selectedMonth.month + 1).padStart(2, "0")}`;
+  const monthLabel = new Date(selectedMonth.year, selectedMonth.month).toLocaleDateString("es-AR", {
+    month: "long",
+    year: "numeric",
+  });
+
   // Gastos por categoría
-  const spendingByCategory = categories.map((cat) => {
-    const catTransactions = transactions.filter((t) => t.categoryId === cat.id);
-    const amount = catTransactions.reduce((sum, t) => sum + Math.abs(t.amount), 0);
-    return {
-      name: cat.name,
-      value: amount,
-      color: cat.color,
-      icon: cat.icon,
-    };
-  }).filter((item) => item.value > 0);
+  const spendingByCategory = useMemo(() =>
+    categories.map((cat) => {
+      const catTransactions = transactions.filter((t) => t.categoryId === cat.id);
+      const amount = catTransactions.reduce((sum, t) => sum + Math.abs(t.amount), 0);
+      return { name: cat.name, value: amount, color: cat.color, icon: cat.icon };
+    }).filter((item) => item.value > 0),
+    [categories, transactions]
+  );
+
+  const totalSpent = useMemo(() =>
+    transactions.reduce((sum, t) => sum + Math.abs(t.amount), 0),
+    [transactions]
+  );
 
   // Top N gastos
-  const topTransactions = [...transactions]
-    .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
-    .slice(0, topN);
+  const topTransactions = useMemo(() =>
+    [...transactions].sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount)).slice(0, topN),
+    [transactions, topN]
+  );
 
-  // Gastos por día (últimos 7 días)
-  const last7Days = Array.from({ length: 7 }, (_, i) => {
-    const date = new Date();
-    date.setDate(date.getDate() - (6 - i));
-    return date.toISOString().split("T")[0];
-  });
+  // Gastos por día del mes seleccionado
+  const spendingByDay = useMemo(() => {
+    const year = selectedMonth.year;
+    const month = selectedMonth.month;
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const today = new Date();
+    const isCurrentMonth = today.getFullYear() === year && today.getMonth() === month;
+    const lastDay = isCurrentMonth ? today.getDate() : daysInMonth;
 
-  const spendingByDay = last7Days.map((date) => {
-    const dayTransactions = transactions.filter((t) => t.date === date);
-    const total = dayTransactions.reduce((sum, t) => sum + Math.abs(t.amount), 0);
-    return {
-      day: new Date(date).toLocaleDateString("es-MX", { weekday: "short" }),
-      total,
-    };
-  });
+    // Show last 7 days of activity within the month
+    const startDay = Math.max(1, lastDay - 6);
+    const days: { day: string; date: string; total: number }[] = [];
 
-  const totalSpent = transactions.reduce((sum, t) => sum + Math.abs(t.amount), 0);
+    for (let d = startDay; d <= lastDay; d++) {
+      const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      const dayTransactions = transactions.filter((t) => t.date === dateStr);
+      const total = dayTransactions.reduce((sum, t) => sum + Math.abs(t.amount), 0);
+      days.push({
+        day: new Date(year, month, d).toLocaleDateString("es-AR", { weekday: "short" }),
+        date: dateStr,
+        total,
+      });
+    }
+    return days;
+  }, [transactions, selectedMonth]);
 
   return (
     <div className="p-4 space-y-4">
+      <MonthSelector />
       {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="font-semibold">Estadísticas</h2>
-        <div className="flex items-center gap-1 text-xs text-gray-600">
+        <div className="flex items-center gap-1 text-xs text-gray-600 capitalize">
           <TrendingUp className="w-4 h-4" />
-          Febrero 2026
+          {monthLabel}
         </div>
       </div>
 
       {/* Distribución por categoría - Gráfico de pastel */}
       <div className="bg-white rounded-xl p-4 shadow-sm">
         <h3 className="font-medium mb-4">Distribución por Categoría</h3>
+        {spendingByCategory.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-8">Sin gastos este mes</p>
+        ) : (
+          <>
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
@@ -84,11 +110,13 @@ export function Stats() {
               />
               <span className="text-xs text-gray-600 truncate">{cat.name}</span>
               <span className="text-xs font-semibold text-gray-900 ml-auto">
-                {((cat.value / totalSpent) * 100).toFixed(0)}%
+                {totalSpent > 0 ? ((cat.value / totalSpent) * 100).toFixed(0) : 0}%
               </span>
             </div>
           ))}
         </div>
+          </>
+        )}
       </div>
 
       {/* Gastos por día - Gráfico de barras */}
@@ -97,19 +125,19 @@ export function Stats() {
         <div className="h-48">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={spendingByDay}>
-              <XAxis 
-                dataKey="day" 
-                tick={{ fontSize: 12 }} 
+              <XAxis
+                dataKey="day"
+                tick={{ fontSize: 12 }}
                 axisLine={false}
                 tickLine={false}
               />
-              <YAxis 
-                tick={{ fontSize: 12 }} 
+              <YAxis
+                tick={{ fontSize: 12 }}
                 axisLine={false}
                 tickLine={false}
               />
-              <Tooltip 
-                formatter={(value) => `$${Number(value).toLocaleString("es-MX")}`}
+              <Tooltip
+                formatter={(value) => `$${Number(value).toLocaleString("es-AR")}`}
                 contentStyle={{
                   backgroundColor: "white",
                   border: "1px solid #e5e7eb",
@@ -141,10 +169,13 @@ export function Stats() {
           </select>
         </div>
 
+        {topTransactions.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-4">Sin transacciones</p>
+        ) : (
         <div className="space-y-2">
           {topTransactions.map((transaction, index) => {
             const category = categories.find((c) => c.id === transaction.categoryId);
-            const percentage = (Math.abs(transaction.amount) / totalSpent) * 100;
+            const percentage = totalSpent > 0 ? (Math.abs(transaction.amount) / totalSpent) * 100 : 0;
 
             return (
               <div key={transaction.id} className="flex items-center gap-3">
@@ -178,20 +209,21 @@ export function Stats() {
                 </div>
                 <div className="text-right flex-shrink-0">
                   <p className="text-sm font-semibold text-gray-900">
-                    ${Math.abs(transaction.amount).toLocaleString("es-MX")}
+                    ${Math.abs(transaction.amount).toLocaleString("es-AR")}
                   </p>
                 </div>
               </div>
             );
           })}
         </div>
+        )}
       </div>
 
       {/* Resumen total */}
       <div className="bg-gradient-to-br from-indigo-600 to-indigo-700 rounded-2xl p-6 text-white shadow-lg">
-        <p className="text-sm opacity-90 mb-1">Total Gastado (todos los registros)</p>
+        <p className="text-sm opacity-90 mb-1">Total Gastado</p>
         <p className="text-3xl font-bold">
-          ${totalSpent.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+          ${totalSpent.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
         </p>
         <div className="flex items-center gap-4 mt-4 text-sm">
           <div>
@@ -201,7 +233,9 @@ export function Stats() {
           <div>
             <p className="opacity-75">Promedio</p>
             <p className="font-semibold">
-              ${(totalSpent / transactions.length).toLocaleString("es-MX")}
+              ${transactions.length > 0
+                ? (totalSpent / transactions.length).toLocaleString("es-AR")
+                : "0"}
             </p>
           </div>
         </div>

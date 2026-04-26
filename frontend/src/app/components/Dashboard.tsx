@@ -55,7 +55,7 @@ export function Dashboard() {
   }, [token, period, refreshTrigger, fetchDashboard]);
 
   const monthSpent = summary?.gasto_mes ?? 0;
-  const totalBudget = summary?.presupuesto_mes ?? budgets.reduce((sum, b) => sum + b.amount, 0);
+  const totalBudget = summary?.presupuesto_mes ?? 0;
   const percentageUsed = totalBudget > 0 ? (monthSpent / totalBudget) * 100 : 0;
 
   const spendingByCategory = (breakdown?.gastos_por_categoria ?? []).slice(0, 6).map((g) => {

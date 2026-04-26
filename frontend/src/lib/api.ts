@@ -1,4 +1,4 @@
-import { apiFetch } from "./api/client";
+import { apiFetch, getApiToken } from "./api/client";
 export { apiFetch, setApiToken, setOnUnauthorized, getApiToken } from "./api/client";
 
 // Tipos
@@ -236,7 +236,6 @@ export const api = {
     extract: async (file: File) => {
       const formData = new FormData();
       formData.append("file", file);
-      const { getApiToken } = await import("./api/client");
       const token = getApiToken();
       const API_BASE =
         import.meta.env.VITE_API_URL ||
