@@ -256,9 +256,57 @@ export function Budgets() {
         </div>
       </div>
 
-      {/* Lista agrupada por categoría */}
+      {/* Desglose por categoría */}
+      <div className="bg-white rounded-xl shadow-sm p-4">
+        <h3 className="font-medium text-gray-800 mb-4">Desglose por categoría</h3>
+        <div className="space-y-4">
+          {grouped.map(({ category, categoryBudgets, subcategoryBudgets, catTotalAmount, catTotalSpent, catPercentage, catStatus }) => {
+            const remaining = catTotalAmount - catTotalSpent;
+            return (
+              <div key={category.id} className="space-y-1.5">
+                <div className="flex items-center gap-3">
+                  <div className="text-2xl flex-shrink-0">{category.icon}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-gray-800">{category.name}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500">{catPercentage.toFixed(0)}%</span>
+                        <span className="text-sm font-semibold text-gray-900">
+                          ${catTotalSpent.toLocaleString("es-AR")}
+                          <span className="text-xs font-normal text-gray-400"> / ${catTotalAmount.toLocaleString("es-AR")}</span>
+                        </span>
+                        {categoryBudgets.length > 0 && (
+                          <button
+                            onClick={() => setEditingBudget(categoryBudgets[0].budget)}
+                            className="p-1 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden mt-1">
+                      <div
+                        className={`h-full rounded-full transition-all ${
+                          catStatus === "over" ? "bg-red-500" : catStatus === "near" ? "bg-yellow-500" : "bg-green-500"
+                        }`}
+                        style={{ width: `${Math.min(catPercentage, 100)}%` }}
+                      />
+                    </div>
+                    <p className={`text-xs mt-0.5 ${remaining >= 0 ? "text-gray-400" : "text-red-500"}`}>
+                      {remaining >= 0 ? `Quedan $${remaining.toLocaleString("es-AR")}` : `Excedido por $${Math.abs(remaining).toLocaleString("es-AR")}`}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Lista expandible por categoría (subcategorías) */}
       <div className="space-y-3">
-        {grouped.map(({ category, categoryBudgets, subcategoryBudgets, catTotalAmount, catTotalSpent, catPercentage, catStatus }) => {
+        {grouped.filter(g => g.subcategoryBudgets.length > 0).map(({ category, categoryBudgets, subcategoryBudgets, catTotalAmount, catTotalSpent, catPercentage, catStatus }) => {
           const hasSub = subcategoryBudgets.length > 0;
           const isExpanded = expandedCategories.has(category.id);
 
