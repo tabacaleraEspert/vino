@@ -1,6 +1,6 @@
 import { Outlet, NavLink } from "react-router";
 import { useEffect, useState } from "react";
-import { Home, Receipt, FolderOpen, Wallet, Store, TrendingUp, LogOut, RefreshCw, Upload, MessageCircle } from "lucide-react";
+import { Home, Receipt, FolderOpen, Wallet, Store, TrendingUp, LogOut, RefreshCw, Upload, MessageCircle, MoreHorizontal } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useData } from "../context/DataContext";
 import { useNavigate } from "react-router";
@@ -21,13 +21,21 @@ export function RootLayout() {
     navigate("/login");
   };
 
+  const [showMore, setShowMore] = useState(false);
+
   const navItems = [
     { to: "/", icon: Home, label: "Inicio" },
     { to: "/transactions", icon: Receipt, label: "Gastos" },
     { to: "/budgets", icon: Wallet, label: "Presupuestos" },
-    { to: "/upload-statement", icon: Upload, label: "Extracto" },
     { to: "/chat", icon: MessageCircle, label: "Chat" },
+    { to: "/upload-statement", icon: Upload, label: "Extracto" },
+  ];
+
+  const moreItems = [
+    { to: "/categories", icon: FolderOpen, label: "Categorías" },
+    { to: "/merchants", icon: Store, label: "Comercios" },
     { to: "/stats", icon: TrendingUp, label: "Estadísticas" },
+    { to: "/uncategorized", icon: FolderOpen, label: "Sin categorizar" },
   ];
 
   return (
@@ -73,7 +81,36 @@ export function RootLayout() {
         <Outlet />
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 max-w-md mx-auto">
+      {/* "More" menu overlay */}
+      {showMore && (
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() => setShowMore(false)}
+        >
+          <div
+            className="absolute bottom-16 right-2 max-w-md mx-auto bg-white rounded-xl shadow-xl border border-gray-200 p-2 min-w-[180px]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {moreItems.map(({ to, icon: Icon, label }) => (
+              <NavLink
+                key={to}
+                to={to}
+                onClick={() => setShowMore(false)}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+                    isActive ? "text-blue-600 bg-blue-50" : "text-gray-700 hover:bg-gray-50"
+                  }`
+                }
+              >
+                <Icon className="w-5 h-5" />
+                <span className="text-sm font-medium">{label}</span>
+              </NavLink>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 max-w-md mx-auto z-50">
         <div className="grid grid-cols-6">
           {navItems.map(({ to, icon: Icon, label }) => (
             <NavLink
@@ -98,6 +135,18 @@ export function RootLayout() {
               )}
             </NavLink>
           ))}
+          {/* More button */}
+          <button
+            onClick={() => setShowMore((p) => !p)}
+            className={`flex flex-col items-center justify-center py-2 px-0.5 transition-colors ${
+              showMore ? "text-blue-600 bg-blue-50" : "text-gray-600 hover:bg-gray-50"
+            }`}
+          >
+            <MoreHorizontal className="w-5 h-5 mb-0.5" />
+            <span className="truncate w-full text-center text-[10px] font-medium leading-tight">
+              Más
+            </span>
+          </button>
         </div>
       </nav>
     </div>

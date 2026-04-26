@@ -571,21 +571,17 @@ async def extract_from_excel(excel_bytes: bytes, categories: list[dict]) -> dict
     }
 
 
-async def _ai_categorize_batch(transactions: list[dict], categories: list[dict]) -> list[dict]:
-    """Use AI to suggest categories for a batch of transactions, with confidence levels."""
+async def _ai_categorize_chunk(
+    transactions: list[dict],
+    categories: list[dict],
+    offset: int,
+) -> list[dict]:
+    """Categorize a chunk of transactions with AI. Returns suggestions with original indices."""
     cats_json = _build_categories_json(categories)
-    descs = [t["descripcion"] for t in transactions]
-    descs_text = "\n".join(f"{i+1}. {d}" for i, d in enumerate(descs))
+    descs_text = "\n".join(f"{i+1}. {t['descripcion']}" for i, t in enumerate(transactions))
 
     prompt = f"""Sos un experto en identificar comercios argentinos de resúmenes de tarjeta de crédito.
-Para cada transacción, identificá qué comercio es y sugerí la categoría más apropiada.
-
-Los nombres pueden ser razones sociales, abreviaciones o nombres de fantasía. Ejemplos:
-- "Nike alcorta" → tienda Nike en Alcorta Shopping → Ropa
-- "Merpago*spotify" → Spotify vía MercadoPago → Suscripciones/Streaming
-- "YPF ESTACION" → estación de servicio → Transporte/Combustible
-- "Disney plus" → streaming → Entretenimiento/Streaming
-- "Apple.com/bill" → suscripción Apple → Suscripciones
+Para cada transacción, identificá qué comercio es y sugerí la categoría.
 
 Transacciones:
 {descs_text}
@@ -593,13 +589,7 @@ Transacciones:
 Categorías disponibles:
 {cats_json}
 
-Para cada transacción respondé con:
-- index: número de la transacción (1-based)
-- comercio_identificado: nombre real/legible del comercio
-- categoria_id: ID de la categoría sugerida (int o null)
-- subcategoria_id: ID de la subcategoría sugerida (int o null)
-- confianza: "alta" si estás seguro, "media" si es probable, "baja" si no sabés
-
+Para cada una respondé: index (1-based), comercio_identificado, categoria_id (int o null), subcategoria_id (int o null), confianza ("alta"/"media"/"baja").
 Respondé SOLO JSON: {{"suggestions": [...]}}"""
 
     try:
@@ -608,20 +598,47 @@ Respondé SOLO JSON: {{"suggestions": [...]}}"""
             model="gpt-5.5",
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
-            max_completion_tokens=4000,
+            max_completion_tokens=2000,
         )
         raw = response.choices[0].message.content or "{}"
         result = json.loads(raw)
-        for s in result.get("suggestions", []):
-            idx = s.get("index", 0) - 1
-            if 0 <= idx < len(transactions):
-                transactions[idx]["categoria_id"] = s.get("categoria_id")
-                transactions[idx]["subcategoria_id"] = s.get("subcategoria_id")
-                transactions[idx]["confianza"] = s.get("confianza", "baja")
-                if s.get("comercio_identificado"):
-                    transactions[idx]["comercio_identificado"] = s["comercio_identificado"]
+        return result.get("suggestions", [])
     except Exception as e:
-        logger.error("AI batch categorization failed: %s", e, exc_info=True)
+        logger.error("AI chunk categorization failed (offset %d): %s", offset, e)
+        return []
+
+
+async def _ai_categorize_batch(transactions: list[dict], categories: list[dict]) -> list[dict]:
+    """Categorize transactions in parallel chunks for speed."""
+    import asyncio
+
+    CHUNK_SIZE = 12
+    chunks = []
+    for i in range(0, len(transactions), CHUNK_SIZE):
+        chunk = transactions[i:i + CHUNK_SIZE]
+        chunks.append((chunk, i))
+
+    # Run all chunks in parallel
+    tasks = [
+        _ai_categorize_chunk(chunk, categories, offset)
+        for chunk, offset in chunks
+    ]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # Apply results back to transactions
+    for (chunk, offset), result in zip(chunks, results):
+        if isinstance(result, Exception):
+            logger.error("Chunk at offset %d failed: %s", offset, result)
+            continue
+        for s in result:
+            idx = s.get("index", 0) - 1  # 1-based to 0-based within chunk
+            global_idx = offset + idx
+            if 0 <= global_idx < len(transactions):
+                transactions[global_idx]["categoria_id"] = s.get("categoria_id")
+                transactions[global_idx]["subcategoria_id"] = s.get("subcategoria_id")
+                transactions[global_idx]["confianza"] = s.get("confianza", "baja")
+                if s.get("comercio_identificado"):
+                    transactions[global_idx]["comercio_identificado"] = s["comercio_identificado"]
 
     return transactions
 
