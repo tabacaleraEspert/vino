@@ -11,7 +11,7 @@ from app.deps import get_current_user_id
 from app.repositories.categoria_repo import list_categorias, list_subcategorias
 from app.repositories.movimiento_repo import list_movimientos
 from app.repositories.regla_repo import resolve_regla, create_regla
-from app.services.merchant_identifier import identify_and_suggest_category
+from app.services.merchant_identifier import identify_and_suggest_category, identify_merchants_batch
 from app.utils.parse_utils import parse_period
 
 logger = logging.getLogger(__name__)
@@ -47,6 +47,38 @@ async def identify_merchant_endpoint(
 
     result = await identify_and_suggest_category(merchant_name, cats_with_subs)
     return result
+
+
+class IdentifyBatchRequest(BaseModel):
+    merchant_names: List[str]
+
+
+@router.post("/identify/batch")
+async def identify_merchants_batch_endpoint(
+    payload: IdentifyBatchRequest,
+    id_usuario: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Identify multiple merchants in a single AI call.
+    Much faster than calling /identify for each one.
+    """
+    if not payload.merchant_names:
+        raise HTTPException(status_code=400, detail="merchant_names es requerido")
+    if len(payload.merchant_names) > 50:
+        raise HTTPException(status_code=400, detail="Maximo 50 comercios por batch")
+
+    cats = await list_categorias(db, id_usuario)
+    subs = await list_subcategorias(db, id_usuario)
+    sub_by_cat: dict[int, list] = {}
+    for s in subs:
+        cid = s.get("categoria_id")
+        if cid:
+            sub_by_cat.setdefault(cid, []).append(s)
+    cats_with_subs = [{**c, "subcategorias": sub_by_cat.get(c["id"], [])} for c in cats]
+
+    results = await identify_merchants_batch(payload.merchant_names, cats_with_subs)
+    return {"results": results}
 
 
 @router.get("/uncategorized")

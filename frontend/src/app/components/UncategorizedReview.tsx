@@ -124,26 +124,38 @@ export function UncategorizedReview() {
   };
 
   const handleIdentifyAll = async () => {
-    setIdentifyingAll(true);
     const pending = merchants.filter((m) => !suggestions[m.comercio] && !categorized.has(m.comercio));
-    for (const m of pending) {
-      setIdentifyingSet((prev) => new Set(prev).add(m.comercio));
-      try {
-        const res = await api.merchants.smart.identify(m.comercio);
-        setSuggestions((prev) => ({ ...prev, [m.comercio]: res }));
-        if (res.categoria_id) {
-          setSelectedCategories((prev) => ({
-            ...prev,
-            [m.comercio]: { catId: String(res.categoria_id), subId: res.subcategoria_id ? String(res.subcategoria_id) : "" },
-          }));
+    if (pending.length === 0) return;
+
+    setIdentifyingAll(true);
+    const names = pending.map((m) => m.comercio);
+    // Mark all as loading
+    setIdentifyingSet(new Set(names));
+
+    try {
+      const res = await api.merchants.smart.identifyBatch(names);
+      const results = res?.results || [];
+      const newSuggestions: Record<string, Suggestion> = {};
+      const newCategories: Record<string, { catId: string; subId: string }> = {};
+
+      for (const r of results) {
+        newSuggestions[r.merchant_raw] = r;
+        if (r.categoria_id) {
+          newCategories[r.merchant_raw] = {
+            catId: String(r.categoria_id),
+            subId: r.subcategoria_id ? String(r.subcategoria_id) : "",
+          };
         }
-      } catch (e) {
-        console.error("Identify failed for", m.comercio, e);
-      } finally {
-        setIdentifyingSet((prev) => { const n = new Set(prev); n.delete(m.comercio); return n; });
       }
+
+      setSuggestions((prev) => ({ ...prev, ...newSuggestions }));
+      setSelectedCategories((prev) => ({ ...prev, ...newCategories }));
+    } catch (e) {
+      console.error("Batch identify failed:", e);
+    } finally {
+      setIdentifyingSet(new Set());
+      setIdentifyingAll(false);
     }
-    setIdentifyingAll(false);
   };
 
   const handleAcceptAll = async () => {

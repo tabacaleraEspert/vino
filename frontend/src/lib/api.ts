@@ -265,6 +265,11 @@ export const api = {
           method: "POST",
           body: JSON.stringify({ merchant_name }),
         }),
+      identifyBatch: (merchant_names: string[]) =>
+        apiFetch<{ results: any[] }>("/merchants/smart/identify/batch", {
+          method: "POST",
+          body: JSON.stringify({ merchant_names }),
+        }),
       uncategorized: (period?: string) => {
         const q = period ? `?period=${period}` : "";
         return apiFetch<{ total_uncategorized: number; unique_merchants: number; merchants: any[] }>(

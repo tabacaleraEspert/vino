@@ -226,3 +226,113 @@ async def identify_and_suggest_category(
         "explicacion": result.get("explicacion", ""),
         "web_search_used": result.get("web_search_used", False),
     }
+
+
+async def identify_merchants_batch(
+    merchant_names: list[str],
+    categories: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """
+    Identify multiple merchants in a single AI call.
+    Much faster than calling identify_merchant for each one.
+    """
+    client = _get_client()
+    cats_json = _build_categories_json(categories)
+
+    names_text = "\n".join(f"{i+1}. {name}" for i, name in enumerate(merchant_names))
+
+    prompt = f"""Sos un experto en identificar comercios y razones sociales argentinas de resúmenes de tarjeta.
+
+Para cada comercio, identificá qué es y sugerí una categoría.
+Los nombres pueden ser razones sociales, abreviaciones, CUIT/CUIL, o nombres de fantasía.
+
+Comercios a identificar:
+{names_text}
+
+Categorías disponibles:
+{cats_json}
+
+Para cada comercio respondé con:
+- index: número (1-based)
+- comercio_identificado: nombre real/legible
+- rubro: tipo de negocio
+- categoria_id: ID de categoría sugerida (int o null)
+- subcategoria_id: ID de subcategoría sugerida (int o null)
+- confianza: "alta" si seguro, "media" si probable, "baja" si no sabés
+- explicacion: breve explicación
+
+Respondé SOLO JSON: {{"results": [...]}}"""
+
+    try:
+        response = await client.chat.completions.create(
+            model="gpt-5.5",
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"},
+            max_completion_tokens=4000,
+        )
+        raw = response.choices[0].message.content or "{}"
+        data = _extract_json(raw)
+
+        # Build lookup for category names
+        cat_map = {}
+        sub_map = {}
+        for c in categories:
+            cat_map[c.get("id")] = c.get("nombre", "")
+            for s in c.get("subcategorias", []):
+                sub_map[s.get("id")] = s.get("nombre", "")
+
+        results = []
+        for s in data.get("results", []):
+            idx = s.get("index", 0) - 1
+            merchant_name = merchant_names[idx] if 0 <= idx < len(merchant_names) else ""
+            cat_id = s.get("categoria_id")
+            sub_id = s.get("subcategoria_id")
+            results.append({
+                "merchant_raw": merchant_name,
+                "merchant_identified": s.get("comercio_identificado", merchant_name),
+                "rubro": s.get("rubro", ""),
+                "confianza": s.get("confianza", "baja"),
+                "categoria_id": cat_id,
+                "categoria_nombre": cat_map.get(cat_id, ""),
+                "subcategoria_id": sub_id,
+                "subcategoria_nombre": sub_map.get(sub_id, ""),
+                "explicacion": s.get("explicacion", ""),
+                "web_search_used": False,
+            })
+
+        # Fill missing (if AI returned fewer results)
+        identified = {r["merchant_raw"] for r in results}
+        for name in merchant_names:
+            if name not in identified:
+                results.append({
+                    "merchant_raw": name,
+                    "merchant_identified": name,
+                    "rubro": "Desconocido",
+                    "confianza": "baja",
+                    "categoria_id": None,
+                    "categoria_nombre": "",
+                    "subcategoria_id": None,
+                    "subcategoria_nombre": "",
+                    "explicacion": "No identificado en batch",
+                    "web_search_used": False,
+                })
+
+        return results
+
+    except Exception as e:
+        logger.error("Batch merchant identification failed: %s", e)
+        return [
+            {
+                "merchant_raw": name,
+                "merchant_identified": name,
+                "rubro": "Desconocido",
+                "confianza": "baja",
+                "categoria_id": None,
+                "categoria_nombre": "",
+                "subcategoria_id": None,
+                "subcategoria_nombre": "",
+                "explicacion": f"Error: {e}",
+                "web_search_used": False,
+            }
+            for name in merchant_names
+        ]
