@@ -39,6 +39,7 @@ interface DataContextType {
   updateTransaction: (id: string, updates: Partial<Transaction>) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
   budgets: Budget[];
+  setBudgets: React.Dispatch<React.SetStateAction<Budget[]>>;
   addBudget: (budget: Omit<Budget, "id">) => Promise<void>;
   updateBudget: (id: string, budget: Partial<Budget>) => Promise<void>;
   deleteBudget: (id: string) => Promise<void>;
@@ -270,7 +271,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         categories, addCategory, updateCategory, deleteCategory,
         addSubcategory, updateSubcategory, deleteSubcategory,
         transactions, updateTransaction, deleteTransaction,
-        budgets, addBudget, updateBudget, deleteBudget,
+        budgets, setBudgets, addBudget, updateBudget, deleteBudget,
         merchants, addMerchant, updateMerchant, deleteMerchant,
         merchantRules, addMerchantRule, updateMerchantRule, deleteMerchantRule,
         refresh, refreshTrigger,

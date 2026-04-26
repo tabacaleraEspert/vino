@@ -2,9 +2,11 @@ import { useState } from "react";
 import { useData } from "../context/DataContext";
 import { useMonth } from "../context/MonthContext";
 import { MonthSelector } from "./MonthSelector";
-import { AlertCircle, CheckCircle2, Plus, ChevronDown, ChevronRight, Pencil } from "lucide-react";
+import { AlertCircle, CheckCircle2, Plus, ChevronDown, ChevronRight, Pencil, Sparkles } from "lucide-react";
 import { CreateBudgetModal } from "./CreateBudgetModal";
 import { EditBudgetModal } from "./EditBudgetModal";
+import { BudgetOnboarding } from "./BudgetOnboarding";
+import { MonthSummary } from "./MonthSummary";
 import { calcSpentFromTransactions, normalizeMesAnio } from "../../lib/api";
 import type { Budget } from "../../lib/api";
 
@@ -95,6 +97,7 @@ export function Budgets() {
   const { budgets, categories, transactions } = useData();
   const { selectedMonth } = useMonth();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const [editingBudget, setEditingBudget] = useState<Budget | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
 
@@ -162,35 +165,40 @@ export function Budgets() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="font-semibold">Presupuestos Mensuales</h2>
-        <button
-          onClick={() => setIsCreateOpen(true)}
-          className="flex items-center gap-1 text-sm text-blue-600 font-medium"
-        >
-          <Plus className="w-4 h-4" />
-          Nuevo
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsOnboardingOpen(true)}
+            className="flex items-center gap-1 text-sm text-purple-600 font-medium"
+          >
+            <Sparkles className="w-4 h-4" />
+            50/30/20
+          </button>
+          <button
+            onClick={() => setIsCreateOpen(true)}
+            className="flex items-center gap-1 text-sm text-blue-600 font-medium"
+          >
+            <Plus className="w-4 h-4" />
+            Nuevo
+          </button>
+        </div>
       </div>
 
       {!hasBudgets ? (
         <div className="bg-white rounded-2xl p-8 shadow-sm text-center">
-          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Plus className="w-8 h-8 text-gray-400" />
+          <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Sparkles className="w-8 h-8 text-purple-500" />
           </div>
           <p className="text-gray-600 font-medium mb-2">Sin presupuestos para este mes</p>
           <p className="text-sm text-gray-500 mb-6">
-            No tienes presupuestos asignados para{" "}
-            {new Date(selectedMonth.year, selectedMonth.month).toLocaleDateString("es-MX", {
-              month: "long",
-              year: "numeric",
-            })}
-            . Agrega uno para comenzar a controlar tus gastos.
+            Configura tus presupuestos para controlar cuánto gastás en cada categoría.
+            Podés hacerlo manualmente o dejar que te ayudemos con la regla 50/30/20.
           </p>
           <button
-            onClick={() => setIsCreateOpen(true)}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white font-medium rounded-xl hover:bg-blue-700 transition-colors"
+            onClick={() => setIsOnboardingOpen(true)}
+            className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white font-medium rounded-xl hover:from-purple-700 hover:to-purple-800 transition-all"
           >
-            <Plus className="w-5 h-5" />
-            Agregar presupuesto
+            <Sparkles className="w-5 h-5" />
+            Configurar presupuestos
           </button>
         </div>
       ) : (
@@ -354,6 +362,12 @@ export function Budgets() {
         </>
       )}
 
+      <MonthSummary />
+      <BudgetOnboarding
+        isOpen={isOnboardingOpen}
+        onClose={() => setIsOnboardingOpen(false)}
+        mesAnio={period}
+      />
       <CreateBudgetModal
         isOpen={isCreateOpen}
         onClose={() => setIsCreateOpen(false)}

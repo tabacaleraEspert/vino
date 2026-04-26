@@ -218,6 +218,45 @@ export const api = {
       }),
     delete: (id: string) =>
       apiFetch(`/presupuestos/${id}`, { method: "DELETE" }),
+    autoAssign: (total: number, mes_anio?: string) =>
+      apiFetch<{
+        total: number;
+        regla: string;
+        mes_anio: string;
+        presupuestos_creados: number;
+        distribucion: { categoria: string; bucket: string; pct_bucket: string; monto: number }[];
+        presupuestos: PresupuestoRaw[];
+      }>("/presupuestos/auto-assign", {
+        method: "POST",
+        body: JSON.stringify({ total, mes_anio }),
+      }),
+  },
+
+  statement: {
+    extract: async (file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      const { getApiToken } = await import("./api/client");
+      const token = getApiToken();
+      const API_BASE =
+        import.meta.env.VITE_API_URL ||
+        "https://vino-backend-bkbge8cwfffsdrhc.brazilsouth-01.azurewebsites.net/api/v1";
+      const res = await fetch(`${API_BASE}/statement/extract`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: "Error desconocido" }));
+        throw new Error(err.detail || `Error ${res.status}`);
+      }
+      return res.json();
+    },
+    confirm: (data: { transactions: any[]; origen_label?: string }) =>
+      apiFetch<{ status: string; total: number; creados: number; duplicados: number; errores: number }>(
+        "/statement/confirm",
+        { method: "POST", body: JSON.stringify(data) }
+      ),
   },
 
   merchants: {

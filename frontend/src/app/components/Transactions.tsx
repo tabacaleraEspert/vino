@@ -13,12 +13,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "./ui/alert-dialog";
-import { Search, Filter, X, Calendar, DollarSign, Store, Edit2, Trash2 } from "lucide-react";
+import { Search, Filter, X, Calendar, DollarSign, Store, Edit2, Trash2, Upload } from "lucide-react";
+import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { useAuth } from "../context/AuthContext";
 import { api, parseDateLocal, type Transaction } from "../../lib/api";
 
 export function Transactions() {
+  const navigate = useNavigate();
   const { token } = useAuth();
   const { categories, merchants, transactions, deleteTransaction, refresh } = useData();
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
@@ -162,6 +164,13 @@ export function Transactions() {
               </button>
             )}
           </div>
+          <button
+            onClick={() => navigate("/upload-statement")}
+            className="p-2 rounded-lg bg-purple-100 text-purple-600 hover:bg-purple-200 transition-colors"
+            title="Cargar extracto"
+          >
+            <Upload className="w-4 h-4" />
+          </button>
           <button
             onClick={() => setShowAdvancedFilters(true)}
             className={`p-2 rounded-lg transition-colors relative ${

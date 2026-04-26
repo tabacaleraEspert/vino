@@ -15,6 +15,7 @@ from app.repositories.presupuesto_repo import (
     upsert_presupuesto,
     delete_presupuesto,
 )
+from app.repositories.categoria_repo import list_categorias
 from app.utils.parse_utils import parse_periodo_mes
 
 router = APIRouter()
@@ -155,3 +156,132 @@ async def delete_presupuesto_endpoint(
     if not await delete_presupuesto(db, id_usuario, id):
         raise HTTPException(status_code=404, detail="Presupuesto no encontrado")
     return {"deleted": True, "id": str(id)}
+
+
+# ---------------------------------------------------------------------------
+# Regla 50/30/20 — auto-asignación
+# ---------------------------------------------------------------------------
+
+# Mapping of category names (lowercase) to 50/30/20 buckets.
+# "necesidades" = 50%, "deseos" = 30%, "ahorro" = 20%
+_BUCKET_MAP: dict[str, str] = {
+    # Necesidades (50%)
+    "vivienda": "necesidades",
+    "alimentacion": "necesidades",
+    "alimentación": "necesidades",
+    "transporte": "necesidades",
+    "servicios": "necesidades",
+    "salud": "necesidades",
+    "educacion": "necesidades",
+    "educación": "necesidades",
+    "impuestos": "necesidades",
+    # Deseos (30%)
+    "entretenimiento": "deseos",
+    "delivery": "deseos",
+    "restaurantes": "deseos",
+    "suscripciones": "deseos",
+    "ropa": "deseos",
+    "compras": "deseos",
+    "vacaciones": "deseos",
+    "ocio": "deseos",
+    "hobbies": "deseos",
+    "tecnologia": "deseos",
+    "tecnología": "deseos",
+    "belleza": "deseos",
+    "mascotas": "deseos",
+    "regalos": "deseos",
+    # Ahorro (20%)
+    "ahorro": "ahorro",
+    "inversiones": "ahorro",
+    "deudas": "ahorro",
+    "emergencias": "ahorro",
+}
+
+_BUCKET_PCT = {"necesidades": 0.50, "deseos": 0.30, "ahorro": 0.20}
+
+
+class AutoAssignIn(BaseModel):
+    total: float
+    mes_anio: Optional[str] = None
+
+
+@router.post("/auto-assign")
+async def auto_assign_budgets(
+    payload: AutoAssignIn,
+    id_usuario: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Auto-asigna presupuestos basado en la regla 50/30/20.
+
+    - 50% Necesidades (vivienda, alimentación, transporte, servicios, salud)
+    - 30% Deseos (entretenimiento, delivery, ropa, suscripciones)
+    - 20% Ahorro (ahorro, inversiones, deudas)
+
+    Distribuye equitativamente dentro de cada bucket entre las categorías
+    del usuario que pertenezcan a ese bucket.
+    """
+    if payload.total <= 0:
+        raise HTTPException(status_code=400, detail="El total debe ser mayor a 0")
+
+    mes = payload.mes_anio
+    if not mes:
+        today = date.today()
+        mes = f"{today.month:02d}/{today.year % 100:02d}"
+    try:
+        periodo_mes = parse_periodo_mes(mes)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # Get user's categories
+    cats = await list_categorias(db, id_usuario)
+    if not cats:
+        raise HTTPException(status_code=400, detail="No hay categorías configuradas")
+
+    # Classify categories into buckets
+    buckets: dict[str, list[dict]] = {"necesidades": [], "deseos": [], "ahorro": []}
+    uncategorized = []
+    for cat in cats:
+        nombre = (cat.get("nombre", "") or "").strip().lower()
+        bucket = _BUCKET_MAP.get(nombre)
+        if bucket:
+            buckets[bucket].append(cat)
+        else:
+            uncategorized.append(cat)
+
+    # Assign uncategorized to "deseos" as fallback
+    buckets["deseos"].extend(uncategorized)
+
+    # Distribute budget
+    total = payload.total
+    created = []
+    distribution = []
+
+    for bucket_name, pct in _BUCKET_PCT.items():
+        bucket_cats = buckets[bucket_name]
+        bucket_total = total * pct
+        if not bucket_cats:
+            continue
+        per_cat = round(bucket_total / len(bucket_cats), 2)
+        for cat in bucket_cats:
+            row = await upsert_presupuesto(
+                db, id_usuario, periodo_mes,
+                Decimal(str(per_cat)),
+                id_categoria=cat["id"],
+            )
+            created.append(_to_raw(row))
+            distribution.append({
+                "categoria": cat.get("nombre", ""),
+                "bucket": bucket_name,
+                "pct_bucket": f"{int(pct * 100)}%",
+                "monto": per_cat,
+            })
+
+    return {
+        "total": total,
+        "regla": "50/30/20",
+        "mes_anio": mes,
+        "presupuestos_creados": len(created),
+        "distribucion": distribution,
+        "presupuestos": created,
+    }
