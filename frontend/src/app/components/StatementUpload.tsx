@@ -1,5 +1,5 @@
-import { useState, useRef } from "react";
-import { Upload, FileText, Image, X, Check, AlertCircle, ChevronDown, Trash2, ArrowLeft } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Upload, FileText, Image, X, Check, AlertCircle, ChevronDown, Trash2, ArrowLeft, FileSearch, Brain, Sparkles, CheckCircle2 } from "lucide-react";
 import { api } from "../../lib/api";
 import { useData } from "../context/DataContext";
 import { useNavigate } from "react-router";
@@ -33,6 +33,7 @@ export function StatementUpload() {
   const [transactions, setTransactions] = useState<ExtractedTx[]>([]);
   const [result, setResult] = useState<{ creados: number; duplicados: number; errores: number } | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [processingStep, setProcessingStep] = useState(0);
 
   const handleFile = async (file: File) => {
     const allowed = ["application/pdf", "image/jpeg", "image/jpg", "image/png", "image/webp",
@@ -51,13 +52,25 @@ export function StatementUpload() {
     setError("");
     setFileName(file.name);
     setStep("processing");
+    setProcessingStep(0);
+
+    // Animate through steps while the API processes
+    const stepTimers = [
+      setTimeout(() => setProcessingStep(1), 800),
+      setTimeout(() => setProcessingStep(2), 2000),
+      setTimeout(() => setProcessingStep(3), 4000),
+    ];
 
     try {
       const res = await api.statement.extract(file);
+      stepTimers.forEach(clearTimeout);
+      setProcessingStep(4); // done
+      await new Promise((r) => setTimeout(r, 600)); // brief pause to show completion
       setTransactions(res.transactions || []);
       setStatementInfo({ period: res.statement_period || "", card: res.card_or_account || "" });
       setStep("review");
     } catch (e: any) {
+      stepTimers.forEach(clearTimeout);
       setError(e.message || "Error al procesar el archivo");
       setStep("upload");
     }
@@ -173,15 +186,75 @@ export function StatementUpload() {
         </div>
       )}
 
-      {/* Processing */}
+      {/* Processing — animated steps */}
       {step === "processing" && (
-        <div className="bg-white rounded-2xl p-10 text-center shadow-sm">
-          <div className="w-16 h-16 mx-auto mb-4 relative">
-            <div className="w-16 h-16 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin" />
+        <div className="bg-white rounded-2xl p-8 shadow-sm space-y-6">
+          <div className="text-center mb-2">
+            <p className="font-semibold text-gray-800 text-lg">Procesando extracto</p>
+            <p className="text-sm text-gray-500">{fileName}</p>
           </div>
-          <p className="font-medium text-gray-700 mb-1">Analizando extracto...</p>
-          <p className="text-sm text-gray-500">{fileName}</p>
-          <p className="text-xs text-gray-400 mt-2">La IA esta extrayendo las transacciones</p>
+
+          {[
+            { icon: FileSearch, label: "Leyendo archivo", desc: "Extrayendo datos del documento" },
+            { icon: Upload, label: "Parseando transacciones", desc: "Identificando gastos e ingresos" },
+            { icon: Brain, label: "Analizando con IA", desc: "Identificando comercios y categorias" },
+            { icon: Sparkles, label: "Categorizando", desc: "Asignando categorias a cada gasto" },
+          ].map((s, i) => {
+            const isActive = processingStep === i;
+            const isDone = processingStep > i;
+            const isPending = processingStep < i;
+
+            return (
+              <div
+                key={i}
+                className={`flex items-center gap-4 transition-all duration-500 ${
+                  isPending ? "opacity-30" : "opacity-100"
+                }`}
+              >
+                <div
+                  className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-500 ${
+                    isDone
+                      ? "bg-green-100"
+                      : isActive
+                      ? "bg-purple-100 animate-pulse"
+                      : "bg-gray-100"
+                  }`}
+                >
+                  {isDone ? (
+                    <CheckCircle2 className="w-6 h-6 text-green-600" />
+                  ) : isActive ? (
+                    <s.icon className="w-6 h-6 text-purple-600 animate-bounce" />
+                  ) : (
+                    <s.icon className="w-6 h-6 text-gray-400" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className={`font-medium text-sm transition-colors duration-300 ${
+                    isDone ? "text-green-700" : isActive ? "text-purple-700" : "text-gray-400"
+                  }`}>
+                    {s.label}
+                    {isDone && <span className="ml-1">-</span>}
+                  </p>
+                  <p className={`text-xs transition-colors duration-300 ${
+                    isActive ? "text-purple-500" : "text-gray-400"
+                  }`}>
+                    {s.desc}
+                  </p>
+                </div>
+                {isActive && (
+                  <div className="w-5 h-5 border-2 border-purple-200 border-t-purple-600 rounded-full animate-spin flex-shrink-0" />
+                )}
+              </div>
+            );
+          })}
+
+          {/* Progress bar */}
+          <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-purple-500 to-indigo-500 rounded-full transition-all duration-700 ease-out"
+              style={{ width: `${(processingStep / 4) * 100}%` }}
+            />
+          </div>
         </div>
       )}
 

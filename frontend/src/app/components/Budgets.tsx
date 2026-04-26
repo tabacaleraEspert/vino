@@ -287,7 +287,7 @@ export function Budgets() {
                     {catTotalAmount.toLocaleString("es-AR")}
                   </p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                   {catStatus === "over" ? (
                     <AlertCircle className="w-5 h-5 text-red-500" />
                   ) : catStatus === "near" ? (
@@ -302,6 +302,18 @@ export function Budgets() {
                   >
                     {catPercentage.toFixed(0)}%
                   </span>
+                  {/* Edit button — always visible for category-level budgets */}
+                  {categoryBudgets.length > 0 && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingBudget(categoryBudgets[0].budget);
+                      }}
+                      className="p-1.5 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                  )}
                   {hasSub && (
                     <button
                       onClick={(e) => {
