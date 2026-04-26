@@ -30,46 +30,68 @@ Tu tarea es LEER el mensaje y extraer los datos del gasto. Entendés slang argen
 - "2 gambas" = 200
 - "1 luca" = 1.000
 - "50k" = 50.000
-- "guita" = plata/dinero
 
 Reglas:
-- monto: número entero (sin $, sin puntos de miles, sin decimales). SIEMPRE convertir slang.
-- moneda: "ARS" por defecto. "USD" si dice dólares/dolar/usd/dolares.
-- comercio: nombre del lugar donde gastó. Si no dice → ""
-- descripcion: resumen corto del gasto
-- tipo: siempre "Gasto" salvo que diga ingreso/cobré/me pagaron
+- monto: número entero, SIEMPRE convertir slang. Sin $ ni puntos.
+- moneda: "ARS" por defecto. "USD" si dice dólares/dolar.
+- comercio: nombre del lugar. Si no dice nombre de local → ""
+- descripcion: resumen corto y claro del gasto (ej: "Alfajor en kiosco", "Almuerzo", "Nafta YPF")
+- tipo: "Gasto" siempre, salvo que diga ingreso/cobré/me pagaron
 - medio_de_pago: "Efectivo" por defecto. Si dice tarjeta/débito/crédito/transferencia, extraer.
-- fecha: si menciona "hoy" → hoy. "ayer" → ayer. Si no dice nada → null (se usa hoy).
+- fecha: "hoy" → hoy, "ayer" → ayer, si no dice → null
+- categoria_sugerida: basándote en el gasto, sugerí la categoría más probable de esta lista:
+{categories_text}
+  Si no estás seguro → null
 
 Respondé SOLO JSON:
-{
-  "monto": 5000,
+{{
+  "monto": 1500,
   "moneda": "ARS",
-  "comercio": "Jumbo",
-  "descripcion": "Compra en supermercado",
+  "comercio": "",
+  "descripcion": "Alfajor",
   "tipo": "Gasto",
   "medio_de_pago": "Efectivo",
   "fecha": null,
+  "categoria_sugerida": "Alimentacion",
+  "subcategoria_sugerida": "Kiosco",
   "datos_completos": true,
   "dato_faltante": null
-}
+}}
 
-Si falta el monto (=0 o no se pudo extraer):
-  datos_completos = false, dato_faltante = "monto"
-
-Si el mensaje no tiene nada que ver con un gasto:
-  datos_completos = false, dato_faltante = "no_es_gasto"
+Si falta el monto → datos_completos = false, dato_faltante = "monto"
+Si no es un gasto → datos_completos = false, dato_faltante = "no_es_gasto"
 """
 
 
-async def extract_expense_from_message(message: str) -> dict[str, Any]:
+async def extract_expense_from_message(
+    message: str,
+    categories: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     """Extract expense data from a natural language message."""
     client = _get_client()
+
+    # Build categories text for the prompt
+    cats_text = ""
+    if categories:
+        lines = []
+        for c in categories:
+            subs = c.get("subcategorias", [])
+            sub_names = ", ".join(s.get("nombre", "") for s in subs) if subs else ""
+            line = f"  - {c.get('nombre', '')} (id={c.get('id', '')})"
+            if sub_names:
+                line += f": {sub_names}"
+            lines.append(line)
+        cats_text = "\n".join(lines)
+    else:
+        cats_text = "  (no disponibles)"
+
+    prompt = _EXTRACT_PROMPT.replace("{categories_text}", cats_text)
+
     try:
         response = await client.chat.completions.create(
             model="gpt-5.5",
             messages=[
-                {"role": "system", "content": _EXTRACT_PROMPT},
+                {"role": "system", "content": prompt},
                 {"role": "user", "content": message},
             ],
             response_format={"type": "json_object"},

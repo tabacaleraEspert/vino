@@ -139,7 +139,6 @@ async def register_expense(
     from datetime import date, timedelta
     from decimal import Decimal
 
-    from app.repositories.categoria_repo import list_categorias, list_subcategorias
     from app.repositories.movimiento_repo import create_movimiento
     from app.repositories.regla_repo import resolve_regla, create_regla
     from app.repositories.medio_pago_repo import resolve_medio_pago
@@ -149,8 +148,18 @@ async def register_expense(
     if not message:
         return {"status": "error", "reply": "No recibí ningún mensaje."}
 
-    # Step 1: Extract expense data from message
-    extracted = await extract_expense_from_message(message)
+    # Load categories for the extractor
+    cats = await list_categorias(db, payload.user_id)
+    subs = await list_subcategorias(db, payload.user_id)
+    sub_by_cat: dict[int, list] = {}
+    for s in subs:
+        cid = s.get("categoria_id")
+        if cid:
+            sub_by_cat.setdefault(cid, []).append(s)
+    cats_with_subs = [{**c, "subcategorias": sub_by_cat.get(c["id"], [])} for c in cats]
+
+    # Step 1: Extract expense data from message (with categories context)
+    extracted = await extract_expense_from_message(message, cats_with_subs)
 
     if not extracted.get("datos_completos"):
         faltante = extracted.get("dato_faltante", "")
@@ -210,32 +219,13 @@ async def register_expense(
             categoria_nombre = regla_match.get("categoria_nombre", "")
             subcategoria_nombre = regla_match.get("subcategoria_nombre", "")
 
-    # Step 3: If no rule match, try AI identification
+    # Step 3: If no rule match, try AI merchant identification
     if not id_categoria and comercio_raw:
         try:
-            cats = await list_categorias(db, payload.user_id)
-            subs = await list_subcategorias(db, payload.user_id)
-            sub_by_cat: dict[int, list] = {}
-            for s in subs:
-                cid = s.get("categoria_id")
-                if cid:
-                    sub_by_cat.setdefault(cid, []).append(s)
-            cats_with_subs = [{**c, "subcategorias": sub_by_cat.get(c["id"], [])} for c in cats]
-
             ai_result = await identify_merchant(comercio_raw, cats_with_subs, use_web_search=False)
             if ai_result.get("confianza") in ("alta", "media") and ai_result.get("categoria_id"):
                 id_categoria = ai_result["categoria_id"]
                 id_subcategoria = ai_result.get("subcategoria_id")
-                # Find names
-                for c in cats:
-                    if c["id"] == id_categoria:
-                        categoria_nombre = c.get("nombre", "")
-                        for s in sub_by_cat.get(c["id"], []):
-                            if s["id"] == id_subcategoria:
-                                subcategoria_nombre = s.get("nombre", "")
-                        break
-
-                # Create rule for future
                 try:
                     await create_regla(
                         db, id_usuario=payload.user_id, patron=comercio_raw,
@@ -247,12 +237,38 @@ async def register_expense(
         except Exception as e:
             logger.warning("AI merchant identification failed: %s", e)
 
-    # Default category if nothing matched
+    # Step 3b: Use GPT's category suggestion from the extraction
     if not id_categoria:
-        id_categoria = 6  # Otros
-        id_subcategoria = 42  # Gastos no categorizados
+        cat_sug = extracted.get("categoria_sugerida", "")
+        sub_sug = extracted.get("subcategoria_sugerida", "")
+        if cat_sug:
+            for c in cats:
+                if c.get("nombre", "").lower() == str(cat_sug).lower():
+                    id_categoria = c["id"]
+                    categoria_nombre = c.get("nombre", "")
+                    for s in sub_by_cat.get(c["id"], []):
+                        if sub_sug and s.get("nombre", "").lower() == str(sub_sug).lower():
+                            id_subcategoria = s["id"]
+                            subcategoria_nombre = s.get("nombre", "")
+                            break
+                    break
+
+    # Default if nothing matched
+    if not id_categoria:
+        id_categoria = 6
+        id_subcategoria = 42
         categoria_nombre = "Otros"
         subcategoria_nombre = "Gastos no categorizados"
+
+    # Resolve names if we have IDs but no names yet
+    if id_categoria and not categoria_nombre:
+        for c in cats:
+            if c["id"] == id_categoria:
+                categoria_nombre = c.get("nombre", "")
+                for s in sub_by_cat.get(c["id"], []):
+                    if s["id"] == id_subcategoria:
+                        subcategoria_nombre = s.get("nombre", "")
+                break
 
     # Step 4: Resolve payment method
     id_credito_debito = None
@@ -289,20 +305,40 @@ async def register_expense(
         logger.error("Failed to create movement: %s", e)
         return {"status": "error", "reply": f"Error al registrar el gasto: {e}"}
 
-    # Step 6: Build WhatsApp confirmation
+    # Step 6: Build WhatsApp confirmation (conversational style)
     monto_fmt = f"${monto:,.0f}".replace(",", ".")
-    parts = [f"Registrado *{monto_fmt} {moneda}*"]
-    if comercio_raw:
-        parts.append(f"en *{comercio_raw}*")
-    parts.append(f"({categoria_nombre}")
-    if subcategoria_nombre and subcategoria_nombre != "Gastos no categorizados":
-        parts.append(f"/ {subcategoria_nombre})")
-    else:
-        parts.append(")")
-    if medio_pago_raw and medio_pago_raw.lower() != "efectivo":
-        parts.append(f"con {medio_pago_raw}")
+    emoji = "💸"
+    if categoria_nombre.lower() in ("alimentacion", "alimentos"):
+        emoji = "🍽️"
+    elif categoria_nombre.lower() in ("transporte",):
+        emoji = "🚗"
+    elif categoria_nombre.lower() in ("entretenimiento",):
+        emoji = "🎬"
+    elif categoria_nombre.lower() in ("salud",):
+        emoji = "💊"
+    elif categoria_nombre.lower() in ("ropa",):
+        emoji = "👕"
+    elif categoria_nombre.lower() in ("vivienda", "servicios"):
+        emoji = "🏠"
+    elif categoria_nombre.lower() in ("educacion", "educación"):
+        emoji = "📚"
 
-    reply = " ".join(parts)
+    reply = f"{emoji} *{monto_fmt}*"
+    if moneda != "ARS":
+        reply += f" {moneda}"
+    if comercio_raw:
+        reply += f" en *{comercio_raw}*"
+    elif descripcion and descripcion != "Gasto WhatsApp":
+        reply += f" — {descripcion}"
+
+    reply += f"\n📂 {categoria_nombre}"
+    if subcategoria_nombre and subcategoria_nombre != "Gastos no categorizados":
+        reply += f" / {subcategoria_nombre}"
+
+    if medio_pago_raw and medio_pago_raw.lower() != "efectivo":
+        reply += f"\n💳 {medio_pago_raw}"
+
+    reply += "\n✅ Registrado"
 
     return {
         "status": "created",
