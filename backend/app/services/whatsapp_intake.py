@@ -58,6 +58,21 @@ _EXPENSE_KEYWORDS = [
 
 _QUERY_INDICATORS = ["cuanto", "cuánto", "cuantos", "resumen", "en qué", "en que", "último gasto", "ultimo gasto", "cómo vengo", "como vengo"]
 
+_SUGGESTION_PATTERNS = [
+    "puedo comprar", "puedo comprarme", "me puedo comprar",
+    "puedo gastar", "puedo ir a", "me alcanza para",
+    "me da para", "me conviene", "debería comprar", "deberia comprar",
+    "vale la pena", "es caro", "es barato", "qué opinas de comprar",
+    "que opinas de comprar", "me recomendas",
+]
+
+
+def _looks_like_suggestion(text: str) -> bool:
+    """Check if a message is asking for purchase advice, not registering an expense."""
+    lower = text.lower()
+    return any(kw in lower for kw in _SUGGESTION_PATTERNS)
+
+
 def _looks_like_expense(text: str) -> bool:
     """Check if a message looks like an expense registration (not a query)."""
     lower = text.lower()
@@ -97,7 +112,11 @@ def detect_command(body: str, button_payload: str | None = None) -> dict[str, An
     if not text:
         return None
 
-    # Detect expense messages (DATA) before other commands
+    # Detect suggestion/advice questions BEFORE expense detection
+    if _looks_like_suggestion(text):
+        return {"intent": Intent.SUGERENCIAS, "command_data": {}}
+
+    # Detect expense messages (DATA)
     if _looks_like_expense(text):
         return {"intent": Intent.DATA, "command_data": {}}
 
