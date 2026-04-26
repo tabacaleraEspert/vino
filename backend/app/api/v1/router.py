@@ -13,6 +13,7 @@ from app.api.v1 import comercios
 from app.api.v1 import ingest
 from app.api.v1 import whatsapp
 from app.api.v1 import statement_upload
+from app.api.v1 import merchant_identify
 from app.api.v1.admin import router as admin_router
 from app.api.v1.views import router as views_router
 
@@ -38,3 +39,4 @@ router.include_router(recategorizaciones.router, prefix="/recategorizaciones", t
 router.include_router(ingest.router, prefix="/ingest", tags=["ingest"])
 router.include_router(whatsapp.router, prefix="/whatsapp", tags=["whatsapp"])
 router.include_router(statement_upload.router, prefix="/statement", tags=["statement"])
+router.include_router(merchant_identify.router, prefix="/merchants/smart", tags=["merchants"])

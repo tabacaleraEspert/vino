@@ -13,7 +13,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "./ui/alert-dialog";
-import { Search, Filter, X, Calendar, DollarSign, Store, Edit2, Trash2, Upload } from "lucide-react";
+import { Search, Filter, X, Calendar, DollarSign, Store, Edit2, Trash2, Upload, AlertCircle } from "lucide-react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { useAuth } from "../context/AuthContext";
@@ -163,6 +163,13 @@ export function Transactions() {
               </button>
             )}
           </div>
+          <button
+            onClick={() => navigate("/uncategorized")}
+            className="p-2 rounded-lg bg-amber-100 text-amber-600 hover:bg-amber-200 transition-colors"
+            title="Gastos sin categorizar"
+          >
+            <AlertCircle className="w-4 h-4" />
+          </button>
           <button
             onClick={() => navigate("/upload-statement")}
             className="p-2 rounded-lg bg-purple-100 text-purple-600 hover:bg-purple-200 transition-colors"

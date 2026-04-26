@@ -259,6 +259,29 @@ export const api = {
   },
 
   merchants: {
+    smart: {
+      identify: (merchant_name: string) =>
+        apiFetch<any>("/merchants/smart/identify", {
+          method: "POST",
+          body: JSON.stringify({ merchant_name }),
+        }),
+      uncategorized: (period?: string) => {
+        const q = period ? `?period=${period}` : "";
+        return apiFetch<{ total_uncategorized: number; unique_merchants: number; merchants: any[] }>(
+          `/merchants/smart/uncategorized${q}`
+        );
+      },
+      categorize: (data: { comercio: string; categoria_id: number; subcategoria_id: number | null; create_rule: boolean }) =>
+        apiFetch<any>("/merchants/smart/categorize", {
+          method: "POST",
+          body: JSON.stringify(data),
+        }),
+      bulkCategorize: (items: any[]) =>
+        apiFetch<any>("/merchants/smart/categorize/bulk", {
+          method: "POST",
+          body: JSON.stringify({ items }),
+        }),
+    },
     list: () => apiFetch<Merchant[]>("/comercios"),
     create: (data: Omit<Merchant, "id">) =>
       apiFetch<Merchant>("/comercios", {

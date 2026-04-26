@@ -15,6 +15,8 @@ from app.repositories.movimiento_repo import (
 from app.repositories.medio_pago_repo import resolve_medio_pago
 from app.repositories.regla_repo import create_regla, resolve_regla
 from app.repositories.user_repo import get_user_by_gmail
+from app.repositories.categoria_repo import list_categorias, list_subcategorias
+from app.services.merchant_identifier import identify_merchant
 from app.utils.normalize import normalize_text
 from app.utils.parse_utils import parse_date_flex, parse_money
 
@@ -126,22 +128,46 @@ async def ingest_movimiento(
             id_categoria = regla_match["categoria_id"]
             id_subcategoria = regla_match["subcategoria_id"]
         else:
-            # Sin regla: asignar defaults y crear regla AUTO
-            id_categoria = DEFAULT_CATEGORIA_ID
-            id_subcategoria = DEFAULT_SUBCATEGORIA_ID
+            # Sin regla: intentar identificar comercio con IA
+            ai_cat_id = None
+            ai_sub_id = None
+            ai_confianza = "baja"
+            try:
+                cats = await list_categorias(db, id_usuario)
+                subs = await list_subcategorias(db, id_usuario)
+                sub_by_cat: dict[int, list] = {}
+                for s in subs:
+                    cid = s.get("categoria_id")
+                    if cid:
+                        sub_by_cat.setdefault(cid, []).append(s)
+                cats_with_subs = [{**c, "subcategorias": sub_by_cat.get(c["id"], [])} for c in cats]
+                ai_result = await identify_merchant(comercio_raw, cats_with_subs, use_web_search=False)
+                ai_cat_id = ai_result.get("categoria_id")
+                ai_sub_id = ai_result.get("subcategoria_id")
+                ai_confianza = ai_result.get("confianza", "baja")
+            except Exception as e:
+                logger.warning("AI merchant identification failed for '%s': %s", comercio_raw, e)
+
+            # Use AI suggestion if confidence is not low, otherwise default
+            if ai_cat_id and ai_confianza in ("alta", "media"):
+                id_categoria = ai_cat_id
+                id_subcategoria = ai_sub_id
+            else:
+                id_categoria = DEFAULT_CATEGORIA_ID
+                id_subcategoria = DEFAULT_SUBCATEGORIA_ID
+
             try:
                 regla_match = await create_regla(
                     db,
                     id_usuario=id_usuario,
                     patron=comercio_raw,
-                    id_categoria=DEFAULT_CATEGORIA_ID,
-                    id_subcategoria=DEFAULT_SUBCATEGORIA_ID,
-                    confianza="AUTO",
+                    id_categoria=id_categoria,
+                    id_subcategoria=id_subcategoria,
+                    confianza=f"AI_{ai_confianza}" if ai_cat_id else "AUTO",
                 )
                 regla_creada = True
             except Exception as e:
-                # Si falla crear regla (ej: duplicado), no frenar la ingesta
-                logger.warning("No se pudo crear regla AUTO para '%s': %s", comercio_raw, e)
+                logger.warning("No se pudo crear regla para '%s': %s", comercio_raw, e)
 
     # Descripcion: incluir comercio si hay
     if comercio_raw and descripcion:
