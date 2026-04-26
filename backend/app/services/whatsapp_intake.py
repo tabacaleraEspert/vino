@@ -101,8 +101,7 @@ async def classify_intent(body: str) -> Intent:
                 {"role": "system", "content": _CLASSIFY_SYSTEM_PROMPT},
                 {"role": "user", "content": body},
             ],
-            max_tokens=20,
-            temperature=0,
+            max_completion_tokens=20,
         )
         raw = (response.choices[0].message.content or "").strip().upper()
         try:

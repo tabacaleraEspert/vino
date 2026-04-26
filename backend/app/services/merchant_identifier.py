@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any
 
 from openai import AsyncOpenAI
@@ -31,7 +32,7 @@ Los nombres suelen ser razones sociales, abreviaciones o nombres comerciales. Ej
 - "MERPAGO*SPOTIFY" → suscripción de streaming
 - "YPF ESTACION 1234" → estación de servicio
 - "FARMACITY" → farmacia
-- "STA MARIA SA" → puede ser muchas cosas, buscá en internet
+- "STA MARIA SA" → puede ser muchas cosas
 
 Las categorías disponibles del usuario son:
 {categories_json}
@@ -46,20 +47,14 @@ Respondé SOLO con JSON válido:
   "explicacion": "Breve explicación de por qué"
 }}
 
-Si no tenés idea de qué es, devolvé confianza "baja" y categoria_id null.
-Si necesitarías buscar en internet para confirmar, decilo en la explicación."""
+Si no tenés idea de qué es, devolvé confianza "baja" y categoria_id null."""
 
 
-_WEBSEARCH_PROMPT = """Buscá en internet qué es el comercio "{merchant}" en Argentina.
-Puede ser una razón social, nombre de fantasía, o abreviación de tarjeta de crédito.
+_WEBSEARCH_PROMPT = """Necesito identificar qué comercio o empresa es "{merchant}" en Argentina.
+Puede ser una razón social, CUIT, nombre de fantasía, o abreviación que aparece en un resumen de tarjeta de crédito.
+Si es un CUIT/CUIL, buscalo en internet para saber a quién pertenece.
 
-Respondé SOLO con JSON válido:
-{{
-  "comercio_identificado": "Nombre real del comercio",
-  "rubro": "Tipo de negocio",
-  "fuente": "URL o referencia de donde sacaste la info",
-  "confianza": "alta" | "media" | "baja"
-}}"""
+Decime qué encontraste: nombre del comercio, rubro/tipo de negocio, y una referencia."""
 
 
 def _build_categories_json(categories: list[dict[str, Any]]) -> str:
@@ -73,6 +68,30 @@ def _build_categories_json(categories: list[dict[str, Any]]) -> str:
             ]
         cats.append(entry)
     return json.dumps(cats, ensure_ascii=False)
+
+
+def _extract_json(text: str) -> dict:
+    """Extract JSON from text that may contain markdown or extra content."""
+    # Try direct parse
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    # Try extracting from ```json blocks
+    m = re.search(r"```json\s*(.*?)\s*```", text, re.DOTALL)
+    if m:
+        try:
+            return json.loads(m.group(1))
+        except json.JSONDecodeError:
+            pass
+    # Try finding first { ... }
+    m = re.search(r"\{.*\}", text, re.DOTALL)
+    if m:
+        try:
+            return json.loads(m.group(0))
+        except json.JSONDecodeError:
+            pass
+    return {}
 
 
 async def identify_merchant(
@@ -101,11 +120,10 @@ async def identify_merchant(
                 {"role": "user", "content": f"Comercio: {merchant_name}"},
             ],
             response_format={"type": "json_object"},
-            max_tokens=200,
-            temperature=0,
+            max_completion_tokens=500,
         )
         raw = response.choices[0].message.content or "{}"
-        result = json.loads(raw)
+        result = _extract_json(raw)
     except Exception as e:
         logger.error("Merchant identification failed for '%s': %s", merchant_name, e)
         return {
@@ -119,34 +137,56 @@ async def identify_merchant(
         }
 
     # Step 2: Web search if confidence is low
-    web_result = None
-    if use_web_search and result.get("confianza") == "baja":
+    web_info = None
+    if use_web_search and result.get("confianza") in ("baja", None):
         try:
-            ws_response = await client.chat.completions.create(
+            ws_response = await client.responses.create(
                 model="gpt-5.5",
-                messages=[
-                    {"role": "user", "content": _WEBSEARCH_PROMPT.format(merchant=merchant_name)},
-                ],
-                response_format={"type": "json_object"},
-                max_tokens=200,
-                temperature=0,
-                # Use web search tool if available
                 tools=[{"type": "web_search_preview"}],
+                input=_WEBSEARCH_PROMPT.format(merchant=merchant_name),
             )
-            ws_raw = ws_response.choices[0].message.content or "{}"
-            web_result = json.loads(ws_raw)
+            # Extract text from response
+            ws_text = ""
+            for item in ws_response.output:
+                if hasattr(item, "content"):
+                    for block in item.content:
+                        if hasattr(block, "text"):
+                            ws_text += block.text
+            if ws_text:
+                web_info = ws_text
+                logger.info("Web search result for '%s': %s", merchant_name, ws_text[:200])
         except Exception as e:
-            # Web search not available or failed — that's OK, we have the AI result
             logger.info("Web search failed for '%s': %s", merchant_name, e)
 
-    # Combine results
-    if web_result and web_result.get("confianza") in ("alta", "media"):
-        result["comercio_identificado"] = web_result.get("comercio_identificado", result.get("comercio_identificado", ""))
-        result["rubro"] = web_result.get("rubro", result.get("rubro", ""))
-        result["confianza"] = web_result.get("confianza", "media")
-        result["explicacion"] = (result.get("explicacion", "") + f" (web: {web_result.get('fuente', '')})").strip()
-        result["web_search_used"] = True
-    else:
+    # Step 3: If we got web results, re-ask GPT to classify with that info
+    if web_info:
+        try:
+            reclassify_prompt = f"""Basándote en esta información de internet sobre el comercio "{merchant_name}":
+
+{web_info}
+
+Las categorías disponibles son:
+{cats_json}
+
+Respondé SOLO JSON:
+{{"comercio_identificado": "nombre", "rubro": "tipo", "confianza": "alta|media|baja", "categoria_id": <int o null>, "subcategoria_id": <int o null>, "explicacion": "breve"}}"""
+
+            re_response = await client.chat.completions.create(
+                model="gpt-5.5",
+                messages=[{"role": "user", "content": reclassify_prompt}],
+                response_format={"type": "json_object"},
+                max_completion_tokens=500,
+            )
+            re_raw = re_response.choices[0].message.content or "{}"
+            web_result = _extract_json(re_raw)
+            if web_result.get("comercio_identificado"):
+                result = web_result
+                result["web_search_used"] = True
+                result["explicacion"] = (result.get("explicacion", "") or "") + " (verificado con búsqueda web)"
+        except Exception as e:
+            logger.info("Re-classification after web search failed: %s", e)
+
+    if "web_search_used" not in result:
         result["web_search_used"] = False
 
     return result
@@ -156,15 +196,12 @@ async def identify_and_suggest_category(
     merchant_name: str,
     categories: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    """
-    Convenience wrapper that returns a clean result for the UI.
-    """
+    """Convenience wrapper that returns a clean result for the UI."""
     result = await identify_merchant(merchant_name, categories, use_web_search=True)
 
     cat_id = result.get("categoria_id")
     sub_id = result.get("subcategoria_id")
 
-    # Find names
     cat_name = ""
     sub_name = ""
     if cat_id:

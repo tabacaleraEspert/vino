@@ -35,11 +35,18 @@ async def extract_statement(
     if not file.content_type:
         raise HTTPException(status_code=400, detail="Tipo de archivo no detectado")
 
-    allowed = {"application/pdf", "image/jpeg", "image/jpg", "image/png", "image/webp"}
-    if file.content_type not in allowed and not (file.filename or "").lower().endswith(".pdf"):
+    allowed_types = {
+        "application/pdf", "image/jpeg", "image/jpg", "image/png", "image/webp",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.ms-excel",
+    }
+    allowed_ext = {".pdf", ".jpg", ".jpeg", ".png", ".webp", ".xlsx", ".xls"}
+    fname = (file.filename or "").lower()
+    ext_ok = any(fname.endswith(e) for e in allowed_ext)
+    if file.content_type not in allowed_types and not ext_ok:
         raise HTTPException(
             status_code=400,
-            detail=f"Formato no soportado: {file.content_type}. Usa PDF, JPG o PNG.",
+            detail=f"Formato no soportado: {file.content_type}. Usa PDF, JPG, PNG o Excel (.xlsx).",
         )
 
     file_bytes = await file.read()

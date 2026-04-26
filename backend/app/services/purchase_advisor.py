@@ -44,8 +44,7 @@ async def _extract_purchase(message: str) -> dict:
             {"role": "user", "content": message},
         ],
         response_format={"type": "json_object"},
-        max_tokens=100,
-        temperature=0,
+        max_completion_tokens=100,
     )
     raw = response.choices[0].message.content or "{}"
     try:

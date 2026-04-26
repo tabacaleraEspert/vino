@@ -33,9 +33,12 @@ export function StatementUpload() {
   const [dragOver, setDragOver] = useState(false);
 
   const handleFile = async (file: File) => {
-    const allowed = ["application/pdf", "image/jpeg", "image/jpg", "image/png", "image/webp"];
-    if (!allowed.includes(file.type) && !file.name.toLowerCase().endsWith(".pdf")) {
-      setError("Formato no soportado. Usa PDF, JPG o PNG.");
+    const allowed = ["application/pdf", "image/jpeg", "image/jpg", "image/png", "image/webp",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-excel"];
+    const allowedExt = [".pdf", ".jpg", ".jpeg", ".png", ".webp", ".xlsx", ".xls"];
+    const extOk = allowedExt.some((ext) => file.name.toLowerCase().endsWith(ext));
+    if (!allowed.includes(file.type) && !extOk) {
+      setError("Formato no soportado. Usa PDF, JPG, PNG o Excel (.xlsx).");
       return;
     }
     if (file.size > 10 * 1024 * 1024) {
@@ -144,7 +147,7 @@ export function StatementUpload() {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".pdf,.jpg,.jpeg,.png,.webp"
+            accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.xls"
             className="hidden"
             onChange={(e) => {
               const file = e.target.files?.[0];
@@ -161,6 +164,7 @@ export function StatementUpload() {
 
           <div className="flex items-center justify-center gap-4 mt-6 text-xs text-gray-400">
             <span className="flex items-center gap-1"><FileText className="w-3.5 h-3.5" /> PDF</span>
+            <span className="flex items-center gap-1"><FileText className="w-3.5 h-3.5" /> Excel</span>
             <span className="flex items-center gap-1"><Image className="w-3.5 h-3.5" /> JPG / PNG</span>
             <span>Max 10MB</span>
           </div>

@@ -10,6 +10,7 @@ import { Stats } from "./components/Stats";
 import { AdminPanel } from "./components/AdminPanel";
 import { StatementUpload } from "./components/StatementUpload";
 import { UncategorizedReview } from "./components/UncategorizedReview";
+import { Chat } from "./components/Chat";
 import { Login } from "./components/Login";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
@@ -35,6 +36,7 @@ export const router = createBrowserRouter([
       { path: "stats", Component: Stats },
       { path: "upload-statement", Component: StatementUpload },
       { path: "uncategorized", Component: UncategorizedReview },
+      { path: "chat", Component: Chat },
       { path: "admin", Component: AdminPanel },
     ],
   },

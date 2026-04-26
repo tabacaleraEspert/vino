@@ -93,8 +93,7 @@ async def extract_from_text(text: str, categories: list[dict]) -> dict:
             {"role": "user", "content": f"Extracto bancario:\n\n{text}"},
         ],
         response_format={"type": "json_object"},
-        max_tokens=4000,
-        temperature=0,
+        max_completion_tokens=4000,
     )
 
     raw = response.choices[0].message.content or "{}"
@@ -127,8 +126,7 @@ async def extract_from_image(image_bytes: bytes, mime_type: str, categories: lis
             },
         ],
         response_format={"type": "json_object"},
-        max_tokens=4000,
-        temperature=0,
+        max_completion_tokens=4000,
     )
 
     raw = response.choices[0].message.content or "{}"
@@ -164,6 +162,227 @@ async def extract_from_pdf(pdf_bytes: bytes, categories: list[dict]) -> dict:
     }
 
 
+def _parse_ar_money(val: str | None) -> float | None:
+    """Parse Argentine money format: $1.219.066,31 → 1219066.31, U$S698,57 → 698.57"""
+    if not val:
+        return None
+    s = str(val).strip()
+    if not s or s == "None":
+        return None
+    # Remove currency symbols and spaces (order matters: U$S before $)
+    for sym in ("U$S", "US$", "u$s", "us$", "$"):
+        s = s.replace(sym, "")
+    s = s.strip()
+    if not s:
+        return None
+    # Handle negative: $-5.795.296,50
+    negative = False
+    if s.startswith("-"):
+        negative = True
+        s = s[1:]
+    # Argentine format: dots are thousands, comma is decimal
+    s = s.replace(".", "").replace(",", ".")
+    try:
+        val_f = float(s)
+        return -val_f if negative else val_f
+    except ValueError:
+        return None
+
+
+def _is_header_row(row_values: list) -> bool:
+    """Check if a row is a header row (Fecha | Descripción | ...)."""
+    vals = [str(v or "").strip().lower() for v in row_values]
+    return "fecha" in vals and "descripción" in vals
+
+
+def _is_section_header(row_values: list) -> str | None:
+    """Detect section headers like 'Pago de tarjeta' or 'Otros conceptos'."""
+    first = str(row_values[0] or "").strip().lower()
+    if "pago de tarjeta" in first:
+        return "pagos"
+    if "otros conceptos" in first:
+        return "otros"
+    if "tarjeta de" in first or "tarjetas incluidas" in first:
+        return "tarjeta_header"
+    if "total de" in first:
+        return "total"
+    return None
+
+
+async def extract_from_excel(excel_bytes: bytes, categories: list[dict]) -> dict:
+    """Extract transactions from an Excel bank statement (Santander format)."""
+    import io
+    from openpyxl import load_workbook
+
+    wb = load_workbook(io.BytesIO(excel_bytes), read_only=True, data_only=True)
+    ws = wb.active or wb[wb.sheetnames[0]]
+
+    transactions = []
+    current_section = None
+    last_date = None
+    card_info = ""
+    statement_period = ""
+
+    # Detect card info from sheet name
+    card_info = ws.title or ""
+
+    for row in ws.iter_rows(values_only=True):
+        vals = list(row)
+        if not any(v for v in vals):
+            continue
+
+        first = str(vals[0] or "").strip()
+
+        # Detect sections
+        section = _is_section_header(vals)
+        if section:
+            current_section = section
+            continue
+
+        # Skip header rows
+        if _is_header_row(vals):
+            continue
+
+        # Skip total rows
+        if first.lower().startswith("total de"):
+            continue
+
+        # Detect statement period from "Fecha de cierre"
+        if first.lower() == "fecha de cierre":
+            continue
+        if not statement_period and len(vals) >= 2:
+            cierre = str(vals[0] or "")
+            if "/" in cierre and len(cierre) == 10:
+                # Could be a date like 26/03/2026
+                try:
+                    parts = cierre.split("/")
+                    if len(parts) == 3 and len(parts[2]) == 4:
+                        statement_period = f"{parts[2]}-{parts[1]}"
+                except Exception:
+                    pass
+
+        # Skip non-transaction sections
+        if current_section in ("otros", "total"):
+            continue
+
+        # Parse transaction rows (6 columns: Fecha, Descripción, Cuotas, Comprobante, Monto pesos, Monto dólares)
+        if len(vals) < 5:
+            continue
+
+        fecha_raw = vals[0]
+        descripcion = str(vals[1] or "").strip()
+        cuotas = str(vals[2] or "").strip()
+        monto_pesos = vals[4] if len(vals) > 4 else None
+        monto_dolares = vals[5] if len(vals) > 5 else None
+
+        if not descripcion:
+            continue
+
+        # Skip payment/refund entries and administrative entries
+        desc_lower = descripcion.lower()
+        if any(skip in desc_lower for skip in [
+            "su pago en pesos", "transferencia deuda", "aviso importante",
+            "movimientos del resumen", "cierres y vencimientos",
+        ]):
+            continue
+
+        # Handle date (may be empty = same as previous)
+        if fecha_raw:
+            fecha_str = str(fecha_raw).strip()
+            if "/" in fecha_str:
+                try:
+                    parts = fecha_str.split("/")
+                    if len(parts) == 3:
+                        d, m, y = parts
+                        if len(y) == 4:
+                            last_date = f"{y}-{m.zfill(2)}-{d.zfill(2)}"
+                except Exception:
+                    pass
+
+        if not last_date:
+            continue
+
+        # Parse amount
+        monto_pesos_val = _parse_ar_money(str(monto_pesos)) if monto_pesos else None
+        monto_dolares_val = _parse_ar_money(str(monto_dolares)) if monto_dolares else None
+
+        if monto_pesos_val is not None and monto_pesos_val != 0:
+            monto = abs(monto_pesos_val)
+            moneda = "ARS"
+            tipo = "Ingreso" if monto_pesos_val < 0 else "Gasto"
+        elif monto_dolares_val is not None and monto_dolares_val != 0:
+            monto = abs(monto_dolares_val)
+            moneda = "USD"
+            tipo = "Ingreso" if monto_dolares_val < 0 else "Gasto"
+        else:
+            continue
+
+        # Clean description
+        desc_clean = descripcion.strip()
+        if cuotas:
+            desc_clean = f"{desc_clean} ({cuotas})"
+
+        transactions.append({
+            "fecha": last_date,
+            "descripcion": desc_clean,
+            "monto": round(monto, 2),
+            "moneda": moneda,
+            "tipo": tipo,
+            "categoria_id": None,
+            "subcategoria_id": None,
+        })
+
+    wb.close()
+
+    # Use AI to suggest categories if we have categories
+    if transactions and categories:
+        transactions = await _ai_categorize_batch(transactions, categories)
+
+    return {
+        "transactions": transactions,
+        "statement_period": statement_period,
+        "card_or_account": card_info,
+    }
+
+
+async def _ai_categorize_batch(transactions: list[dict], categories: list[dict]) -> list[dict]:
+    """Use AI to suggest categories for a batch of transactions."""
+    cats_json = _build_categories_json(categories)
+    descs = [t["descripcion"] for t in transactions]
+    descs_text = "\n".join(f"{i+1}. {d}" for i, d in enumerate(descs))
+
+    prompt = f"""Tengo estas transacciones de un resumen de tarjeta de crédito argentino.
+Para cada una, sugerí la categoría y subcategoría más apropiada.
+
+Transacciones:
+{descs_text}
+
+Categorías disponibles:
+{cats_json}
+
+Respondé SOLO con JSON: {{"suggestions": [{{"index": 1, "categoria_id": <int o null>, "subcategoria_id": <int o null>}}, ...]}}"""
+
+    try:
+        client = _get_client()
+        response = await client.chat.completions.create(
+            model="gpt-5.5",
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"},
+            max_completion_tokens=2000,
+        )
+        raw = response.choices[0].message.content or "{}"
+        result = json.loads(raw)
+        for s in result.get("suggestions", []):
+            idx = s.get("index", 0) - 1
+            if 0 <= idx < len(transactions):
+                transactions[idx]["categoria_id"] = s.get("categoria_id")
+                transactions[idx]["subcategoria_id"] = s.get("subcategoria_id")
+    except Exception as e:
+        logger.warning("AI batch categorization failed: %s", e)
+
+    return transactions
+
+
 async def parse_statement(
     file_bytes: bytes,
     filename: str,
@@ -171,9 +390,14 @@ async def parse_statement(
     categories: list[dict],
 ) -> dict:
     """Dispatch to the right extractor based on file type."""
+    fname_lower = filename.lower()
     if mime_type in ("image/jpeg", "image/jpg", "image/png", "image/webp"):
         return await extract_from_image(file_bytes, mime_type, categories)
-    elif mime_type == "application/pdf" or filename.lower().endswith(".pdf"):
+    elif fname_lower.endswith(".xlsx") or fname_lower.endswith(".xls") or \
+         mime_type in ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                       "application/vnd.ms-excel"):
+        return await extract_from_excel(file_bytes, categories)
+    elif mime_type == "application/pdf" or fname_lower.endswith(".pdf"):
         return await extract_from_pdf(file_bytes, categories)
     else:
         return {"transactions": [], "error": f"Formato no soportado: {mime_type}"}
