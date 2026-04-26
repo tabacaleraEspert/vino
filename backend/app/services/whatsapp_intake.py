@@ -60,17 +60,29 @@ _QUERY_INDICATORS = ["cuanto", "cuánto", "cuantos", "resumen", "en qué", "en q
 
 _SUGGESTION_PATTERNS = [
     "puedo comprar", "puedo comprarme", "me puedo comprar",
-    "puedo gastar", "puedo ir a", "me alcanza para",
+    "puedo gastar", "puedo ir ", "puedo pedir", "puedo tomarme",
+    "me alcanza para", "me alcanza",
     "me da para", "me conviene", "debería comprar", "deberia comprar",
-    "vale la pena", "es caro", "es barato", "qué opinas de comprar",
-    "que opinas de comprar", "me recomendas",
+    "vale la pena", "es caro", "es barato",
+    "qué opinas de comprar", "que opinas de comprar",
+    "me recomendas", "me puedo dar",
+    "puedo darme", "me puedo permitir",
 ]
 
 
 def _looks_like_suggestion(text: str) -> bool:
     """Check if a message is asking for purchase advice, not registering an expense."""
-    lower = text.lower()
-    return any(kw in lower for kw in _SUGGESTION_PATTERNS)
+    lower = text.lower().strip()
+    # Explicit patterns
+    if any(kw in lower for kw in _SUGGESTION_PATTERNS):
+        return True
+    # Generic: starts with "puedo" = asking permission = suggestion
+    if lower.startswith("puedo ") or lower.startswith("me puedo "):
+        return True
+    # Question about affordability
+    if ("?" in text) and any(w in lower for w in ["comprar", "gastar", "pedir", "ir a", "comer", "salir"]):
+        return True
+    return False
 
 
 def _looks_like_expense(text: str) -> bool:
