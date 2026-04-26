@@ -116,20 +116,26 @@ export function Budgets() {
       spent: calcSpentFromTransactions(b, transactions, selectedMonth),
     }));
 
+  // Debug: log IDs to find mismatch
+  if (budgetsWithSpent.length > 0 && categories.length > 0) {
+    console.log("[Budgets] budgetCategoryIds:", budgetsWithSpent.map(b => ({ id: b.budget.categoryId, type: typeof b.budget.categoryId })));
+    console.log("[Budgets] categoriesIds:", categories.map(c => ({ id: c.id, type: typeof c.id, name: c.name })));
+  }
+
   const grouped = categories
-    .filter((cat) => budgetsWithSpent.some(({ budget }) => budget.categoryId === cat.id))
+    .filter((cat) => budgetsWithSpent.some(({ budget }) => String(budget.categoryId) === String(cat.id)))
     .map((cat) => {
       const categoryBudgets = budgetsWithSpent.filter(
-        ({ budget }) => budget.categoryId === cat.id && !budget.subcategoryId
+        ({ budget }) => String(budget.categoryId) === String(cat.id) && !budget.subcategoryId
       );
       const subcategoryBudgets = budgetsWithSpent.filter(
-        ({ budget }) => budget.categoryId === cat.id && budget.subcategoryId
+        ({ budget }) => String(budget.categoryId) === String(cat.id) && budget.subcategoryId
       );
       const catTotalAmount = budgetsWithSpent
-        .filter(({ budget }) => budget.categoryId === cat.id)
+        .filter(({ budget }) => String(budget.categoryId) === String(cat.id))
         .reduce((s, { budget }) => s + budget.amount, 0);
       const catTotalSpent = budgetsWithSpent
-        .filter(({ budget }) => budget.categoryId === cat.id)
+        .filter(({ budget }) => String(budget.categoryId) === String(cat.id))
         .reduce((s, { spent }) => s + spent, 0);
       const catPercentage = catTotalAmount > 0 ? (catTotalSpent / catTotalAmount) * 100 : 0;
       const catStatus = getStatus(catPercentage);
