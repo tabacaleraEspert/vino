@@ -341,6 +341,21 @@ async def register_expense(
 
     reply += "\n✅ Registrado"
 
+    # Step 7: Smart suggestions — budget context after every expense
+    try:
+        from app.services.smart_suggestions import post_expense_suggestions
+        period_str = f"{fecha.year}-{fecha.month:02d}"
+        suggestions = await post_expense_suggestions(
+            db, id_usuario=payload.user_id, id_categoria=id_categoria,
+            monto=float(monto), period=period_str, moneda=moneda,
+        )
+        if suggestions:
+            reply += "\n"
+            for sug in suggestions[:2]:
+                reply += f"\n{sug.mensaje_whatsapp}"
+    except Exception as e:
+        logger.warning("Smart suggestions failed (non-blocking): %s", e)
+
     return {
         "status": "created",
         "reply": reply,
