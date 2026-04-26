@@ -1,4 +1,4 @@
-"""Service for purchase advice based on budget status."""
+"""Smart purchase advisor — budget-aware buying suggestions with context and alternatives."""
 from __future__ import annotations
 
 import json
@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.services.presupuesto_analysis import budget_vs_actual
+from app.services.smart_suggestions import compute_category_metrics, compute_month_context
 
 logger = logging.getLogger(__name__)
 
@@ -24,18 +25,55 @@ def _get_client() -> AsyncOpenAI:
     return _client
 
 
-_EXTRACT_PROMPT = """Extraé del mensaje del usuario qué quiere comprar y por cuánto.
-Devolvé JSON:
+def _fmt(n: float) -> str:
+    return f"${n:,.0f}".replace(",", ".")
+
+
+_EXTRACT_PROMPT = """Sos un asistente financiero argentino. El usuario te pregunta si puede comprar algo o ir a algún lugar.
+
+Extraé del mensaje:
+- item: qué quiere comprar o hacer (ej: "remera Nike", "comer en Marcelo", "ir al cine")
+- monto: cuánto sale (número, sin $). Si no dice → null. Slang: "60k"=60000, "300 lucas"=300000
+- categoria_probable: categoría de gasto (Ropa, Entretenimiento, Alimentacion, Transporte, etc.)
+- es_lugar: true si menciona un lugar/restaurante/negocio específico, false si es un producto genérico
+- lugar_nombre: nombre del lugar si es_lugar=true, sino null
+
+Respondé SOLO JSON:
 {
-  "item": "remera Nike",
-  "monto": 60000,
-  "categoria_probable": "Ropa"
-}
-Si no hay monto claro, poné null. Si no podés extraer nada, devolvé {"item": null, "monto": null, "categoria_probable": null}."""
+  "item": "comer en Marcelo",
+  "monto": null,
+  "categoria_probable": "Entretenimiento",
+  "es_lugar": true,
+  "lugar_nombre": "Marcelo"
+}"""
+
+
+_ADVICE_PROMPT = """Sos un asesor financiero argentino por WhatsApp, piola y directo.
+
+El usuario pregunta si puede hacer una compra. Tenés estos datos reales:
+
+PRESUPUESTO Y GASTOS:
+{budget_context}
+
+MÉTRICAS DE LA CATEGORÍA:
+{metrics_context}
+
+PREGUNTA DEL USUARIO: "{message}"
+ITEM: {item}
+MONTO ESTIMADO: {monto}
+
+Tu tarea:
+1. Decile si puede o no, basándote en el presupuesto restante y el ritmo de gasto
+2. Si es caro para su patrón (comparar con avg_ticket), mencionalo
+3. Si no puede, sugerí una alternativa más barata o decile que espere
+4. Si puede pero queda justo, advertí
+5. Sé breve, 2-4 líneas máximo, estilo WhatsApp con emojis y negritas
+
+NO uses JSON. Respondé solo texto para WhatsApp."""
 
 
 async def _extract_purchase(message: str) -> dict:
-    """Extract item, amount, and probable category from user message."""
+    """Extract item, amount, and context from user message."""
     client = _get_client()
     response = await client.chat.completions.create(
         model="gpt-5.5",
@@ -44,27 +82,48 @@ async def _extract_purchase(message: str) -> dict:
             {"role": "user", "content": message},
         ],
         response_format={"type": "json_object"},
-        max_completion_tokens=100,
+        max_completion_tokens=200,
     )
     raw = response.choices[0].message.content or "{}"
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
-        return {"item": None, "monto": None, "categoria_probable": None}
+        return {"item": None, "monto": None, "categoria_probable": None, "es_lugar": False, "lugar_nombre": None}
+
+
+async def _estimate_price(item: str, lugar: str | None = None) -> float | None:
+    """Use GPT to estimate price in ARS if user didn't provide one."""
+    client = _get_client()
+    query = f"Cuánto sale {item}" if not lugar else f"Cuánto sale comer/ir a {lugar} en Buenos Aires, Argentina"
+
+    try:
+        response = await client.chat.completions.create(
+            model="gpt-5.5",
+            messages=[
+                {"role": "system", "content": "Estimá el precio en pesos argentinos (ARS) a abril 2026. Respondé SOLO JSON: {\"precio_estimado\": 25000, \"rango_bajo\": 15000, \"rango_alto\": 40000}"},
+                {"role": "user", "content": query},
+            ],
+            response_format={"type": "json_object"},
+            max_completion_tokens=100,
+        )
+        raw = response.choices[0].message.content or "{}"
+        data = json.loads(raw)
+        return data.get("precio_estimado")
+    except Exception as e:
+        logger.warning("Price estimation failed: %s", e)
+        return None
 
 
 def _find_category_match(
     categoria_probable: str | None,
     analysis_cats: list[dict],
 ) -> dict | None:
-    """Find the best matching category from budget analysis."""
     if not categoria_probable:
         return None
     target = categoria_probable.lower().strip()
     for cat in analysis_cats:
         if cat["categoria"].lower().strip() == target:
             return cat
-    # Fuzzy: check if target is contained in category name or vice versa
     for cat in analysis_cats:
         cat_name = cat["categoria"].lower().strip()
         if target in cat_name or cat_name in target:
@@ -81,11 +140,11 @@ async def advise_purchase(
     """
     Analyze a purchase question and return a WhatsApp-formatted response.
 
-    Flow:
-    1. Extract what they want to buy + amount from the message
-    2. Get current month's budget vs actual
-    3. Find the matching category
-    4. Generate advice based on budget status
+    Enhanced flow:
+    1. Extract what they want + amount + context (is it a place?)
+    2. If no amount, estimate price with GPT
+    3. Get budget status + category metrics (avg ticket, trend)
+    4. Generate smart, contextual advice with GPT
     """
     today = date.today()
     period = f"{today.year}-{today.month:02d}"
@@ -95,124 +154,99 @@ async def advise_purchase(
     item = purchase.get("item")
     monto = purchase.get("monto")
     cat_name = purchase.get("categoria_probable")
+    es_lugar = purchase.get("es_lugar", False)
+    lugar = purchase.get("lugar_nombre")
 
     if not item and not monto:
         return (
-            "No entendi bien que queres comprar. "
-            "Decime algo como: _Puedo comprarme unas zapatillas de 80k?_"
+            "No entendí bien qué querés comprar. "
+            "Decime algo como: _Puedo comprarme unas zapatillas de 80k?_ "
+            "o _Puedo ir a comer a X hoy?_"
         )
 
-    # Step 2: Get budget analysis
+    # Step 2: Estimate price if not provided
+    if not monto:
+        monto = await _estimate_price(item, lugar)
+        monto_estimated = True
+    else:
+        monto_estimated = False
+
+    # Step 3: Get budget analysis
     try:
         analysis = await budget_vs_actual(db, id_usuario, period)
     except Exception as e:
         logger.error("Budget analysis failed: %s", e)
-        return "No pude obtener tu presupuesto. Asegurate de tener presupuestos cargados para este mes."
+        return "No pude obtener tu presupuesto. Asegurate de tener presupuestos cargados."
 
     if not analysis["categorias"]:
-        return (
-            "No tenes presupuestos cargados para este mes. "
-            "Anda a la seccion de Presupuestos en la app para configurarlos."
-        )
+        return "No tenés presupuestos cargados. Andá a la app para configurarlos."
 
-    # Step 3: Find matching category
     cat_match = _find_category_match(cat_name, analysis["categorias"])
+    ctx = compute_month_context(period)
 
-    # Step 4: Build response
-    dias_restantes = analysis["dias_restantes"]
-    greeting = f"*{user_name}*" if user_name else "Che"
-
-    if monto and cat_match:
-        presup = cat_match["presupuesto"]
-        gastado = cat_match["gastado"]
-        restante = cat_match["restante"]
-        pct = cat_match["pct_usado"]
-        cat_display = cat_match["categoria"]
-
-        item_display = f"*{item}*" if item else "eso"
-        monto_display = f"${monto:,.0f}".replace(",", ".")
-
-        if presup <= 0:
-            # No budget for this category
-            return (
-                f"{greeting}, no tenes presupuesto definido para *{cat_display}*. "
-                f"Este mes ya gastaste ${gastado:,.0f} ahi.\n\n".replace(",", ".") +
-                f"Si queres comprar {item_display} por {monto_display}, "
-                "te recomiendo primero definir un presupuesto para esa categoria."
+    # Step 4: Get category metrics if we have a match
+    metrics_text = "No hay métricas específicas."
+    if cat_match and cat_match.get("categoria_id"):
+        try:
+            metrics = await compute_category_metrics(
+                db, id_usuario, int(cat_match["categoria_id"]), period
             )
-
-        if pct > 100:
-            # Already over budget
-            exceso = gastado - presup
-            return (
-                f"Uh {greeting}, ya estas *pasado* en *{cat_display}*.\n\n"
-                f"Presupuesto: ${presup:,.0f}\n".replace(",", ".") +
-                f"Gastado: ${gastado:,.0f} ({pct:.0f}%)\n".replace(",", ".") +
-                f"Excedido por: ${exceso:,.0f}\n\n".replace(",", ".") +
-                f"Comprar {item_display} por {monto_display} te pasaria aun mas. "
-                "Yo esperaria al mes que viene."
+            metrics_text = (
+                f"Categoría: {metrics.categoria_nombre}\n"
+                f"Ticket promedio: {_fmt(metrics.avg_ticket)}\n"
+                f"Ticket más caro: {_fmt(metrics.max_ticket)}\n"
+                f"Transacciones este mes: {metrics.tx_count}\n"
+                f"Tendencia vs mes pasado: {f'{metrics.trend_vs_last_month:+.0f}%' if metrics.trend_vs_last_month is not None else 'sin datos'}"
             )
+        except Exception:
+            pass
 
-        if monto > restante:
-            # Would go over budget
-            return (
-                f"{greeting}, en *{cat_display}* te queda "
-                f"${restante:,.0f} de ${presup:,.0f}".replace(",", ".") +
-                f" ({pct:.0f}% usado).\n\n"
-                f"Comprar {item_display} por {monto_display} te pasaria del presupuesto "
-                f"por ${(monto - restante):,.0f}.\n\n".replace(",", ".") +
-                (f"Faltan {dias_restantes} dias para fin de mes. "
-                 "Yo lo pensaria." if dias_restantes > 3 else
-                 "Ya casi termina el mes, bankatelo.")
-            )
+    # Build budget context
+    budget_lines = [
+        f"Día del mes: {ctx.days_elapsed}/{ctx.days_in_month} ({ctx.pct_month_elapsed:.0f}% transcurrido)",
+        f"Presupuesto total: {_fmt(analysis['total_presupuesto'])}",
+        f"Gastado total: {_fmt(analysis['total_gastado'])} ({analysis['pct_usado_global']:.0f}%)",
+        f"Restante total: {_fmt(analysis['total_restante'])}",
+    ]
+    if cat_match:
+        budget_lines.extend([
+            f"\nCategoría relevante: {cat_match['categoria']}",
+            f"Presupuesto categoría: {_fmt(cat_match['presupuesto'])}",
+            f"Gastado categoría: {_fmt(cat_match['gastado'])} ({cat_match['pct_usado']:.0f}%)",
+            f"Restante categoría: {_fmt(cat_match['restante'])}",
+        ])
 
-        # Can afford it
-        new_remaining = restante - monto
-        new_pct = ((gastado + monto) / presup * 100) if presup > 0 else 0
-        return (
-            f"Si {greeting}, podes! En *{cat_display}* te queda "
-            f"${restante:,.0f} de ${presup:,.0f}".replace(",", ".") +
-            f" ({pct:.0f}% usado).\n\n"
-            f"Si compras {item_display} por {monto_display}, "
-            f"te quedarian ${new_remaining:,.0f} ".replace(",", ".") +
-            f"({new_pct:.0f}% usado).\n\n" +
-            (f"Faltan {dias_restantes} dias, estas bien. Dale tranqui."
-             if new_pct < 80 else
-             f"Ojo que quedas en {new_pct:.0f}%, ajusta el resto del mes.")
+    budget_context = "\n".join(budget_lines)
+
+    monto_text = _fmt(monto) if monto else "desconocido"
+    if monto_estimated and monto:
+        monto_text += " (estimado)"
+
+    # Step 5: Generate advice with GPT using all context
+    try:
+        client = _get_client()
+        prompt = _ADVICE_PROMPT.format(
+            budget_context=budget_context,
+            metrics_context=metrics_text,
+            message=message,
+            item=item or "?",
+            monto=monto_text,
         )
-
-    elif monto and not cat_match:
-        # Has amount but couldn't match category
-        total_restante = analysis["total_restante"]
-        total_pct = analysis["pct_usado_global"]
-        item_display = f"*{item}*" if item else "eso"
-        monto_display = f"${monto:,.0f}".replace(",", ".")
-
-        if total_pct > 100:
-            return (
-                f"{greeting}, en general ya estas *pasado* del presupuesto total "
-                f"({total_pct:.0f}% usado).\n\n"
-                f"Comprar {item_display} por {monto_display} no es buena idea ahora."
-            )
-
-        if monto > total_restante:
-            return (
-                f"{greeting}, en total te queda ${total_restante:,.0f} ".replace(",", ".") +
-                f"de presupuesto ({total_pct:.0f}% usado).\n\n"
-                f"Comprar {item_display} por {monto_display} te pasaria del presupuesto total."
-            )
-
-        return (
-            f"No encontre la categoria exacta, pero en general te queda "
-            f"${total_restante:,.0f} de presupuesto ".replace(",", ".") +
-            f"({total_pct:.0f}% usado).\n\n"
-            f"Comprar {item_display} por {monto_display} entra. "
-            f"Faltan {dias_restantes} dias para fin de mes."
+        response = await client.chat.completions.create(
+            model="gpt-5.5",
+            messages=[
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": message},
+            ],
+            max_completion_tokens=300,
         )
-
-    else:
-        # No amount
-        return (
-            f"Decime cuanto sale y te digo si entra en tu presupuesto. "
-            f"Ej: _Puedo comprarme {item or 'unas zapas'} de 50k?_"
-        )
+        reply = response.choices[0].message.content or ""
+        return reply.strip()
+    except Exception as e:
+        logger.error("Advice generation failed: %s", e)
+        # Fallback: basic response
+        if monto and cat_match:
+            if monto > cat_match["restante"]:
+                return f"Con {_fmt(cat_match['restante'])} restante en {cat_match['categoria']}, {_fmt(monto)} te pasaría del presupuesto."
+            return f"Sí, tenés margen. Te queda {_fmt(cat_match['restante'])} en {cat_match['categoria']}."
+        return "No pude analizar tu consulta. Probá con más detalle."
