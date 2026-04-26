@@ -139,6 +139,7 @@ async def register_expense(
     from datetime import date, timedelta
     from decimal import Decimal
 
+    from app.repositories.categoria_repo import list_categorias, list_subcategorias
     from app.repositories.movimiento_repo import create_movimiento
     from app.repositories.regla_repo import resolve_regla, create_regla
     from app.repositories.medio_pago_repo import resolve_medio_pago
