@@ -1,4 +1,4 @@
-"""WhatsApp intake endpoint — receives Twilio webhook data, resolves user and classifies intent."""
+"""WhatsApp endpoints — intake, purchase advice, and more."""
 import logging
 from typing import Any, Dict
 
@@ -10,6 +10,7 @@ from app.core.security import require_master_key
 from app.db.session import get_db
 from app.repositories.user_repo import get_user_by_wpp
 from app.services.whatsapp_intake import Intent, classify_intent, detect_command
+from app.services.purchase_advisor import advise_purchase
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -71,3 +72,35 @@ async def whatsapp_intake(
         "user": user_summary,
         "raw_body": body,
     }
+
+
+# ---------------------------------------------------------------------------
+# Purchase advice
+# ---------------------------------------------------------------------------
+
+class PurchaseAdviceRequest(BaseModel):
+    user_id: int
+    message: str
+    user_name: str = ""
+
+
+@router.post("/suggest-purchase")
+async def suggest_purchase(
+    payload: PurchaseAdviceRequest,
+    _: None = Depends(require_master_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Responde si el usuario puede comprar algo según su presupuesto.
+
+    Ejemplo: "Puedo comprarme una remera de 60k?"
+    → Analiza el presupuesto de la categoría, calcula si entra, devuelve
+      un mensaje listo para enviar por WhatsApp.
+    """
+    reply = await advise_purchase(
+        db,
+        id_usuario=payload.user_id,
+        message=payload.message,
+        user_name=payload.user_name,
+    )
+    return {"reply": reply}
