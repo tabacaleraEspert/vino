@@ -159,7 +159,7 @@ async def delete_comercio(
     id_usuario: int = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    # Find and delete matching regla
+    # Find and delete matching regla(s)
     name = _id_to_merchant_name(id) if id.startswith(VIRTUAL_MERCHANT_PREFIX) else id
     name_norm = normalize_text(name)
     reglas = await list_reglas(db, id_usuario)
@@ -167,9 +167,11 @@ async def delete_comercio(
         r for r in reglas
         if normalize_text(r.get("comercio", r.get("patron", ""))) == name_norm
     ]
-    if not regla_match:
-        raise HTTPException(status_code=404, detail="Comercio no encontrado")
 
     from app.repositories.regla_repo import delete_regla
-    await delete_regla(db, id_usuario, regla_match[0]["id"])
-    return {"deleted": True, "id": id}
+    for regla in regla_match:
+        await delete_regla(db, id_usuario, regla["id"])
+
+    # Always return success — if no regla existed, the virtual merchant
+    # disappears on next refresh since it's derived from movimientos/reglas
+    return {"deleted": True, "id": id, "reglas_deleted": len(regla_match)}
