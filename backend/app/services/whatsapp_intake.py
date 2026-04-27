@@ -27,8 +27,8 @@ class Intent(str, Enum):
 # --- Command detection (regex, no AI needed) ---
 
 _COMMANDS: list[tuple[re.Pattern, Intent, str]] = [
-    # Exact match for weekly resume (case-insensitive)
-    (re.compile(r"^weekly_expenses_resume$", re.IGNORECASE), Intent.WEEKLY_RESUME, "exact"),
+    # Exact match for weekly resume (case-insensitive) — both formats
+    (re.compile(r"^weekly[_ ]?(expenses[_ ]?)?resume$", re.IGNORECASE), Intent.WEEKLY_RESUME, "exact"),
     # CATEGORIZAR followed by a number
     (re.compile(r"^categorizar\s+(\d+)", re.IGNORECASE), Intent.CATEGORIZACION, "movimiento_id"),
     # PRESUPUESTO: followed by content
@@ -58,7 +58,15 @@ _EXPENSE_KEYWORDS = [
 ]
 
 
-_QUERY_INDICATORS = ["cuanto", "cuánto", "cuantos", "resumen", "en qué", "en que", "último gasto", "ultimo gasto", "cómo vengo", "como vengo"]
+_QUERY_INDICATORS = ["cuanto", "cuánto", "cuantos", "en qué", "en que", "último gasto", "ultimo gasto"]
+
+_RESUME_INDICATORS = [
+    "resumen", "cómo vengo", "como vengo", "cómo voy", "como voy",
+    "cómo estoy", "como estoy", "cómo me fue", "como me fue",
+    "reporte del mes", "reporte mensual", "resumen del mes",
+    "resumen mensual", "resumen semanal", "cómo viene el mes",
+    "como viene el mes", "balance del mes",
+]
 
 _SUGGESTION_PATTERNS = [
     "puedo comprar", "puedo comprarme", "me puedo comprar",
@@ -118,13 +126,18 @@ def detect_command(body: str, button_payload: str | None = None) -> dict[str, An
     """Detect commands via regex or button payload. Returns None if no match."""
     # Check button payload first (e.g., from interactive WhatsApp buttons)
     if button_payload:
-        text = button_payload.strip()
-        if text.lower() == "weekly_expenses_resume":
+        text = button_payload.strip().lower()
+        if text in ("weekly_expenses_resume", "weekly_resume"):
             return {"intent": Intent.WEEKLY_RESUME, "command_data": {}}
 
     text = body.strip()
     if not text:
         return None
+
+    # Detect resume/summary requests
+    lower = text.lower()
+    if any(kw in lower for kw in _RESUME_INDICATORS):
+        return {"intent": Intent.WEEKLY_RESUME, "command_data": {}}
 
     # Detect suggestion/advice questions BEFORE expense detection
     if _looks_like_suggestion(text):
@@ -185,7 +198,8 @@ REGLA CLAVE: Si el mensaje menciona un monto, un comercio, o cualquier indicio d
 6) CATEGORIZACION — Quiere categorizar un movimiento existente:
 "Categorizar 123", "recategorizar el último gasto"
 
-7) WEEKLY_RESUME — Resumen semanal: solo si el mensaje es exactamente "weekly_expenses_resume"
+7) WEEKLY_RESUME — Pide un resumen del mes, reporte, balance, "cómo vengo", "cómo voy", "cómo me fue":
+"¿Cómo vengo este mes?", "resumen del mes", "cómo voy?", "reporte mensual", "balance del mes"
 
 8) OTHER — ÚLTIMO RECURSO. Solo si no encaja en NINGUNA de las anteriores.
 Saludos puros ("hola"), charla casual sin contexto financiero.
