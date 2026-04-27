@@ -35,6 +35,8 @@ _COMMANDS: list[tuple[re.Pattern, Intent, str]] = [
     (re.compile(r"^presupuesto\s*:\s*(.+)", re.IGNORECASE), Intent.PRESUPUESTO, "raw_presupuesto"),
     # SUGERENCIA(S): followed by content
     (re.compile(r"^sugerencias?\s*:\s*(.+)", re.IGNORECASE), Intent.SUGERENCIAS, "raw_sugerencia"),
+    # CAMBIAR id + categoría (recategorize)
+    (re.compile(r"^cambiar\s+(\d+)\s+(.+)", re.IGNORECASE), Intent.CATEGORIZACION, "cambiar"),
 ]
 
 
@@ -138,6 +140,9 @@ def detect_command(body: str, button_payload: str | None = None) -> dict[str, An
             command_data = {}
             if data_key == "movimiento_id" and m.lastindex and m.lastindex >= 1:
                 command_data["movimiento_id"] = int(m.group(1))
+            elif data_key == "cambiar" and m.lastindex and m.lastindex >= 2:
+                command_data["movimiento_id"] = int(m.group(1))
+                command_data["nueva_categoria"] = m.group(2).strip()
             elif data_key in ("raw_presupuesto", "raw_sugerencia") and m.lastindex and m.lastindex >= 1:
                 command_data[data_key] = m.group(1).strip()
             return {"intent": intent, "command_data": command_data}

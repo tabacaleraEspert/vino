@@ -13,6 +13,7 @@ from app.services.whatsapp_intake import Intent, classify_intent, detect_command
 from app.services.purchase_advisor import advise_purchase
 from app.services.expense_extractor import extract_expense_from_message
 from app.repositories.movimiento_agg import count_gastos_mes as _count_gastos
+from app.repositories.categoria_repo import list_categorias as _list_cats
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -427,7 +428,9 @@ async def register_expense(
     if medio_pago_raw and medio_pago_raw.lower() != "efectivo":
         reply += f"\n💳 {medio_pago_raw}"
 
+    mov_id = created.get("id") or created.get("Id")
     reply += "\n✅ Registrado"
+    reply += f"\n\n_Mal categorizado? Respondé:_\n_CAMBIAR {mov_id} + categoría_"
 
     # Step 7: Smart suggestions — budget context after every expense
     try:
@@ -452,3 +455,91 @@ async def register_expense(
         "categoria": categoria_nombre,
         "subcategoria": subcategoria_nombre,
     }
+
+
+# ---------------------------------------------------------------------------
+# Recategorize — change category of a registered expense
+# ---------------------------------------------------------------------------
+
+class RecategorizeRequest(BaseModel):
+    user_id: int
+    movimiento_id: int
+    nueva_categoria: str  # category name (fuzzy matched)
+
+
+@router.post("/recategorize")
+async def recategorize_expense(
+    payload: RecategorizeRequest,
+    _: None = Depends(require_master_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Change the category of a registered expense.
+    Triggered by "CAMBIAR 1234 Transporte" in WhatsApp.
+    Also updates/creates a merchant rule for future auto-categorization.
+    """
+    from sqlalchemy import select, and_
+    from app.models.movimiento_orm import Movimiento
+    from app.repositories.regla_repo import create_regla, resolve_regla
+
+    # Find the movement
+    stmt = select(Movimiento).where(and_(
+        Movimiento.Id == payload.movimiento_id,
+        Movimiento.Id_usuario == payload.user_id,
+    ))
+    result = await db.execute(stmt)
+    mov = result.scalar_one_or_none()
+    if not mov:
+        return {"status": "error", "reply": f"No encontré el gasto #{payload.movimiento_id}"}
+
+    # Find matching category by name (fuzzy)
+    cats = await _list_cats(db, payload.user_id)
+    target = payload.nueva_categoria.lower().strip()
+    matched_cat = None
+    for c in cats:
+        if c["nombre"].lower() == target or target in c["nombre"].lower():
+            matched_cat = c
+            break
+
+    if not matched_cat:
+        cat_names = ", ".join(c["nombre"] for c in cats)
+        return {
+            "status": "error",
+            "reply": f"No encontré la categoría *{payload.nueva_categoria}*.\n\nCategorías disponibles:\n{cat_names}",
+        }
+
+    # Update the movement
+    old_cat = mov.Id_Categoria
+    mov.Id_Categoria = matched_cat["id"]
+    mov.CategoriaManual = True
+    await db.flush()
+
+    # Update/create merchant rule for future transactions
+    comercio = mov.Descripcion or ""
+    if comercio:
+        try:
+            existing_rule = await resolve_regla(db, payload.user_id, comercio)
+            if existing_rule:
+                from app.models.regla_comercio import ReglaComercio
+                regla_stmt = select(ReglaComercio).where(ReglaComercio.Id == existing_rule["id"])
+                regla_result = await db.execute(regla_stmt)
+                regla = regla_result.scalar_one_or_none()
+                if regla:
+                    regla.Id_Categoria = matched_cat["id"]
+                    regla.Confianza = "MANUAL"
+                    await db.flush()
+            else:
+                await create_regla(
+                    db, id_usuario=payload.user_id, patron=comercio,
+                    id_categoria=matched_cat["id"], id_subcategoria=None,
+                    confianza="MANUAL",
+                )
+        except Exception as e:
+            logger.warning("Rule update failed during recategorize: %s", e)
+
+    reply = (
+        f"✏️ Gasto #{payload.movimiento_id} actualizado a *{matched_cat['nombre']}*\n"
+        f"Futuros gastos de este comercio se categorizarán automáticamente."
+    )
+
+    return {"status": "updated", "reply": reply, "categoria": matched_cat["nombre"]}
