@@ -43,6 +43,20 @@ Reglas:
 {categories_text}
   Si no estás seguro → null
 
+CUOTAS: Si el usuario menciona cuotas, extraer:
+- cuota_actual: número de cuota actual (ej: "cuota 3 de 6" → 3)
+- cuota_total: total de cuotas (ej: "cuota 3 de 6" → 6)
+- monto_total_compra: monto total de la compra si se menciona
+  Si dice "en 6 cuotas de 5000" → monto = 5000, cuota_total = 6, monto_total_compra = 30000
+  Si dice "compré algo de 300k en 12 cuotas" → monto = 25000, cuota_total = 12, monto_total_compra = 300000
+
+PAGUÉ YO (split): Si el usuario dice "pagué yo", "dividimos", "somos X", extraer:
+- es_split: true
+- split_participantes: cantidad de personas (incluido el usuario)
+- split_nombres: lista de nombres si los menciona
+  Si dice "pagué yo la cena, somos 4" → es_split = true, split_participantes = 4
+  El monto registrado es el TOTAL (lo que pagó), no la parte de cada uno
+
 Respondé SOLO JSON:
 {{
   "monto": 1500,
@@ -54,6 +68,12 @@ Respondé SOLO JSON:
   "fecha": null,
   "categoria_sugerida": "Alimentacion",
   "subcategoria_sugerida": "Kiosco",
+  "cuota_actual": null,
+  "cuota_total": null,
+  "monto_total_compra": null,
+  "es_split": false,
+  "split_participantes": null,
+  "split_nombres": [],
   "datos_completos": true,
   "dato_faltante": null
 }}

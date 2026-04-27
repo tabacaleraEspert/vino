@@ -38,6 +38,16 @@ class Movimiento(Base):
     ComercioId: Mapped[str | None] = mapped_column(String(120))
     CategoriaManual: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="0")
 
+    # Cuotas
+    CuotaActual: Mapped[int | None] = mapped_column(Integer)
+    CuotaTotal: Mapped[int | None] = mapped_column(Integer)
+    MontoTotalCompra: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+
+    # Split / "Pagué yo"
+    EsSplit: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="0")
+    SplitTotal: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+    SplitParticipantes: Mapped[int | None] = mapped_column(Integer)
+
     # Relationships
     usuario = relationship("User", back_populates="movimientos")
     categoria = relationship("Categoria", lazy="joined")
