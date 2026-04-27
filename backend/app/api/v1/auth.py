@@ -39,6 +39,13 @@ async def register(payload: RegisterIn, db: AsyncSession = Depends(get_db)):
             apellido=payload.apellido.strip() if payload.apellido else None,
             gmail=payload.email.strip() if payload.email else None,
         )
+        # Seed default categories for the new user
+        from app.services.seed_categories import seed_default_categories
+        try:
+            await seed_default_categories(db, user["id"])
+        except Exception as e:
+            logger.warning("Failed to seed categories for user %s: %s", user.get("id"), e)
+
         logger.info("register_ok nombre=%s id=%s", user.get("Nombre"), user.get("id"))
         return {
             "message": "Usuario creado correctamente. Ya puedes iniciar sesión.",
