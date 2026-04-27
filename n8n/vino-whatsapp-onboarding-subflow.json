@@ -1,0 +1,46 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## ONBOARDING\nPrimer mensaje de usuario nuevo → bienvenida\nEl reply ya viene del intake, solo hay que mandarlo",
+        "height": 250,
+        "width": 600
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [3900, -11700],
+      "typeVersion": 1,
+      "id": "note-onb",
+      "name": "Note Onboarding"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.twilio.com/2010-04-01/Accounts/{{ TWILIO_ACCOUNT_SID }}/Messages.json",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            { "name": "From", "value": "whatsapp:+15709091218" },
+            { "name": "To", "value": "={{ $('POST /whatsapp/intake').first().json.user.wpp_entero }}" },
+            { "name": "Body", "value": "={{ $('POST /whatsapp/intake').first().json.reply }}" }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [4000, -11600],
+      "id": "send-onboarding",
+      "name": "Enviar Bienvenida",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "qu2pUaLFWnPuyEoT",
+          "name": "Twilio Template Sender"
+        }
+      }
+    }
+  ],
+  "connections": {}
+}

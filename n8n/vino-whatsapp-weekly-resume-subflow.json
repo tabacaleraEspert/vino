@@ -1,0 +1,73 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## WEEKLY_RESUME / Monthly Summary\nResumen mensual por WhatsApp",
+        "height": 250,
+        "width": 600
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [4600, -11300],
+      "typeVersion": 1,
+      "id": "note-resume",
+      "name": "Note Resume"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://vino-backend-bkbge8cwfffsdrhc.brazilsouth-01.azurewebsites.net/api/v1/whatsapp/monthly-summary",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  user_id: $('POST /whatsapp/intake').first().json.user.id\n}) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [4700, -11200],
+      "id": "monthly-summary",
+      "name": "POST /monthly-summary",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "Vs0QI3pE2uopgGVB",
+          "name": "X-Master-Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.twilio.com/2010-04-01/Accounts/{{ TWILIO_ACCOUNT_SID }}/Messages.json",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            { "name": "From", "value": "whatsapp:+15709091218" },
+            { "name": "To", "value": "={{ $('POST /whatsapp/intake').first().json.user.wpp_entero }}" },
+            { "name": "Body", "value": "={{ $json.reply }}" }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [4960, -11200],
+      "id": "send-resume-reply",
+      "name": "Enviar WhatsApp",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "qu2pUaLFWnPuyEoT",
+          "name": "Twilio Template Sender"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "POST /monthly-summary": {
+      "main": [[{ "node": "Enviar WhatsApp", "type": "main", "index": 0 }]]
+    }
+  }
+}
