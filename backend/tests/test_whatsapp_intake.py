@@ -11,8 +11,16 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from contextlib import contextmanager
 from app.core.config import settings
 from app.services.whatsapp_intake import Intent, detect_command
+
+
+@pytest.fixture(autouse=True)
+def _skip_onboarding():
+    """Patch count_gastos so onboarding doesn't trigger in any test."""
+    with patch("app.api.v1.whatsapp._count_gastos", new_callable=AsyncMock, return_value=100):
+        yield
 from tests.conftest import make_user_dict
 
 pytestmark = pytest.mark.anyio

@@ -12,6 +12,7 @@ from app.repositories.user_repo import get_user_by_wpp
 from app.services.whatsapp_intake import Intent, classify_intent, detect_command
 from app.services.purchase_advisor import advise_purchase
 from app.services.expense_extractor import extract_expense_from_message
+from app.repositories.movimiento_agg import count_gastos_mes as _count_gastos
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -51,6 +52,37 @@ async def whatsapp_intake(
     }
 
     body = payload.Body.strip()
+
+    # --- 1b. Onboarding: check if first interaction ---
+    from datetime import date, timedelta
+    try:
+        six_months_ago = date.today() - timedelta(days=180)
+        total_movs = await _count_gastos(db, user["id"], six_months_ago, date.today())
+        is_new_user = total_movs == 0
+    except Exception:
+        is_new_user = False
+
+    if is_new_user:
+        nombre = user.get("Nombre", "")
+        onboarding_msg = (
+            f"Hola {nombre}! Soy *Vino*, tu asistente de finanzas personales.\n\n"
+            f"Registrá gastos mandándome mensajes como:\n"
+            f'_"Almorcé $3.500 en el centro"_\n'
+            f'_"Gasté 50k en ropa"_\n'
+            f'_"Uber 2500"_\n\n'
+            f"También podés preguntarme:\n"
+            f'_"Cuánto gasté este mes?"_\n'
+            f'_"Puedo comprarme unas zapatillas de 80k?"_\n\n'
+            f"Empezá registrando tu primer gasto!"
+        )
+        return {
+            "intent": "ONBOARDING",
+            "command_match": True,
+            "command_data": {},
+            "user": user_summary,
+            "raw_body": body,
+            "reply": onboarding_msg,
+        }
 
     # --- 2. Detectar comando por regex ---
     cmd = detect_command(body, payload.ButtonPayload)
