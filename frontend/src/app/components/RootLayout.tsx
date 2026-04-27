@@ -1,6 +1,6 @@
 import { Outlet, NavLink } from "react-router";
 import { useEffect, useState } from "react";
-import { Home, Receipt, FolderOpen, Wallet, Store, TrendingUp, LogOut, RefreshCw, Upload, MessageCircle, MoreHorizontal } from "lucide-react";
+import { Home, Receipt, FolderOpen, Wallet, Store, TrendingUp, LogOut, RefreshCw, Upload, MessageCircle, MoreHorizontal, Users } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useData } from "../context/DataContext";
 import { useNavigate } from "react-router";
@@ -35,6 +35,7 @@ export function RootLayout() {
     { to: "/categories", icon: FolderOpen, label: "Categorías" },
     { to: "/merchants", icon: Store, label: "Comercios" },
     { to: "/stats", icon: TrendingUp, label: "Estadísticas" },
+    { to: "/debts", icon: Users, label: "Me deben" },
     { to: "/uncategorized", icon: FolderOpen, label: "Sin categorizar" },
   ];
 

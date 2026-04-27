@@ -11,6 +11,7 @@ import { AdminPanel } from "./components/AdminPanel";
 import { StatementUpload } from "./components/StatementUpload";
 import { UncategorizedReview } from "./components/UncategorizedReview";
 import { Chat } from "./components/Chat";
+import { Debts } from "./components/Debts";
 import { Login } from "./components/Login";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
@@ -37,6 +38,7 @@ export const router = createBrowserRouter([
       { path: "upload-statement", Component: StatementUpload },
       { path: "uncategorized", Component: UncategorizedReview },
       { path: "chat", Component: Chat },
+      { path: "debts", Component: Debts },
       { path: "admin", Component: AdminPanel },
     ],
   },

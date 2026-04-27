@@ -232,6 +232,16 @@ export const api = {
       }),
   },
 
+  deudas: {
+    list: (pagado?: boolean) => {
+      const q = pagado !== undefined ? `?pagado=${pagado}` : "";
+      return apiFetch<any[]>(`/deudas${q}`);
+    },
+    summary: () => apiFetch<{ total_pendiente: number; personas: any[] }>("/deudas/summary"),
+    pagar: (id: number) => apiFetch<any>(`/deudas/${id}/pagar`, { method: "PATCH" }),
+    delete: (id: number) => apiFetch(`/deudas/${id}`, { method: "DELETE" }),
+  },
+
   statement: {
     extract: async (file: File) => {
       const formData = new FormData();

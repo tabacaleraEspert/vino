@@ -15,6 +15,7 @@ from app.api.v1 import whatsapp
 from app.api.v1 import statement_upload
 from app.api.v1 import merchant_identify
 from app.api.v1 import chat
+from app.api.v1 import deudas
 from app.api.v1.admin import router as admin_router
 from app.api.v1.views import router as views_router
 
@@ -42,3 +43,4 @@ router.include_router(whatsapp.router, prefix="/whatsapp", tags=["whatsapp"])
 router.include_router(statement_upload.router, prefix="/statement", tags=["statement"])
 router.include_router(merchant_identify.router, prefix="/merchants/smart", tags=["merchants"])
 router.include_router(chat.router, prefix="/chat", tags=["chat"])
+router.include_router(deudas.router, prefix="/deudas", tags=["deudas"])
