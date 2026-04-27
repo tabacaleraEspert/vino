@@ -12,6 +12,7 @@ import { StatementUpload } from "./components/StatementUpload";
 import { UncategorizedReview } from "./components/UncategorizedReview";
 import { Chat } from "./components/Chat";
 import { Debts } from "./components/Debts";
+import { Wallets } from "./components/Wallets";
 import { Login } from "./components/Login";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
@@ -39,6 +40,7 @@ export const router = createBrowserRouter([
       { path: "uncategorized", Component: UncategorizedReview },
       { path: "chat", Component: Chat },
       { path: "debts", Component: Debts },
+      { path: "wallets", Component: Wallets },
       { path: "admin", Component: AdminPanel },
     ],
   },

@@ -232,6 +232,15 @@ export const api = {
       }),
   },
 
+  billeteras: {
+    list: () => apiFetch<any[]>("/billeteras"),
+    create: (data: { nombre: string; moneda: string; icono?: string; color?: string; saldo_inicial?: number }) =>
+      apiFetch<any>("/billeteras", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: number, data: any) =>
+      apiFetch<any>(`/billeteras/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    delete: (id: number) => apiFetch(`/billeteras/${id}`, { method: "DELETE" }),
+  },
+
   deudas: {
     list: (pagado?: boolean) => {
       const q = pagado !== undefined ? `?pagado=${pagado}` : "";

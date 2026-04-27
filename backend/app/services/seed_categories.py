@@ -105,6 +105,24 @@ async def seed_default_categories(db: AsyncSession, id_usuario: int) -> int:
 
         created += 1
 
+    # Seed default wallets
+    from app.models.billetera import Billetera
+    default_wallets = [
+        {"nombre": "Cuenta Pesos", "moneda": "ARS", "icono": "🇦🇷", "color": "#14b8a6", "es_default": True},
+        {"nombre": "Cuenta Dólares", "moneda": "USD", "icono": "🇺🇸", "color": "#3b82f6", "es_default": False},
+    ]
+    for w in default_wallets:
+        wallet = Billetera(
+            Id_usuario=id_usuario,
+            Nombre=w["nombre"],
+            Moneda=w["moneda"],
+            Icono=w["icono"],
+            Color=w["color"],
+            EsDefault=w["es_default"],
+        )
+        db.add(wallet)
+        created += 1
+
     await db.flush()
-    logger.info("Seeded %d categories+subcategories for user %d", created, id_usuario)
+    logger.info("Seeded %d categories+subcategories+wallets for user %d", created, id_usuario)
     return created

@@ -43,6 +43,9 @@ class Movimiento(Base):
     CuotaTotal: Mapped[int | None] = mapped_column(Integer)
     MontoTotalCompra: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
 
+    # Billetera
+    Id_Billetera: Mapped[int | None] = mapped_column(Integer)
+
     # Split / "Pagué yo"
     EsSplit: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="0")
     SplitTotal: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
