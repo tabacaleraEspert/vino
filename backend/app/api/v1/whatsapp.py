@@ -458,6 +458,44 @@ async def register_expense(
 
 
 # ---------------------------------------------------------------------------
+# Monthly summary for WhatsApp
+# ---------------------------------------------------------------------------
+
+class MonthlySummaryRequest(BaseModel):
+    user_id: int
+
+
+@router.post("/monthly-summary")
+async def whatsapp_monthly_summary(
+    payload: MonthlySummaryRequest,
+    _: None = Depends(require_master_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Generate end-of-month summary for WhatsApp.
+    Can be triggered by n8n cron or by user request.
+    Uses previous month if we're in the first 5 days, otherwise current month.
+    """
+    from datetime import date
+    from app.services.monthly_summary import generate_monthly_summary
+
+    today = date.today()
+    # In first 5 days of month, summarize previous month
+    if today.day <= 5:
+        prev = today.replace(day=1) - timedelta(days=1)
+        period = f"{prev.year}-{prev.month:02d}"
+    else:
+        period = f"{today.year}-{today.month:02d}"
+
+    try:
+        result = await generate_monthly_summary(db, payload.user_id, period)
+        return {"reply": result["whatsapp_message"], "data": result}
+    except Exception as e:
+        logger.error("Monthly summary failed: %s", e)
+        return {"reply": f"No pude generar el resumen: {e}"}
+
+
+# ---------------------------------------------------------------------------
 # Recategorize — change category of a registered expense
 # ---------------------------------------------------------------------------
 

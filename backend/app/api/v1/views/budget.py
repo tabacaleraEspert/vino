@@ -45,3 +45,21 @@ async def get_budget_suggestions(
         return {"period": period, "moneda": moneda, "suggestions": suggestions}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/monthly-summary")
+async def get_monthly_summary(
+    period: str = Query(..., description="Formato YYYY-MM, ej: 2026-04"),
+    moneda: str = Query(default="ARS"),
+    id_usuario: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Resumen completo del mes: nota, totales, top categorías,
+    comparación con mes anterior, alertas de presupuesto.
+    """
+    from app.services.monthly_summary import generate_monthly_summary
+    try:
+        return await generate_monthly_summary(db, id_usuario, period, moneda)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
