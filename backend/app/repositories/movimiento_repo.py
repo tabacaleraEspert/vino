@@ -286,6 +286,42 @@ async def get_movimiento_by_origen(
     return await get_movimiento(session, id_usuario, row)
 
 
+async def find_duplicate_cross_source(
+    session: AsyncSession,
+    id_usuario: int,
+    monto: float,
+    fecha: date,
+    descripcion: str | None = None,
+    window_minutes: int = 5,
+) -> dict[str, Any] | None:
+    """
+    Cross-source deduplication: find an existing movement with the same
+    user + amount + date, created within the last N minutes.
+
+    Catches: bank email + MercadoPago email for the same purchase.
+    """
+    from datetime import datetime, timedelta
+
+    now = datetime.utcnow()
+    window_start = now - timedelta(minutes=window_minutes)
+
+    # Match by: same user, same amount (exact), same date, recent timestamp
+    conditions = [
+        Movimiento.Id_usuario == id_usuario,
+        Movimiento.Monto == monto,
+        Movimiento.Fecha == fecha,
+        Movimiento.Timestamp >= window_start,
+    ]
+
+    stmt = select(Movimiento.Id).where(and_(*conditions)).order_by(Movimiento.Id.desc()).limit(1)
+    result = await session.execute(stmt)
+    row = result.scalar_one_or_none()
+
+    if not row:
+        return None
+    return await get_movimiento(session, id_usuario, row)
+
+
 async def list_comercios_from_movimientos(
     session: AsyncSession,
     id_usuario: int,

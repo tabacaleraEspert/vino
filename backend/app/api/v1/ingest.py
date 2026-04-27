@@ -11,6 +11,7 @@ from app.db.session import get_db
 from app.repositories.movimiento_repo import (
     create_movimiento as repo_create,
     get_movimiento_by_origen,
+    find_duplicate_cross_source,
 )
 from app.repositories.medio_pago_repo import resolve_medio_pago
 from app.repositories.regla_repo import create_regla, resolve_regla
@@ -107,6 +108,23 @@ async def ingest_movimiento(
             return {
                 "status": "duplicado",
                 "movimiento": existing,
+                "usuario": {
+                    "id": user["id"],
+                    "nombre": user.get("Nombre", ""),
+                    "wpp_entero": user.get("WppEntero", ""),
+                },
+            }
+
+    # --- 3b. Cross-source dedup (bank + MercadoPago for same purchase) ---
+    if monto > 0 and fecha:
+        cross_dup = await find_duplicate_cross_source(
+            db, id_usuario, monto=round(monto, 2), fecha=fecha, window_minutes=5
+        )
+        if cross_dup:
+            logger.info("Cross-source duplicate detected: mov %s matches existing %s", comercio_raw, cross_dup.get("id"))
+            return {
+                "status": "duplicado_cross",
+                "movimiento": cross_dup,
                 "usuario": {
                     "id": user["id"],
                     "nombre": user.get("Nombre", ""),
