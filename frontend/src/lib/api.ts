@@ -574,12 +574,12 @@ export function calcSpentFromTransactions(
     .filter((t) => {
       const d = parseDateLocal(t.date);
       if (d.getMonth() !== ref.month || d.getFullYear() !== ref.year) return false;
-      if (t.amount >= 0) return false; // solo gastos (negativos)
-      if (t.categoryId !== budget.categoryId) return false;
+      if (t.amount === 0) return false;
+      if (String(t.categoryId) !== String(budget.categoryId)) return false;
       if (budget.subcategoryId) {
-        return t.subcategoryId === budget.subcategoryId;
+        return String(t.subcategoryId) === String(budget.subcategoryId);
       }
-      return true; // presupuesto de categoría completa
+      return true;
     })
     .reduce((sum, t) => sum + Math.abs(t.amount), 0);
 }
