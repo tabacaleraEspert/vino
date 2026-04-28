@@ -53,6 +53,8 @@ def format_query_result(result: QueryResult, user_name: str = "") -> str:
             return _format_listado(result, moneda)
         case Metrica.RESUMEN:
             return _format_resumen(result, moneda)
+        case Metrica.COMPARAR:
+            return _format_comparar(result, moneda)
         case _:
             return "No pude armar la respuesta."
 
@@ -186,4 +188,75 @@ def _format_resumen(r: QueryResult, moneda: str) -> str:
             lines.append(
                 f"· {cat['categoria']}: {_fmt_money(cat['total'], moneda)} ({pct:.0f}%)"
             )
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Comparison helpers
+# ---------------------------------------------------------------------------
+
+def _delta_pct(current: float, previous: float) -> float:
+    """Percentage change from previous to current. Returns 0 if previous is 0."""
+    if previous == 0:
+        return 100.0 if current > 0 else 0.0
+    return ((current - previous) / previous) * 100
+
+
+def _delta_arrow(pct: float) -> str:
+    """Arrow + formatted percentage."""
+    if pct > 0:
+        return f"📈 +{pct:.0f}%"
+    elif pct < 0:
+        return f"📉 {pct:.0f}%"
+    else:
+        return "➡️ 0%"
+
+
+def _format_comparar(r: QueryResult, moneda: str) -> str:
+    p = r.params
+    label_a = p.periodo_label
+    label_b = p.compare_periodo_label
+    cat_label = f" en *{p.categorias[0]}*" if p.categorias else ""
+
+    # Total comparison
+    delta = _delta_pct(r.total, r.compare_total)
+    diff_abs = r.total - r.compare_total
+    arrow = _delta_arrow(delta)
+
+    lines = [f"🔄 *Comparación{cat_label}*"]
+    lines.append(f"*{label_a}*: {_fmt_money(r.total, moneda)} ({r.conteo} gastos)")
+    lines.append(f"*{label_b}*: {_fmt_money(r.compare_total, moneda)} ({r.compare_conteo} gastos)")
+    lines.append("")
+
+    sign = "+" if diff_abs >= 0 else ""
+    lines.append(f"💰 Diferencia: {sign}{_fmt_money(diff_abs, moneda)} ({arrow})")
+
+    # Promedio comparison
+    if r.promedio or r.compare_promedio:
+        prom_delta = _delta_pct(r.promedio, r.compare_promedio)
+        prom_arrow = _delta_arrow(prom_delta)
+        lines.append(
+            f"📏 Ticket promedio: {_fmt_money(r.promedio, moneda)} vs "
+            f"{_fmt_money(r.compare_promedio, moneda)} ({prom_arrow})"
+        )
+
+    # Category breakdown comparison (only for general, non-category-filtered)
+    if r.por_categoria and r.compare_por_categoria and not p.categorias:
+        lines.append("")
+        lines.append("📂 *Por categoría:*")
+        # Build lookup for period B
+        b_by_cat: dict[str, float] = {
+            c["categoria"]: c["total"] for c in r.compare_por_categoria
+        }
+        for cat in r.por_categoria:
+            name = cat["categoria"]
+            total_a = cat["total"]
+            total_b = b_by_cat.get(name, 0)
+            cat_delta = _delta_pct(total_a, total_b)
+            cat_arrow = _delta_arrow(cat_delta)
+            lines.append(
+                f"· {name}: {_fmt_money(total_a, moneda)} vs "
+                f"{_fmt_money(total_b, moneda)} ({cat_arrow})"
+            )
+
     return "\n".join(lines)

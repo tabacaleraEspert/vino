@@ -283,6 +283,85 @@ class TestFormatQueryResult:
         assert "$0" in msg
         assert "0 gastos" in msg
 
+    def test_format_comparar_general(self):
+        p = _make_params(
+            metrica=Metrica.COMPARAR,
+            compare_from_date=date(2026, 3, 1),
+            compare_to_date=date(2026, 3, 31),
+            compare_periodo_label="marzo",
+        )
+        r = QueryResult(
+            metrica=Metrica.COMPARAR, params=p,
+            total=200000, conteo=40, promedio=5000,
+            compare_total=150000, compare_conteo=30, compare_promedio=5000,
+            por_categoria=[
+                {"categoria": "Alimentacion", "total": 80000, "count": 20},
+                {"categoria": "Transporte", "total": 60000, "count": 15},
+            ],
+            compare_por_categoria=[
+                {"categoria": "Alimentacion", "total": 60000, "count": 18},
+                {"categoria": "Transporte", "total": 50000, "count": 12},
+            ],
+        )
+        msg = format_query_result(r)
+        assert "Comparación" in msg
+        assert "$200.000" in msg
+        assert "$150.000" in msg
+        assert "marzo" in msg
+        assert "📈" in msg  # went up
+        assert "+33%" in msg  # (200k - 150k) / 150k = 33%
+        assert "Alimentacion" in msg
+
+    def test_format_comparar_with_category(self):
+        p = _make_params(
+            metrica=Metrica.COMPARAR,
+            categorias=["comida"],
+            compare_from_date=date(2026, 3, 1),
+            compare_to_date=date(2026, 3, 31),
+            compare_periodo_label="marzo",
+        )
+        r = QueryResult(
+            metrica=Metrica.COMPARAR, params=p,
+            total=80000, conteo=20, promedio=4000,
+            compare_total=100000, compare_conteo=25, compare_promedio=4000,
+        )
+        msg = format_query_result(r)
+        assert "comida" in msg
+        assert "📉" in msg  # went down
+        assert "-20%" in msg  # (80k - 100k) / 100k = -20%
+
+    def test_format_comparar_zero_previous(self):
+        p = _make_params(
+            metrica=Metrica.COMPARAR,
+            compare_from_date=date(2026, 3, 1),
+            compare_to_date=date(2026, 3, 31),
+            compare_periodo_label="marzo",
+        )
+        r = QueryResult(
+            metrica=Metrica.COMPARAR, params=p,
+            total=50000, conteo=10,
+            compare_total=0, compare_conteo=0,
+        )
+        msg = format_query_result(r)
+        assert "$50.000" in msg
+        assert "$0" in msg
+        assert "+100%" in msg
+
+    def test_format_comparar_equal(self):
+        p = _make_params(
+            metrica=Metrica.COMPARAR,
+            compare_from_date=date(2026, 3, 1),
+            compare_to_date=date(2026, 3, 31),
+            compare_periodo_label="marzo",
+        )
+        r = QueryResult(
+            metrica=Metrica.COMPARAR, params=p,
+            total=100000, conteo=20,
+            compare_total=100000, compare_conteo=20,
+        )
+        msg = format_query_result(r)
+        assert "0%" in msg
+
 
 # ===========================================================================
 # parse_query — mocked LLM
@@ -344,6 +423,26 @@ class TestParseQueryMocked:
         with self._mock_openai(json_resp):
             params = await parse_query("algo raro", CATALOGO, ref_date=REF)
         assert params.metrica == Metrica.RESUMEN
+
+    async def test_parses_comparar_with_both_periods(self):
+        json_resp = (
+            '{"periodo":"este_mes","metrica":"comparar","categorias":["alimentacion"],'
+            '"top_n":5,"moneda":"ARS","periodo_comparar":"mes_pasado"}'
+        )
+        with self._mock_openai(json_resp):
+            params = await parse_query("compará comida este mes vs el anterior", CATALOGO, ref_date=REF)
+        assert params.metrica == Metrica.COMPARAR
+        assert params.from_date == date(2026, 4, 1)
+        assert params.compare_from_date == date(2026, 3, 1)
+        assert params.compare_to_date == date(2026, 3, 31)
+        assert params.categoria_ids == [1]
+
+    async def test_comparar_without_periodo_comparar_defaults_mes_pasado(self):
+        json_resp = '{"periodo":"este_mes","metrica":"comparar","categorias":[],"top_n":5,"moneda":"ARS"}'
+        with self._mock_openai(json_resp):
+            params = await parse_query("gasté más este mes?", CATALOGO, ref_date=REF)
+        assert params.metrica == Metrica.COMPARAR
+        assert params.compare_from_date == date(2026, 3, 1)
 
 
 # Need to import parse_query here (after CATALOGO is defined)

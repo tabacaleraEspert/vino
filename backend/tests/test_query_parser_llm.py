@@ -165,3 +165,47 @@ class TestParseListado:
         assert p.metrica == Metrica.LISTADO
         assert p.categoria_ids == [2]
         assert p.top_n == 10
+
+
+# ===========================================================================
+# COMPARAR queries
+# ===========================================================================
+
+class TestParseComparar:
+    async def test_compara_este_mes_vs_anterior(self):
+        p = await parse_query("Compará este mes con el anterior", CATALOGO, ref_date=REF)
+        assert p.metrica == Metrica.COMPARAR
+        assert p.from_date == date(2026, 4, 1)
+        assert p.compare_from_date == date(2026, 3, 1)
+        assert p.compare_to_date == date(2026, 3, 31)
+
+    async def test_compara_categoria_especifica(self):
+        p = await parse_query(
+            "Compará cuánto gasté en comida este mes vs el mes pasado",
+            CATALOGO, ref_date=REF,
+        )
+        assert p.metrica == Metrica.COMPARAR
+        assert p.categoria_ids == [1]
+        assert p.compare_from_date is not None
+
+    async def test_gaste_mas_o_menos(self):
+        p = await parse_query("Gasté más o menos que el mes pasado?", CATALOGO, ref_date=REF)
+        assert p.metrica == Metrica.COMPARAR
+        assert p.compare_from_date == date(2026, 3, 1)
+
+    async def test_diferencia_semanas(self):
+        p = await parse_query(
+            "Diferencia entre esta semana y la pasada en transporte",
+            CATALOGO, ref_date=REF,
+        )
+        assert p.metrica == Metrica.COMPARAR
+        assert p.categoria_ids == [2]
+        assert p.compare_from_date is not None
+
+    async def test_porcentaje_diferencia_comida(self):
+        p = await parse_query(
+            "Cuál es la diferencia porcentual en alimentación entre este mes y el anterior?",
+            CATALOGO, ref_date=REF,
+        )
+        assert p.metrica == Metrica.COMPARAR
+        assert p.categoria_ids == [1]

@@ -34,6 +34,7 @@ class Metrica(str, Enum):
     CONTEO = "conteo"
     LISTADO = "listado"
     RESUMEN = "resumen"
+    COMPARAR = "comparar"
 
 
 @dataclass
@@ -47,6 +48,10 @@ class QueryParams:
     categoria_ids: list[int] = field(default_factory=list)  # resolved IDs
     top_n: int = 5
     moneda: str = "ARS"
+    # For COMPARAR: second period to compare against
+    compare_from_date: date | None = None
+    compare_to_date: date | None = None
+    compare_periodo_label: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -66,7 +71,7 @@ Campos a extraer:
   - "cómo vengo" / "cómo voy" = "este_mes"
 
 "metrica": uno de: "total", "promedio", "porcentaje", "mayor", "menor", \
-"top_n", "conteo", "listado", "resumen"
+"top_n", "conteo", "listado", "resumen", "comparar"
   - "cuánto gasté" = "total"
   - "en qué gasté más" / "top categorías" = "top_n"
   - "cuántas veces" / "cuántos gastos" = "conteo"
@@ -76,6 +81,8 @@ Campos a extraer:
   - "ticket promedio" / "cuánto gasto en promedio" = "promedio"
   - "últimos gastos" / "mostrame los gastos" = "listado"
   - "resumen" / "cómo vengo" / "cómo voy" / "dame un resumen" = "resumen"
+  - "comparar", "diferencia entre", "vs", "contra", "respecto a", \
+"más o menos que" = "comparar"
   - Si no queda claro, usá "resumen".
 
 "categorias": lista de nombres de categorías mencionadas. \
@@ -84,6 +91,11 @@ Ej: ["comida", "transporte"]. Lista vacía si no menciona ninguna.
 "top_n": número si pide "top N" o "las N categorías". Default 5.
 
 "moneda": "ARS", "USD", o "EUR". Default "ARS".
+
+"periodo_comparar": SOLO si metrica="comparar". El segundo periodo contra \
+el que se compara. Mismos valores que "periodo". \
+Si dice "este mes vs el anterior", periodo="este_mes", \
+periodo_comparar="mes_pasado". Omitir si no es comparación.
 
 Ejemplos:
 - "Cuánto gasté en comida este mes?" → \
@@ -99,7 +111,13 @@ Ejemplos:
 - "Cuántas veces comí afuera este mes?" → \
 {"periodo":"este_mes","metrica":"conteo","categorias":["comida"],"top_n":5,"moneda":"ARS"}
 - "Mostrame mis últimos 10 gastos en transporte" → \
-{"periodo":"todo","metrica":"listado","categorias":["transporte"],"top_n":10,"moneda":"ARS"}"""
+{"periodo":"todo","metrica":"listado","categorias":["transporte"],"top_n":10,"moneda":"ARS"}
+- "Compará este mes con el anterior en comida" → \
+{"periodo":"este_mes","metrica":"comparar","categorias":["comida"],"top_n":5,"moneda":"ARS","periodo_comparar":"mes_pasado"}
+- "Gasté más o menos que el mes pasado?" → \
+{"periodo":"este_mes","metrica":"comparar","categorias":[],"top_n":5,"moneda":"ARS","periodo_comparar":"mes_pasado"}
+- "Diferencia entre esta semana y la anterior en transporte" → \
+{"periodo":"esta_semana","metrica":"comparar","categorias":["transporte"],"top_n":5,"moneda":"ARS","periodo_comparar":"semana_pasada"}"""
 
 
 # ---------------------------------------------------------------------------
@@ -283,6 +301,16 @@ async def parse_query(
     if moneda not in ("ARS", "USD", "EUR"):
         moneda = "ARS"
 
+    # Resolve comparison period (only for COMPARAR)
+    compare_from = None
+    compare_to = None
+    compare_label = ""
+    if metrica == Metrica.COMPARAR:
+        periodo_comparar_raw = data.get("periodo_comparar", "mes_pasado")
+        compare_from, compare_to, compare_label = resolve_periodo(
+            periodo_comparar_raw, ref_date,
+        )
+
     params = QueryParams(
         from_date=from_d,
         to_date=to_d,
@@ -292,6 +320,9 @@ async def parse_query(
         categoria_ids=cat_ids,
         top_n=top_n,
         moneda=moneda,
+        compare_from_date=compare_from,
+        compare_to_date=compare_to,
+        compare_periodo_label=compare_label,
     )
     logger.info("parse_query result: %s", params)
     return params

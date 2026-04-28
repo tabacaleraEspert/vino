@@ -33,6 +33,11 @@ class QueryResult:
     por_categoria: list[dict[str, Any]] = field(default_factory=list)
     movimientos: list[dict[str, Any]] = field(default_factory=list)
     total_movimientos: int = 0
+    # For COMPARAR:
+    compare_total: float = 0.0
+    compare_conteo: int = 0
+    compare_promedio: float = 0.0
+    compare_por_categoria: list[dict[str, Any]] = field(default_factory=list)
 
 
 async def execute_query(
@@ -170,5 +175,64 @@ async def execute_query(
             )
             if result.conteo > 0:
                 result.promedio = result.total / result.conteo
+
+        case Metrica.COMPARAR:
+            if not params.compare_from_date or not params.compare_to_date:
+                # Fallback: can't compare without second period
+                result.metrica = Metrica.RESUMEN
+                return await execute_query(db, user_id, params)
+
+            # Period A (primary)
+            if cat_id:
+                rows_a = await agg.avg_ticket_por_categoria(
+                    db, user_id, params.from_date, params.to_date,
+                    id_categoria=cat_id, moneda=params.moneda,
+                )
+                result.total = rows_a[0]["total"] if rows_a else 0.0
+                result.conteo = rows_a[0]["count"] if rows_a else 0
+                result.promedio = rows_a[0]["avg_ticket"] if rows_a else 0.0
+            else:
+                result.total = await agg.sum_gastos_mes(
+                    db, user_id, params.from_date, params.to_date,
+                    moneda=params.moneda,
+                )
+                result.conteo = await agg.count_gastos_mes(
+                    db, user_id, params.from_date, params.to_date,
+                    moneda=params.moneda,
+                )
+                if result.conteo > 0:
+                    result.promedio = result.total / result.conteo
+
+            # Period B (comparison)
+            if cat_id:
+                rows_b = await agg.avg_ticket_por_categoria(
+                    db, user_id, params.compare_from_date, params.compare_to_date,
+                    id_categoria=cat_id, moneda=params.moneda,
+                )
+                result.compare_total = rows_b[0]["total"] if rows_b else 0.0
+                result.compare_conteo = rows_b[0]["count"] if rows_b else 0
+                result.compare_promedio = rows_b[0]["avg_ticket"] if rows_b else 0.0
+            else:
+                result.compare_total = await agg.sum_gastos_mes(
+                    db, user_id, params.compare_from_date, params.compare_to_date,
+                    moneda=params.moneda,
+                )
+                result.compare_conteo = await agg.count_gastos_mes(
+                    db, user_id, params.compare_from_date, params.compare_to_date,
+                    moneda=params.moneda,
+                )
+                if result.compare_conteo > 0:
+                    result.compare_promedio = result.compare_total / result.compare_conteo
+
+            # Category breakdown for both periods (general comparison)
+            if not cat_id:
+                result.por_categoria = await agg.gastos_por_categoria(
+                    db, user_id, params.from_date, params.to_date,
+                    moneda=params.moneda, top=params.top_n,
+                )
+                result.compare_por_categoria = await agg.gastos_por_categoria(
+                    db, user_id, params.compare_from_date, params.compare_to_date,
+                    moneda=params.moneda, top=params.top_n,
+                )
 
     return result
