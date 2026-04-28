@@ -32,7 +32,7 @@ jobs:
           pip install -r requirements.txt -r requirements-test.txt
 
       - name: Run tests
-        run: pytest tests/ -v --tb=short
+        run: pytest tests/ -v --tb=short -m "not llm"
 
   frontend-build:
     runs-on: ubuntu-latest
