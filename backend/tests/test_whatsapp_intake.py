@@ -13,7 +13,7 @@ import pytest
 
 from contextlib import contextmanager
 from app.core.config import settings
-from app.services.whatsapp_intake import Intent, detect_command
+from app.services.whatsapp_intake import Intent, classify_intent, detect_command
 
 
 @pytest.fixture(autouse=True)
@@ -46,6 +46,10 @@ BASE_PAYLOAD = {
 
 
 class TestDetectCommand:
+    """detect_command only matches explicit commands — never natural language."""
+
+    # --- WEEKLY_RESUME ---
+
     def test_weekly_resume_exact(self):
         result = detect_command("Weekly_expenses_resume")
         assert result is not None
@@ -66,6 +70,13 @@ class TestDetectCommand:
         assert result is not None
         assert result["intent"] == Intent.WEEKLY_RESUME
 
+    def test_weekly_resume_short_form(self):
+        result = detect_command("weekly_resume")
+        assert result is not None
+        assert result["intent"] == Intent.WEEKLY_RESUME
+
+    # --- CATEGORIZAR ---
+
     def test_categorizar_with_number(self):
         result = detect_command("CATEGORIZAR 123")
         assert result is not None
@@ -82,6 +93,21 @@ class TestDetectCommand:
         result = detect_command("categorizar")
         assert result is None
 
+    # --- CAMBIAR ---
+
+    def test_cambiar_with_id_and_category(self):
+        result = detect_command("CAMBIAR 42 Transporte")
+        assert result is not None
+        assert result["intent"] == Intent.CATEGORIZACION
+        assert result["command_data"]["movimiento_id"] == 42
+        assert result["command_data"]["nueva_categoria"] == "Transporte"
+
+    def test_cambiar_without_category_no_match(self):
+        result = detect_command("CAMBIAR 42")
+        assert result is None
+
+    # --- PRESUPUESTO ---
+
     def test_presupuesto_with_content(self):
         result = detect_command("PRESUPUESTO: algo importante")
         assert result is not None
@@ -91,6 +117,8 @@ class TestDetectCommand:
     def test_presupuesto_no_colon_no_match(self):
         result = detect_command("PRESUPUESTO algo")
         assert result is None
+
+    # --- SUGERENCIAS ---
 
     def test_sugerencias_with_content(self):
         result = detect_command("SUGERENCIAS: como ahorrar")
@@ -103,18 +131,31 @@ class TestDetectCommand:
         assert result is not None
         assert result["intent"] == Intent.SUGERENCIAS
 
-    def test_expense_text_detected_as_data(self):
-        result = detect_command("Gasté 5000 en Carrefour")
-        assert result is not None
-        assert result["intent"] == Intent.DATA
+    # --- Natural language NEVER matches (goes to AI) ---
 
-    def test_normal_text_no_command(self):
-        result = detect_command("hola como andas")
-        assert result is None
+    def test_expense_text_is_not_a_command(self):
+        """Expense messages are natural language, not commands."""
+        assert detect_command("Gasté 5000 en Carrefour") is None
+
+    def test_query_text_is_not_a_command(self):
+        """Queries are natural language, not commands."""
+        assert detect_command("Cuánto gasté este mes?") is None
+
+    def test_suggestion_text_is_not_a_command(self):
+        """Purchase advice questions are natural language, not commands."""
+        assert detect_command("Puedo comprarme unas zapatillas de 80k?") is None
+
+    def test_resume_text_is_not_a_command(self):
+        """Resume requests in natural language are not commands."""
+        assert detect_command("cómo vengo este mes?") is None
+
+    def test_greeting_is_not_a_command(self):
+        assert detect_command("hola como andas") is None
 
     def test_empty_body_no_command(self):
-        result = detect_command("")
-        assert result is None
+        assert detect_command("") is None
+
+    # --- Button payload priority ---
 
     def test_button_payload_priority_over_body(self):
         result = detect_command("CATEGORIZAR 999", button_payload="Weekly_expenses_resume")
@@ -244,8 +285,10 @@ class TestWhatsAppIntakeCommands:
 
 
 class TestWhatsAppIntakeClassification:
-    async def test_expense_detected_by_regex_not_ai(self, client):
-        """Expense messages are caught by regex, AI is not called."""
+    """Natural language messages are always classified by AI, never by regex."""
+
+    async def test_expense_goes_to_ai(self, client):
+        """Expense messages go to AI classification, not regex."""
         payload = {**BASE_PAYLOAD, "Body": "Gasté 5000 en Carrefour"}
         with patch(
             "app.api.v1.whatsapp.get_user_by_wpp",
@@ -254,7 +297,7 @@ class TestWhatsAppIntakeClassification:
         ), patch(
             "app.api.v1.whatsapp.classify_intent",
             new_callable=AsyncMock,
-            return_value=Intent.OTHER,
+            return_value=Intent.DATA,
         ) as mock_classify:
             resp = await client.post(
                 "/api/v1/whatsapp/intake",
@@ -263,11 +306,11 @@ class TestWhatsAppIntakeClassification:
             )
         body = resp.json()
         assert body["intent"] == "DATA"
-        assert body["command_match"] is True
-        mock_classify.assert_not_awaited()
+        assert body["command_match"] is False
+        mock_classify.assert_awaited_once()
 
-    async def test_classifies_via_ai_when_no_regex_match(self, client):
-        payload = {**BASE_PAYLOAD, "Body": "que onda mis finanzas"}
+    async def test_query_goes_to_ai(self, client):
+        payload = {**BASE_PAYLOAD, "Body": "Cuanto gasté esta semana?"}
         with patch(
             "app.api.v1.whatsapp.get_user_by_wpp",
             new_callable=AsyncMock,
@@ -287,8 +330,8 @@ class TestWhatsAppIntakeClassification:
         assert body["command_match"] is False
         mock_classify.assert_awaited_once()
 
-    async def test_classifies_query(self, client):
-        payload = {**BASE_PAYLOAD, "Body": "Cuanto gasté esta semana?"}
+    async def test_greeting_goes_to_ai(self, client):
+        payload = {**BASE_PAYLOAD, "Body": "hola"}
         with patch(
             "app.api.v1.whatsapp.get_user_by_wpp",
             new_callable=AsyncMock,
@@ -296,17 +339,20 @@ class TestWhatsAppIntakeClassification:
         ), patch(
             "app.api.v1.whatsapp.classify_intent",
             new_callable=AsyncMock,
-            return_value=Intent.QUERY,
-        ):
+            return_value=Intent.OTHER,
+        ) as mock_classify:
             resp = await client.post(
                 "/api/v1/whatsapp/intake",
                 json=payload,
                 headers=MASTER_HEADERS,
             )
-        assert resp.json()["intent"] == "QUERY"
+        body = resp.json()
+        assert body["intent"] == "OTHER"
+        assert body["command_match"] is False
+        mock_classify.assert_awaited_once()
 
-    async def test_defaults_to_other_on_ai_failure(self, client):
-        payload = {**BASE_PAYLOAD, "Body": "hola"}
+    async def test_ai_failure_defaults_to_other(self, client):
+        payload = {**BASE_PAYLOAD, "Body": "asdfghjk"}
         with patch(
             "app.api.v1.whatsapp.get_user_by_wpp",
             new_callable=AsyncMock,
@@ -322,6 +368,89 @@ class TestWhatsAppIntakeClassification:
                 headers=MASTER_HEADERS,
             )
         assert resp.json()["intent"] == "OTHER"
+
+
+# ===========================================================================
+# Service: classify_intent (unit tests — mock OpenAI)
+# ===========================================================================
+
+
+class TestClassifyIntent:
+    """classify_intent only returns DATA, QUERY, SUGERENCIAS, or OTHER."""
+
+    def _mock_openai_response(self, json_content: str):
+        """Helper: patch OpenAI to return a specific JSON string."""
+        mock_choice = type("C", (), {"message": type("M", (), {"content": json_content})()})()
+        mock_response = type("R", (), {"choices": [mock_choice]})()
+        return patch(
+            "app.services.whatsapp_intake._get_openai_client",
+            return_value=type("Client", (), {
+                "chat": type("Chat", (), {
+                    "completions": type("Completions", (), {
+                        "create": AsyncMock(return_value=mock_response),
+                    })(),
+                })(),
+            })(),
+        )
+
+    async def test_returns_data(self):
+        with self._mock_openai_response('{"tipo": "DATA"}'):
+            result = await classify_intent("Gasté 5000 en Carrefour")
+        assert result == Intent.DATA
+
+    async def test_returns_query(self):
+        with self._mock_openai_response('{"tipo": "QUERY"}'):
+            result = await classify_intent("Cuánto gasté ayer?")
+        assert result == Intent.QUERY
+
+    async def test_returns_sugerencias(self):
+        with self._mock_openai_response('{"tipo": "SUGERENCIAS"}'):
+            result = await classify_intent("Puedo comprarme unas zapas?")
+        assert result == Intent.SUGERENCIAS
+
+    async def test_returns_other(self):
+        with self._mock_openai_response('{"tipo": "OTHER"}'):
+            result = await classify_intent("Hola")
+        assert result == Intent.OTHER
+
+    async def test_rejects_weekly_resume_from_ai(self):
+        """AI should never return WEEKLY_RESUME — that's a command."""
+        with self._mock_openai_response('{"tipo": "WEEKLY_RESUME"}'):
+            result = await classify_intent("cómo vengo este mes")
+        assert result == Intent.OTHER
+
+    async def test_rejects_presupuesto_from_ai(self):
+        with self._mock_openai_response('{"tipo": "PRESUPUESTO"}'):
+            result = await classify_intent("cómo viene mi presupuesto")
+        assert result == Intent.OTHER
+
+    async def test_rejects_categorizacion_from_ai(self):
+        with self._mock_openai_response('{"tipo": "CATEGORIZACION"}'):
+            result = await classify_intent("recategorizar el último gasto")
+        assert result == Intent.OTHER
+
+    async def test_rejects_cat_y_subcats_from_ai(self):
+        with self._mock_openai_response('{"tipo": "CAT_Y_SUBCATS"}'):
+            result = await classify_intent("qué categorías hay")
+        assert result == Intent.OTHER
+
+    async def test_rejects_garbage_from_ai(self):
+        with self._mock_openai_response('{"tipo": "BANANA"}'):
+            result = await classify_intent("algo raro")
+        assert result == Intent.OTHER
+
+    async def test_handles_malformed_json(self):
+        with self._mock_openai_response("not json at all"):
+            result = await classify_intent("test")
+        assert result == Intent.OTHER
+
+    async def test_handles_openai_exception(self):
+        with patch(
+            "app.services.whatsapp_intake._get_openai_client",
+            side_effect=Exception("API down"),
+        ):
+            result = await classify_intent("test")
+        assert result == Intent.OTHER
 
 
 # ===========================================================================

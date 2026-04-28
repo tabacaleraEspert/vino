@@ -158,40 +158,33 @@ async def whatsapp_query(
 ):
     """
     Answer financial questions from WhatsApp.
-    Reuses the chat logic but with master key auth (for n8n).
 
-    Handles: "cuánto gasté este mes?", "en qué categoría gasto más?",
-    "cómo viene mi presupuesto?", etc.
+    Pipeline: parse (LLM) → execute (DB) → format (pure).
+    No more dumping everything to GPT — structured queries with real data.
     """
-    from datetime import date
-    from app.api.v1.chat import _build_context, _SYSTEM_PROMPT
-    from openai import AsyncOpenAI
-    from app.core.config import settings
+    from app.repositories.categoria_repo import list_categorias
+    from app.services.query_parser import parse_query
+    from app.services.query_executor import execute_query
+    from app.services.query_formatter import format_query_result
 
     message = payload.message.strip()
     if not message:
         return {"reply": "No recibí ninguna pregunta."}
 
-    today = date.today()
-    period = f"{today.year}-{today.month:02d}"
-
-    context = await _build_context(db, payload.user_id, period)
-    system = _SYSTEM_PROMPT.replace("{context}", context)
-
     try:
-        client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-        response = await client.chat.completions.create(
-            model="gpt-5.5",
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": message},
-            ],
-            max_completion_tokens=500,
-        )
-        reply = response.choices[0].message.content or "No pude generar una respuesta."
+        # Step 1: Parse — LLM extracts structured params
+        cats = await list_categorias(db, payload.user_id)
+        params = await parse_query(message, cats)
+
+        # Step 2: Execute — call the right DB queries
+        result = await execute_query(db, payload.user_id, params)
+
+        # Step 3: Format — build WhatsApp message
+        reply = format_query_result(result, user_name=payload.user_name)
+
     except Exception as e:
         logger.error("WhatsApp query failed: %s", e)
-        reply = f"Error: {e}"
+        reply = f"No pude responder tu consulta. Probá de nuevo."
 
     return {"reply": reply}
 

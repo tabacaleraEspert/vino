@@ -24,107 +24,38 @@ class Intent(str, Enum):
     OTHER = "OTHER"
 
 
-# --- Command detection (regex, no AI needed) ---
+# ---------------------------------------------------------------------------
+# Command detection — exact match only, no heuristics
+# ---------------------------------------------------------------------------
+# Commands are explicit structured messages, not natural language.
+# Everything that isn't a command goes to AI classification.
+#
+# Supported commands:
+#   WEEKLY_EXPENSES_RESUME / WEEKLY_RESUME  → WEEKLY_RESUME
+#   CATEGORIZAR <id>                        → CATEGORIZACION
+#   CAMBIAR <id> <categoría>                → CATEGORIZACION (recategorize)
+#   PRESUPUESTO: <texto>                    → PRESUPUESTO
+#   SUGERENCIA(S): <texto>                  → SUGERENCIAS
+# ---------------------------------------------------------------------------
 
 _COMMANDS: list[tuple[re.Pattern, Intent, str]] = [
-    # Exact match for weekly resume (case-insensitive) — both formats
     (re.compile(r"^weekly[_ ]?(expenses[_ ]?)?resume$", re.IGNORECASE), Intent.WEEKLY_RESUME, "exact"),
-    # CATEGORIZAR followed by a number
-    (re.compile(r"^categorizar\s+(\d+)", re.IGNORECASE), Intent.CATEGORIZACION, "movimiento_id"),
-    # PRESUPUESTO: followed by content
-    (re.compile(r"^presupuesto\s*:\s*(.+)", re.IGNORECASE), Intent.PRESUPUESTO, "raw_presupuesto"),
-    # SUGERENCIA(S): followed by content
-    (re.compile(r"^sugerencias?\s*:\s*(.+)", re.IGNORECASE), Intent.SUGERENCIAS, "raw_sugerencia"),
-    # CAMBIAR id + categoría (recategorize)
-    (re.compile(r"^cambiar\s+(\d+)\s+(.+)", re.IGNORECASE), Intent.CATEGORIZACION, "cambiar"),
+    (re.compile(r"^categorizar\s+(\d+)$", re.IGNORECASE), Intent.CATEGORIZACION, "movimiento_id"),
+    (re.compile(r"^cambiar\s+(\d+)\s+(.+)$", re.IGNORECASE), Intent.CATEGORIZACION, "cambiar"),
+    (re.compile(r"^presupuesto\s*:\s*(.+)$", re.IGNORECASE), Intent.PRESUPUESTO, "raw_presupuesto"),
+    (re.compile(r"^sugerencias?\s*:\s*(.+)$", re.IGNORECASE), Intent.SUGERENCIAS, "raw_sugerencia"),
 ]
-
-
-# Regex patterns to detect DATA (expense) messages without AI
-_EXPENSE_PATTERNS = [
-    # Contains a number that looks like a money amount (500, 1500, 50000, 50k, 300 lucas, etc.)
-    re.compile(r"\b\d{3,}\b", re.IGNORECASE),  # 3+ digit number
-    re.compile(r"\b\d+k\b", re.IGNORECASE),     # "50k"
-    re.compile(r"\b\d+\s*lucas?\b", re.IGNORECASE),  # "300 lucas"
-    re.compile(r"\b\d+\s*palos?\b", re.IGNORECASE),  # "1 palo"
-    re.compile(r"\b\d+\s*gambas?\b", re.IGNORECASE),  # "2 gambas"
-]
-
-_EXPENSE_KEYWORDS = [
-    "gast", "compr", "pagué", "pague", "pagó", "almor", "cené", "cene",
-    "taxi", "uber", "nafta", "super", "delivery", "efectivo", "tarjeta",
-    "debito", "débito", "credito", "crédito", "transferencia",
-    "cargar un gasto", "agregar un gasto", "registrar un gasto", "anotar un gasto",
-]
-
-
-_QUERY_INDICATORS = ["cuanto", "cuánto", "cuantos", "en qué", "en que", "último gasto", "ultimo gasto"]
-
-_RESUME_INDICATORS = [
-    "resumen", "cómo vengo", "como vengo", "cómo voy", "como voy",
-    "cómo estoy", "como estoy", "cómo me fue", "como me fue",
-    "reporte del mes", "reporte mensual", "resumen del mes",
-    "resumen mensual", "resumen semanal", "cómo viene el mes",
-    "como viene el mes", "balance del mes",
-]
-
-_SUGGESTION_PATTERNS = [
-    "puedo comprar", "puedo comprarme", "me puedo comprar",
-    "puedo gastar", "puedo ir ", "puedo pedir", "puedo tomarme",
-    "me alcanza para", "me alcanza",
-    "me da para", "me conviene", "debería comprar", "deberia comprar",
-    "vale la pena", "es caro", "es barato",
-    "qué opinas de comprar", "que opinas de comprar",
-    "me recomendas", "me puedo dar",
-    "puedo darme", "me puedo permitir",
-]
-
-
-def _looks_like_suggestion(text: str) -> bool:
-    """Check if a message is asking for purchase advice, not registering an expense."""
-    lower = text.lower().strip()
-    # Explicit patterns
-    if any(kw in lower for kw in _SUGGESTION_PATTERNS):
-        return True
-    # Generic: starts with "puedo" = asking permission = suggestion
-    if lower.startswith("puedo ") or lower.startswith("me puedo "):
-        return True
-    # Question about affordability
-    if ("?" in text) and any(w in lower for w in ["comprar", "gastar", "pedir", "ir a", "comer", "salir"]):
-        return True
-    return False
-
-
-def _looks_like_expense(text: str) -> bool:
-    """Check if a message looks like an expense registration (not a query)."""
-    lower = text.lower()
-    # If it looks like a query about spending, NOT data entry
-    if any(q in lower for q in _QUERY_INDICATORS) and "?" in text:
-        return False
-    # Direct expense keywords that always mean DATA
-    direct_keywords = ["cargar un gasto", "agregar un gasto", "registrar un gasto", "anotar un gasto"]
-    if any(kw in lower for kw in direct_keywords):
-        return True
-    # Check for expense action keywords + any number → DATA
-    action_keywords = ["gast", "compr", "pagué", "pague", "pagó", "almor", "cené", "cene"]
-    has_action = any(kw in lower for kw in action_keywords)
-    has_amount = any(p.search(text) for p in _EXPENSE_PATTERNS)
-    if has_action and has_amount:
-        return True
-    # Slang amounts with context
-    has_slang_amount = bool(re.search(r"\b\d+\s*(lucas?|palos?|gambas?|k)\b", lower))
-    if has_slang_amount:
-        return True
-    # Transport/service keywords + amount
-    service_keywords = ["taxi", "uber", "nafta", "delivery"]
-    if any(kw in lower for kw in service_keywords) and has_amount:
-        return True
-    return False
 
 
 def detect_command(body: str, button_payload: str | None = None) -> dict[str, Any] | None:
-    """Detect commands via regex or button payload. Returns None if no match."""
-    # Check button payload first (e.g., from interactive WhatsApp buttons)
+    """
+    Detect explicit commands only. Returns None for any natural language message.
+
+    Commands are structured messages that users type intentionally (or sent via
+    button payloads). Everything else — expenses, queries, greetings — is NOT
+    a command and should be classified by AI.
+    """
+    # Button payloads take priority (from interactive WhatsApp buttons)
     if button_payload:
         text = button_payload.strip().lower()
         if text in ("weekly_expenses_resume", "weekly_resume"):
@@ -134,23 +65,10 @@ def detect_command(body: str, button_payload: str | None = None) -> dict[str, An
     if not text:
         return None
 
-    # Detect resume/summary requests
-    lower = text.lower()
-    if any(kw in lower for kw in _RESUME_INDICATORS):
-        return {"intent": Intent.WEEKLY_RESUME, "command_data": {}}
-
-    # Detect suggestion/advice questions BEFORE expense detection
-    if _looks_like_suggestion(text):
-        return {"intent": Intent.SUGERENCIAS, "command_data": {}}
-
-    # Detect expense messages (DATA)
-    if _looks_like_expense(text):
-        return {"intent": Intent.DATA, "command_data": {}}
-
     for pattern, intent, data_key in _COMMANDS:
         m = pattern.match(text)
         if m:
-            command_data = {}
+            command_data: dict[str, Any] = {}
             if data_key == "movimiento_id" and m.lastindex and m.lastindex >= 1:
                 command_data["movimiento_id"] = int(m.group(1))
             elif data_key == "cambiar" and m.lastindex and m.lastindex >= 2:
@@ -163,51 +81,69 @@ def detect_command(body: str, button_payload: str | None = None) -> dict[str, An
     return None
 
 
-# --- Intent classification via OpenAI ---
+# ---------------------------------------------------------------------------
+# Intent classification via OpenAI
+# ---------------------------------------------------------------------------
+# Only 4 intents: DATA, QUERY, SUGERENCIAS, OTHER.
+# Commands (WEEKLY_RESUME, CATEGORIZAR, etc.) are already handled by
+# detect_command and never reach this function.
+# Sub-types of QUERY (resumen, presupuesto, categorías, etc.) are resolved
+# downstream after the switch, not here.
+# ---------------------------------------------------------------------------
 
-_CLASSIFY_SYSTEM_PROMPT = """Sos un asistente financiero especializado en detectar la intención del usuario.
-Tu única tarea es clasificar cada mensaje que llega por WhatsApp.
+_CLASSIFY_SYSTEM_PROMPT = """\
+Clasificá el mensaje de WhatsApp en UNA de estas 4 categorías.
+Respondé SOLO con JSON: {"tipo": "DATA|QUERY|SUGERENCIAS|OTHER"}
 
-No respondés contenido útil. No generás texto de conversación. No registrás gastos.
-Solo devolvés un JSON con la clasificación.
+DATA — El usuario quiere REGISTRAR un gasto o ingreso.
+Está contando algo que ya pasó o está pasando: compró, pagó, gastó, cobró.
+Ejemplos:
+- "Gasté 5000 en el super"
+- "Almorcé 3500"
+- "Pagué la luz 12000"
+- "taxi 2500"
+- "50k en ropa"
+- "300 lucas en Nike"
+- "Uber hoy 1800"
+- "quiero cargar un gasto"
+- "nafta 15000 con débito"
+Clave: menciona un monto + contexto de gasto/ingreso = DATA.
 
-DEFINICIONES:
+QUERY — El usuario PREGUNTA sobre sus finanzas.
+Quiere saber algo, no registrar nada.
+Ejemplos:
+- "Cuánto gasté este mes?"
+- "Gasté plata ayer?"
+- "En qué categoría gasto más?"
+- "Cómo vengo este mes?"
+- "Dame un resumen"
+- "Cuál fue mi último gasto?"
+- "Cómo viene mi presupuesto?"
+- "Qué categorías tengo?"
+Clave: pregunta, pide info, quiere ver datos = QUERY.
 
-1) DATA — Mensajes que forman parte de un registro de GASTO o INGRESO.
-Incluye:
-- Mensajes que describen gastos o ingresos: "gasté 5000 en el super", "almorcé 3500", "pagué la luz"
-- Mensajes con montos: "300 lucas en Nike", "1500 en un alfajor", "50k en ropa", "taxi 2500"
-- Mensajes sueltos que completan datos: "75 mil", "con débito", "hoy", "Uber", "efectivo"
-- Mensajes parcialmente estructurados: "Fecha: hoy, Monto 5000", "Gasto en YPF"
-- Cualquier mensaje que mencione comprar, gastar, pagar, cobrar, o un monto de dinero
-- "quiero agregar un gasto", "quiero cargar un gasto"
-REGLA CLAVE: Si el mensaje menciona un monto, un comercio, o cualquier indicio de gasto/compra → SIEMPRE DATA.
+SUGERENCIAS — El usuario pide CONSEJO o evaluación de una compra futura.
+Quiere saber si puede/debería comprar algo.
+Ejemplos:
+- "Puedo comprarme unas zapatillas de 80k?"
+- "Me alcanza para salir a comer?"
+- "Me conviene comprar esto?"
+- "Dame sugerencias para ahorrar"
+- "Es caro 50k por una remera?"
+Clave: compra hipotética/futura, pide opinión = SUGERENCIAS.
 
-2) QUERY — Preguntas sobre situación financiera:
-"¿Cuánto gasté?", "¿En qué gasté más?", "¿Me hacés un resumen?", "¿Cuál fue mi último gasto?"
+OTHER — No tiene NADA que ver con finanzas.
+Saludos, charla, preguntas no financieras.
+Ejemplos:
+- "Hola"
+- "Gracias"
+- "Qué onda"
+- "Cómo está el clima?"
 
-3) CAT_Y_SUBCATS — Consultas sobre categorías/subcategorías del sistema:
-"¿Qué categorías existen?", "¿Qué subcategorías hay en Vivienda?"
+REGLA: ante la duda entre DATA y QUERY, fijate si menciona un monto concreto.
+Con monto → DATA. Sin monto → QUERY."""
 
-4) PRESUPUESTO — Consultas sobre presupuestos:
-"¿Cómo viene mi presupuesto?", "PRESUPUESTO: cuánto me queda?"
-
-5) SUGERENCIAS — Pide consejos o si puede comprar algo:
-"¿Puedo comprarme unas zapatillas de 80k?", "Dame sugerencias para ahorrar"
-
-6) CATEGORIZACION — Quiere categorizar un movimiento existente:
-"Categorizar 123", "recategorizar el último gasto"
-
-7) WEEKLY_RESUME — Pide un resumen del mes, reporte, balance, "cómo vengo", "cómo voy", "cómo me fue":
-"¿Cómo vengo este mes?", "resumen del mes", "cómo voy?", "reporte mensual", "balance del mes"
-
-8) OTHER — ÚLTIMO RECURSO. Solo si no encaja en NINGUNA de las anteriores.
-Saludos puros ("hola"), charla casual sin contexto financiero.
-
-PRIORIDAD: Si hay dudas entre DATA y cualquier otra → DATA.
-
-Respondé SIEMPRE con JSON válido:
-{"tipo": "<DATA|QUERY|CAT_Y_SUBCATS|PRESUPUESTO|SUGERENCIAS|CATEGORIZACION|WEEKLY_RESUME|OTHER>"}"""
+_VALID_AI_INTENTS = frozenset({"DATA", "QUERY", "SUGERENCIAS", "OTHER"})
 
 _openai_client: AsyncOpenAI | None = None
 
@@ -220,31 +156,46 @@ def _get_openai_client() -> AsyncOpenAI:
 
 
 async def classify_intent(body: str) -> Intent:
-    """Classify message intent using OpenAI. Falls back to OTHER on error."""
+    """
+    Classify message intent using OpenAI.
+
+    Only returns DATA, QUERY, SUGERENCIAS, or OTHER.
+    Falls back to OTHER on error.
+    """
     import json as _json
+
+    logger.info("classify_intent input: %r", body[:200])
+
     try:
         client = _get_openai_client()
         response = await client.chat.completions.create(
-            model="gpt-5.5",
+            model="gpt-4.1-mini",
             messages=[
                 {"role": "system", "content": _CLASSIFY_SYSTEM_PROMPT},
                 {"role": "user", "content": body},
             ],
             response_format={"type": "json_object"},
-            max_completion_tokens=50,
+            max_completion_tokens=30,
+            temperature=0,
         )
         raw = (response.choices[0].message.content or "").strip()
-        # Parse JSON response
+
         try:
             data = _json.loads(raw)
             tipo = (data.get("tipo") or "").strip().upper()
         except _json.JSONDecodeError:
             tipo = raw.upper()
-        try:
-            return Intent(tipo)
-        except ValueError:
-            logger.warning("OpenAI returned unknown intent '%s' from raw '%s', defaulting to OTHER", tipo, raw[:100])
+
+        if tipo not in _VALID_AI_INTENTS:
+            logger.warning(
+                "classify_intent: unexpected '%s' (raw=%r) for input=%r → defaulting to OTHER",
+                tipo, raw[:100], body[:100],
+            )
             return Intent.OTHER
+
+        logger.info("classify_intent result: %s (input=%r)", tipo, body[:80])
+        return Intent(tipo)
+
     except Exception as e:
-        logger.error("Intent classification failed: %s", e)
+        logger.error("classify_intent failed: %s (input=%r)", e, body[:100])
         return Intent.OTHER
