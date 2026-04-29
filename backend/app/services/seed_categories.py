@@ -9,74 +9,91 @@ from app.models.subcategoria import SubCategoria
 
 logger = logging.getLogger(__name__)
 
+# Buckets for 50/30/20 rule
+BUCKET_NECESIDADES = "necesidades"    # 50%
+BUCKET_ESTILO_VIDA = "estilo_vida"    # 30%
+BUCKET_FUTURO = "futuro"              # 20%
+
 DEFAULT_CATEGORIES = [
+    # ── Necesidades (50%) ──
     {
-        "nombre": "Alimentos",
-        "icon": "🍕",
+        "nombre": "Vivienda",
+        "icon": "🏠",
+        "color": "#ec4899",
+        "bucket": BUCKET_NECESIDADES,
+        "subcategorias": ["Alquiler", "Expensas", "Hipoteca", "Mantenimiento"],
+    },
+    {
+        "nombre": "Comida",
+        "icon": "🍴",
         "color": "#14b8a6",
-        "subcategorias": [
-            "Supermercado", "Restaurant", "Delivery", "Kiosco / Snacks",
-            "Verdulería", "Café / Merienda", "Otros - Alimentos",
-        ],
+        "bucket": BUCKET_NECESIDADES,
+        "subcategorias": ["Súper", "Almacén", "Verdulería", "Carnicería", "Delivery"],
     },
     {
         "nombre": "Transporte",
         "icon": "🚗",
         "color": "#f97316",
-        "subcategorias": [
-            "Combustible", "Estacionamiento", "Peajes",
-            "Taxi / Uber / Cabify", "Transporte público", "Mantenimiento auto",
-            "Otros - Transporte",
-        ],
+        "bucket": BUCKET_NECESIDADES,
+        "subcategorias": ["Nafta", "SUBE", "Uber", "Estacionamiento", "Peajes"],
     },
     {
-        "nombre": "Vivienda",
-        "icon": "🏠",
-        "color": "#ec4899",
-        "subcategorias": [
-            "Alquiler / Hipoteca", "Expensas", "Servicios (luz, gas, agua)",
-            "Internet / Cable", "Reparaciones", "Muebles / Deco",
-            "Otros - Vivienda",
-        ],
-    },
-    {
-        "nombre": "Entretenimiento / Social",
-        "icon": "🎬",
+        "nombre": "Servicios",
+        "icon": "💡",
         "color": "#eab308",
-        "subcategorias": [
-            "Salidas / Bares", "Cine / Teatro", "Streaming / Suscripciones",
-            "Deportes / Gym", "Viajes / Vacaciones", "Hobbies",
-            "Otros - Entretenimiento",
-        ],
+        "bucket": BUCKET_NECESIDADES,
+        "subcategorias": ["Luz", "Gas", "Agua", "Internet", "Celular"],
     },
     {
-        "nombre": "Educación y Salud",
-        "icon": "⚕️",
+        "nombre": "Salud",
+        "icon": "💊",
         "color": "#06b6d4",
-        "subcategorias": [
-            "Farmacia", "Consultas médicas", "Prepaga / Obra social",
-            "Cursos / Capacitación", "Libros / Material",
-            "Otros - Educación y Salud",
-        ],
+        "bucket": BUCKET_NECESIDADES,
+        "subcategorias": ["Prepaga", "Farmacia", "Consultas", "Gimnasio"],
     },
     {
-        "nombre": "Ropa",
+        "nombre": "Educación",
+        "icon": "🎓",
+        "color": "#8b5cf6",
+        "bucket": BUCKET_NECESIDADES,
+        "subcategorias": ["Cuotas", "Cursos", "Libros"],
+    },
+    # ── Estilo de vida (30%) ──
+    {
+        "nombre": "Salidas",
+        "icon": "🍻",
+        "color": "#ef4444",
+        "bucket": BUCKET_ESTILO_VIDA,
+        "subcategorias": ["Restaurantes", "Bar", "Café", "Eventos"],
+    },
+    {
+        "nombre": "Ocio",
+        "icon": "🎬",
+        "color": "#d946ef",
+        "bucket": BUCKET_ESTILO_VIDA,
+        "subcategorias": ["Cine", "Streaming", "Viajes", "Hobbies"],
+    },
+    {
+        "nombre": "Compras",
         "icon": "👕",
         "color": "#57534e",
-        "subcategorias": [
-            "Ropa casual", "Calzado", "Accesorios", "Ropa deportiva",
-            "Otros - Ropa",
-        ],
+        "bucket": BUCKET_ESTILO_VIDA,
+        "subcategorias": ["Ropa", "Calzado", "Hogar", "Tecnología"],
+    },
+    # ── Futuro (20%) ──
+    {
+        "nombre": "Ahorro",
+        "icon": "💰",
+        "color": "#10b981",
+        "bucket": BUCKET_FUTURO,
+        "subcategorias": ["Caja", "Plazo fijo", "Emergencia", "Metas"],
     },
     {
-        "nombre": "Otros",
-        "icon": "📁",
-        "color": "#6b7280",
-        "subcategorias": [
-            "Gastos no categorizados", "Regalos", "Mascotas",
-            "Impuestos / Trámites", "Fintech / Transferencias",
-            "Otros - Varios",
-        ],
+        "nombre": "Inversión",
+        "icon": "📈",
+        "color": "#3b82f6",
+        "bucket": BUCKET_FUTURO,
+        "subcategorias": ["Acciones", "FCI", "Cripto", "Dólar"],
     },
 ]
 
@@ -90,6 +107,7 @@ async def seed_default_categories(db: AsyncSession, id_usuario: int) -> int:
             Nombre=cat_data["nombre"],
             Icon=cat_data["icon"],
             Color=cat_data["color"],
+            Bucket=cat_data.get("bucket"),
         )
         db.add(cat)
         await db.flush()  # get cat.Id

@@ -159,45 +159,10 @@ async def delete_presupuesto_endpoint(
 
 
 # ---------------------------------------------------------------------------
-# Regla 50/30/20 — auto-asignación
+# Regla 50/30/20 — auto-asignación usando Bucket de cada categoría
 # ---------------------------------------------------------------------------
 
-# Mapping of category names (lowercase) to 50/30/20 buckets.
-# "necesidades" = 50%, "deseos" = 30%, "ahorro" = 20%
-_BUCKET_MAP: dict[str, str] = {
-    # Necesidades (50%)
-    "vivienda": "necesidades",
-    "alimentacion": "necesidades",
-    "alimentación": "necesidades",
-    "transporte": "necesidades",
-    "servicios": "necesidades",
-    "salud": "necesidades",
-    "educacion": "necesidades",
-    "educación": "necesidades",
-    "impuestos": "necesidades",
-    # Deseos (30%)
-    "entretenimiento": "deseos",
-    "delivery": "deseos",
-    "restaurantes": "deseos",
-    "suscripciones": "deseos",
-    "ropa": "deseos",
-    "compras": "deseos",
-    "vacaciones": "deseos",
-    "ocio": "deseos",
-    "hobbies": "deseos",
-    "tecnologia": "deseos",
-    "tecnología": "deseos",
-    "belleza": "deseos",
-    "mascotas": "deseos",
-    "regalos": "deseos",
-    # Ahorro (20%)
-    "ahorro": "ahorro",
-    "inversiones": "ahorro",
-    "deudas": "ahorro",
-    "emergencias": "ahorro",
-}
-
-_BUCKET_PCT = {"necesidades": 0.50, "deseos": 0.30, "ahorro": 0.20}
+_BUCKET_PCT = {"necesidades": 0.50, "estilo_vida": 0.30, "futuro": 0.20}
 
 
 class AutoAssignIn(BaseModel):
@@ -214,12 +179,12 @@ async def auto_assign_budgets(
     """
     Auto-asigna presupuestos basado en la regla 50/30/20.
 
-    - 50% Necesidades (vivienda, alimentación, transporte, servicios, salud)
-    - 30% Deseos (entretenimiento, delivery, ropa, suscripciones)
-    - 20% Ahorro (ahorro, inversiones, deudas)
+    Reads each category's `Bucket` field from the DB:
+    - necesidades (50%): Vivienda, Comida, Transporte, Servicios, Salud, Educación
+    - estilo_vida (30%): Salidas, Ocio, Compras
+    - futuro (20%): Ahorro, Inversión
 
-    Distribuye equitativamente dentro de cada bucket entre las categorías
-    del usuario que pertenezcan a ese bucket.
+    Distributes evenly within each bucket across its categories.
     """
     if payload.total <= 0:
         raise HTTPException(status_code=400, detail="El total debe ser mayor a 0")
@@ -233,24 +198,24 @@ async def auto_assign_budgets(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    # Get user's categories
-    cats = await list_categorias(db, id_usuario)
-    if not cats:
+    # Get user's categories with bucket info
+    from sqlalchemy import select, and_
+    from app.models.categoria import Categoria as CatModel
+    stmt = select(CatModel).where(CatModel.Id_usuario == id_usuario)
+    result = await db.execute(stmt)
+    cat_rows = result.scalars().all()
+
+    if not cat_rows:
         raise HTTPException(status_code=400, detail="No hay categorías configuradas")
 
-    # Classify categories into buckets
-    buckets: dict[str, list[dict]] = {"necesidades": [], "deseos": [], "ahorro": []}
-    uncategorized = []
-    for cat in cats:
-        nombre = (cat.get("nombre", "") or "").strip().lower()
-        bucket = _BUCKET_MAP.get(nombre)
-        if bucket:
+    # Group categories by bucket
+    buckets: dict[str, list] = {"necesidades": [], "estilo_vida": [], "futuro": []}
+    for cat in cat_rows:
+        bucket = cat.Bucket or "estilo_vida"  # fallback
+        if bucket in buckets:
             buckets[bucket].append(cat)
         else:
-            uncategorized.append(cat)
-
-    # Assign uncategorized to "deseos" as fallback
-    buckets["deseos"].extend(uncategorized)
+            buckets["estilo_vida"].append(cat)
 
     # Distribute budget
     total = payload.total
@@ -267,11 +232,11 @@ async def auto_assign_budgets(
             row = await upsert_presupuesto(
                 db, id_usuario, periodo_mes,
                 Decimal(str(per_cat)),
-                id_categoria=cat["id"],
+                id_categoria=cat.Id,
             )
             created.append(_to_raw(row))
             distribution.append({
-                "categoria": cat.get("nombre", ""),
+                "categoria": cat.Nombre,
                 "bucket": bucket_name,
                 "pct_bucket": f"{int(pct * 100)}%",
                 "monto": per_cat,

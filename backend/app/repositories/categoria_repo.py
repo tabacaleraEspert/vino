@@ -26,6 +26,7 @@ async def list_categorias(
             "nombre": c.Nombre,
             "icon": c.Icon or "📁",
             "color": c.Color or "#6b7280",
+            "bucket": c.Bucket or "",
         }
         for c in result.scalars().all()
     ]

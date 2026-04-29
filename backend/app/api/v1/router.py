@@ -17,6 +17,7 @@ from app.api.v1 import merchant_identify
 from app.api.v1 import chat
 from app.api.v1 import deudas
 from app.api.v1 import billeteras
+from app.api.v1 import gmail
 from app.api.v1.admin import router as admin_router
 from app.api.v1.views import router as views_router
 
@@ -46,3 +47,4 @@ router.include_router(merchant_identify.router, prefix="/merchants/smart", tags=
 router.include_router(chat.router, prefix="/chat", tags=["chat"])
 router.include_router(deudas.router, prefix="/deudas", tags=["deudas"])
 router.include_router(billeteras.router, prefix="/billeteras", tags=["billeteras"])
+router.include_router(gmail.router, prefix="/gmail", tags=["gmail"])

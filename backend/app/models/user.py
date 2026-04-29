@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Index, Integer, String, func
+from sqlalchemy import Boolean, DateTime, Index, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -17,6 +17,12 @@ class User(Base):
     gmail: Mapped[str | None] = mapped_column(String(255))
     ID_Sheets: Mapped[str | None] = mapped_column(String(500))
     PasswordHash: Mapped[str | None] = mapped_column(String(255))
+    OnboardingCompletado: Mapped[bool] = mapped_column(Boolean, server_default="0")
+    OnboardingCompletadoAt: Mapped[datetime | None] = mapped_column(DateTime)
+    GmailRefreshToken: Mapped[str | None] = mapped_column(String(500))
+    GmailConnectedAt: Mapped[datetime | None] = mapped_column(DateTime)
+    GmailLastPolledAt: Mapped[datetime | None] = mapped_column(DateTime)
+    GmailLastMessageId: Mapped[str | None] = mapped_column(String(100))
     CreatedAt: Mapped[datetime | None] = mapped_column(DateTime, server_default=func.now())
     UpdatedAt: Mapped[datetime | None] = mapped_column(DateTime, server_default=func.now())
 

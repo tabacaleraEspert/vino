@@ -1,0 +1,262 @@
+"""
+Gmail poller — reads bank notification emails and creates movements.
+
+Replaces the n8n Gmail trigger pipeline. Called by POST /gmail/poll
+which is triggered by Azure Timer every 1-2 minutes.
+"""
+from __future__ import annotations
+
+import asyncio
+import base64
+import logging
+from datetime import datetime, UTC
+from html.parser import HTMLParser
+from typing import Any
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.config import settings
+from app.core.encryption import decrypt_token
+from app.models.user import User
+from app.services.bank_email_filters import matches_bank_filter, build_gmail_query
+from app.services.email_expense_extractor import extract_expense_from_email
+
+logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# HTML stripping
+# ---------------------------------------------------------------------------
+
+class _HTMLStripper(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self._text: list[str] = []
+
+    def handle_data(self, data: str):
+        self._text.append(data)
+
+    def get_text(self) -> str:
+        return " ".join(self._text)
+
+
+def strip_html(html: str) -> str:
+    """Strip HTML tags and return plain text."""
+    s = _HTMLStripper()
+    s.feed(html)
+    return s.get_text()
+
+
+# ---------------------------------------------------------------------------
+# Gmail API helpers (sync — called via asyncio.to_thread)
+# ---------------------------------------------------------------------------
+
+def _build_gmail_service(refresh_token: str):
+    """Build a Gmail API service from a refresh token."""
+    from google.oauth2.credentials import Credentials
+    from googleapiclient.discovery import build
+
+    creds = Credentials(
+        token=None,
+        refresh_token=refresh_token,
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=settings.GOOGLE_CLIENT_ID,
+        client_secret=settings.GOOGLE_CLIENT_SECRET,
+    )
+    return build("gmail", "v1", credentials=creds)
+
+
+def _list_messages(service, query: str, max_results: int = 20) -> list[dict]:
+    """List Gmail messages matching a query (sync)."""
+    result = service.users().messages().list(
+        userId="me", q=query, maxResults=max_results,
+    ).execute()
+    return result.get("messages", [])
+
+
+def _get_message(service, msg_id: str) -> dict:
+    """Get a single Gmail message with full content (sync)."""
+    return service.users().messages().get(
+        userId="me", id=msg_id, format="full",
+    ).execute()
+
+
+def _extract_email_parts(msg: dict) -> tuple[str, str, str]:
+    """Extract sender, subject, and body text from a Gmail message."""
+    headers = {h["name"].lower(): h["value"] for h in msg.get("payload", {}).get("headers", [])}
+    sender = headers.get("from", "")
+    subject = headers.get("subject", "")
+
+    # Extract body
+    body = ""
+    payload = msg.get("payload", {})
+
+    def _get_body_from_parts(parts: list) -> str:
+        for part in parts:
+            mime = part.get("mimeType", "")
+            if mime == "text/plain":
+                data = part.get("body", {}).get("data", "")
+                if data:
+                    return base64.urlsafe_b64decode(data).decode("utf-8", errors="replace")
+            elif mime == "text/html":
+                data = part.get("body", {}).get("data", "")
+                if data:
+                    return strip_html(base64.urlsafe_b64decode(data).decode("utf-8", errors="replace"))
+            elif "parts" in part:
+                result = _get_body_from_parts(part["parts"])
+                if result:
+                    return result
+        return ""
+
+    if "parts" in payload:
+        body = _get_body_from_parts(payload["parts"])
+    else:
+        data = payload.get("body", {}).get("data", "")
+        if data:
+            decoded = base64.urlsafe_b64decode(data).decode("utf-8", errors="replace")
+            mime = payload.get("mimeType", "")
+            body = strip_html(decoded) if "html" in mime else decoded
+
+    return sender, subject, body
+
+
+# ---------------------------------------------------------------------------
+# Per-user polling
+# ---------------------------------------------------------------------------
+
+async def poll_user_gmail(
+    db: AsyncSession,
+    user_id: int,
+    gmail: str,
+    refresh_token_encrypted: str,
+    last_message_id: str | None = None,
+) -> dict[str, Any]:
+    """
+    Poll one user's Gmail for bank expense notifications.
+
+    Returns: {"processed": N, "created": N, "duplicated": N, "errors": N}
+    """
+    refresh_token = decrypt_token(refresh_token_encrypted)
+
+    try:
+        service = await asyncio.to_thread(_build_gmail_service, refresh_token)
+    except Exception as e:
+        logger.error("Failed to build Gmail service for user %d: %s", user_id, e)
+        return {"user_id": user_id, "error": str(e)}
+
+    # Build query — last 1 day of bank emails
+    query = build_gmail_query(days_back=1)
+    if last_message_id:
+        # Gmail doesn't support "after message ID" directly,
+        # but we track it for dedup on our side
+        pass
+
+    try:
+        messages = await asyncio.to_thread(_list_messages, service, query, 20)
+    except Exception as e:
+        logger.error("Gmail list failed for user %d: %s", user_id, e)
+        return {"user_id": user_id, "error": str(e)}
+
+    if not messages:
+        return {"user_id": user_id, "processed": 0, "created": 0, "duplicated": 0, "errors": 0}
+
+    stats = {"user_id": user_id, "processed": 0, "created": 0, "duplicated": 0, "errors": 0}
+    newest_msg_id = messages[0]["id"]
+
+    # Process oldest first for consistent tracking
+    for msg_ref in reversed(messages):
+        msg_id = msg_ref["id"]
+
+        # Skip already-processed messages
+        if last_message_id and msg_id <= last_message_id:
+            continue
+
+        try:
+            msg = await asyncio.to_thread(_get_message, service, msg_id)
+            sender, subject, body = _extract_email_parts(msg)
+
+            # Double-check against bank filters
+            if not matches_bank_filter(sender, subject):
+                continue
+
+            stats["processed"] += 1
+
+            # Extract expense data with GPT
+            extracted = await extract_expense_from_email(subject, sender, body)
+            if not extracted.get("datos_completos"):
+                continue
+
+            # Build ingest payload (same format as n8n sends)
+            from app.api.v1.ingest import process_ingest
+            ingest_payload = {
+                "usuario_gmail": gmail,
+                "fecha": extracted.get("fecha"),
+                "tipo": extracted.get("tipo", "Gasto"),
+                "monto": extracted.get("monto", 0),
+                "moneda": extracted.get("moneda", "ARS"),
+                "comercio_raw": extracted.get("comercio_raw", ""),
+                "descripcion": extracted.get("descripcion", ""),
+                "medio_pago_raw": extracted.get("medio_de_pago", ""),
+                "from_email": sender,
+                "asunto": subject,
+                "origen": "Gmail",
+                "origen_id": f"gmail_{msg_id}",
+            }
+
+            result = await process_ingest(db, ingest_payload)
+            status = result.get("status", "")
+            if status == "creado":
+                stats["created"] += 1
+            elif "duplicado" in status:
+                stats["duplicated"] += 1
+
+        except Exception as e:
+            logger.error("Error processing Gmail message %s for user %d: %s", msg_id, user_id, e)
+            stats["errors"] += 1
+
+    # Update last polled and last message ID
+    stmt = select(User).where(User.id == user_id)
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+    if user:
+        user.GmailLastPolledAt = datetime.now(UTC)
+        user.GmailLastMessageId = newest_msg_id
+        await db.flush()
+
+    logger.info(
+        "Gmail poll for user %d: processed=%d created=%d dup=%d errors=%d",
+        user_id, stats["processed"], stats["created"], stats["duplicated"], stats["errors"],
+    )
+    return stats
+
+
+# ---------------------------------------------------------------------------
+# Poll all connected users
+# ---------------------------------------------------------------------------
+
+async def poll_all_users(db: AsyncSession) -> list[dict[str, Any]]:
+    """Poll Gmail for all users with connected Gmail accounts."""
+    stmt = select(User).where(User.GmailRefreshToken.isnot(None))
+    result = await db.execute(stmt)
+    users = result.scalars().all()
+
+    if not users:
+        return []
+
+    results = []
+    for user in users:
+        try:
+            r = await poll_user_gmail(
+                db,
+                user_id=user.id,
+                gmail=user.gmail or "",
+                refresh_token_encrypted=user.GmailRefreshToken,
+                last_message_id=user.GmailLastMessageId,
+            )
+            results.append(r)
+        except Exception as e:
+            logger.error("Poll failed for user %d: %s", user.id, e)
+            results.append({"user_id": user.id, "error": str(e)})
+
+    return results

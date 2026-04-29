@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     JWT_EXPIRE_MIN: int = 60 * 24
     MASTER_KEY: str = "dev_master_change_me"
     OPENAI_API_KEY: str = ""
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    GMAIL_TOKEN_KEY: str = ""  # Fernet key for encrypting Gmail refresh tokens
     CORS_ORIGINS: list[str] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",

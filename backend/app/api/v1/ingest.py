@@ -35,16 +35,15 @@ async def ingest_movimiento(
     _: None = Depends(require_master_key),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Ingesta de movimiento desde n8n u otra fuente externa.
+    """HTTP endpoint for ingest — thin wrapper around process_ingest."""
+    return await process_ingest(db, payload)
 
-    Flujo:
-    1. Resuelve usuario por gmail
-    2. Parsea y valida campos
-    3. Normaliza comercio y matchea contra ReglaComercio
-    4. Si no hay regla: crea regla AUTO + asigna categoría default
-    5. Deduplica por Origen + Origen_Id
-    6. Crea movimiento
+
+async def process_ingest(db: AsyncSession, payload: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Core ingest logic — callable from HTTP endpoint and internal services (Gmail poller).
+
+    Raises HTTPException on validation errors. Returns result dict on success.
     """
     # --- 1. Resolver usuario ---
     usuario_gmail = (payload.get("usuario_gmail") or "").strip()
@@ -250,7 +249,7 @@ async def ingest_batch(
     results = []
     for i, item in enumerate(items):
         try:
-            result = await ingest_movimiento(item, _, db)
+            result = await process_ingest(db, item)
             results.append({"index": i, **result})
         except HTTPException as e:
             results.append({"index": i, "status": "error", "detail": e.detail})

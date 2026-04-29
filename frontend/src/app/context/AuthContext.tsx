@@ -12,7 +12,8 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   login: (username: string, password: string) => Promise<boolean>;
-  register: (username: string, password: string, apellido?: string, email?: string) => Promise<{ ok: boolean; error?: string }>;
+  loginWithGoogle: (credential: string) => Promise<{ ok: boolean; isNewUser: boolean; error?: string }>;
+  register: (username: string, password: string, apellido?: string, email?: string, whatsapp?: string) => Promise<{ ok: boolean; error?: string }>;
   logout: () => void;
   isLoading: boolean;
 }
@@ -80,11 +81,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const loginWithGoogle = async (credential: string): Promise<{ ok: boolean; isNewUser: boolean; error?: string }> => {
+    try {
+      const res = await apiFetch<{
+        access_token: string;
+        is_new_user: boolean;
+        user: { id: string; nombre: string; apellido: string; gmail: string };
+      }>("/auth/google", {
+        method: "POST",
+        body: JSON.stringify({ credential }),
+      });
+      const u = res.user;
+      const newUser: User = {
+        id: u.id,
+        name: `${u.nombre} ${(u.apellido || "").trim()}`.trim(),
+        email: u.gmail || "",
+      };
+      setApiToken(res.access_token);
+      setToken(res.access_token);
+      setUser(newUser);
+      localStorage.setItem(TOKEN_KEY, res.access_token);
+      localStorage.setItem(USER_KEY, JSON.stringify(newUser));
+      return { ok: true, isNewUser: res.is_new_user };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Error con Google Sign-In";
+      return { ok: false, isNewUser: false, error: msg };
+    }
+  };
+
   const register = async (
     username: string,
     password: string,
     apellido?: string,
-    email?: string
+    email?: string,
+    whatsapp?: string,
   ): Promise<{ ok: boolean; error?: string }> => {
     try {
       await apiFetch("/auth/register", {
@@ -94,8 +124,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           password,
           apellido: apellido?.trim() || undefined,
           email: email?.trim() || undefined,
+          whatsapp: whatsapp?.trim() || undefined,
         }),
       });
+      // Auto-login after registration
+      const loggedIn = await login(username.trim(), password);
+      if (!loggedIn) {
+        return { ok: true }; // Registered but auto-login failed — still success
+      }
       return { ok: true };
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Error al crear la cuenta";
@@ -104,7 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, register, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, token, login, loginWithGoogle, register, logout, isLoading }}>
       {children}
     </AuthContext.Provider>
   );
