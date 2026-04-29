@@ -15,6 +15,7 @@ interface AuthContextType {
   login: (username: string, password: string) => Promise<boolean>;
   loginWithGoogle: (credential: string) => Promise<{ ok: boolean; isNewUser: boolean; error?: string }>;
   register: (username: string, password: string, apellido?: string, email?: string, whatsapp?: string) => Promise<{ ok: boolean; error?: string }>;
+  markOnboardingDone: () => void;
   logout: () => void;
   isLoading: boolean;
 }
@@ -45,6 +46,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     setApiToken(token);
   }, [token]);
+
+  const markOnboardingDone = useCallback(() => {
+    setOnboardingCompletado(true);
+    localStorage.setItem("finanzas_onboarding", "true");
+  }, []);
 
   const logout = useCallback(() => {
     clearAllCacheOnLogout();
@@ -150,7 +156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, onboardingCompletado, login, loginWithGoogle, register, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, token, onboardingCompletado, login, loginWithGoogle, register, markOnboardingDone, logout, isLoading }}>
       {children}
     </AuthContext.Provider>
   );

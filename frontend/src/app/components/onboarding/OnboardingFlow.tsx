@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "../../context/AuthContext";
 import { apiFetch } from "../../../lib/api";
+
 import { OnboardingStyles } from "./primitives";
 import { ScreenWelcome } from "./screens/ScreenWelcome";
 import { ScreenCategories } from "./screens/ScreenCategories";
@@ -22,7 +23,7 @@ export function OnboardingFlow() {
     return saved ? Math.min(parseInt(saved, 10), TOTAL_STEPS - 1) : 0;
   });
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, markOnboardingDone } = useAuth();
 
   const goNext = useCallback(() => {
     setStep((s) => {
@@ -68,9 +69,10 @@ export function OnboardingFlow() {
     } catch (e) {
       console.error("Mark onboarding complete failed:", e);
     }
+    markOnboardingDone();
     localStorage.removeItem("onboarding_step");
     navigate("/", { replace: true });
-  }, [navigate]);
+  }, [navigate, markOnboardingDone]);
 
   const firstName = user?.name?.split(" ")[0] || "amig@";
 
