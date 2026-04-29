@@ -15,11 +15,16 @@ import { Debts } from "./components/Debts";
 import { Wallets } from "./components/Wallets";
 import { Login } from "./components/Login";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { OnboardingFlow } from "./components/onboarding/OnboardingFlow";
 
 export const router = createBrowserRouter([
   {
     path: "/login",
     Component: Login,
+  },
+  {
+    path: "/onboarding",
+    Component: OnboardingFlow,
   },
   {
     path: "/",

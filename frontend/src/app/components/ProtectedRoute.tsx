@@ -2,7 +2,7 @@ import { Navigate } from "react-router";
 import { useAuth } from "../context/AuthContext";
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, onboardingCompletado } = useAuth();
 
   if (isLoading) {
     return (
@@ -17,6 +17,10 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (!onboardingCompletado) {
+    return <Navigate to="/onboarding" replace />;
   }
 
   return <>{children}</>;

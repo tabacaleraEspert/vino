@@ -33,8 +33,7 @@ export function Login() {
     const result = await loginWithGoogle(response.credential);
     setIsLoading(false);
     if (result.ok) {
-      // TODO: if (result.isNewUser) navigate("/onboarding");
-      navigate("/");
+      navigate(result.isNewUser ? "/onboarding" : "/");
     } else {
       setError(result.error || "Error al iniciar con Google");
     }

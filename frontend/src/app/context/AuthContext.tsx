@@ -11,6 +11,7 @@ interface User {
 interface AuthContextType {
   user: User | null;
   token: string | null;
+  onboardingCompletado: boolean;
   login: (username: string, password: string) => Promise<boolean>;
   loginWithGoogle: (credential: string) => Promise<{ ok: boolean; isNewUser: boolean; error?: string }>;
   register: (username: string, password: string, apellido?: string, email?: string, whatsapp?: string) => Promise<{ ok: boolean; error?: string }>;
@@ -36,6 +37,9 @@ if (savedTokenSync) setApiToken(savedTokenSync);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(savedUserSync);
   const [token, setToken] = useState<string | null>(savedTokenSync);
+  const [onboardingCompletado, setOnboardingCompletado] = useState(() => {
+    return localStorage.getItem("finanzas_onboarding") === "true";
+  });
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -69,11 +73,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         name: u.nombre ? `${u.nombre} ${(u.apellido || "").trim()}`.trim() : username,
         email: u.gmail || "",
       };
+      const obCompleted = res.onboarding_completado ?? true; // legacy users = completed
       setApiToken(accessToken);
       setToken(accessToken);
       setUser(newUser);
+      setOnboardingCompletado(obCompleted);
       localStorage.setItem(TOKEN_KEY, accessToken);
       localStorage.setItem(USER_KEY, JSON.stringify(newUser));
+      localStorage.setItem("finanzas_onboarding", String(obCompleted));
       return true;
     } catch (err) {
       console.error("Login error:", err);
@@ -97,11 +104,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         name: `${u.nombre} ${(u.apellido || "").trim()}`.trim(),
         email: u.gmail || "",
       };
+      const obCompleted = (res as any).onboarding_completado ?? false;
       setApiToken(res.access_token);
       setToken(res.access_token);
       setUser(newUser);
+      setOnboardingCompletado(obCompleted);
       localStorage.setItem(TOKEN_KEY, res.access_token);
       localStorage.setItem(USER_KEY, JSON.stringify(newUser));
+      localStorage.setItem("finanzas_onboarding", String(obCompleted));
       return { ok: true, isNewUser: res.is_new_user };
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Error con Google Sign-In";
@@ -140,7 +150,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, loginWithGoogle, register, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, token, onboardingCompletado, login, loginWithGoogle, register, logout, isLoading }}>
       {children}
     </AuthContext.Provider>
   );
