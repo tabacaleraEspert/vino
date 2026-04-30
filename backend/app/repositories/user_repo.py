@@ -103,7 +103,7 @@ async def get_or_create_google_user(
 
     user = User(
         Nombre=nombre,
-        Apellido=apellido,
+        Apellido=apellido or "",
         gmail=gmail,
         PasswordHash=None,
     )
