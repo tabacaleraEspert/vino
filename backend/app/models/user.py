@@ -9,7 +9,7 @@ from app.models.base import Base
 class User(Base):
     __tablename__ = "MaestroUsuarios"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
     Nombre: Mapped[str] = mapped_column(String(100), nullable=False)
     Apellido: Mapped[str | None] = mapped_column(String(100))
     WppEntero: Mapped[str | None] = mapped_column(String(50))

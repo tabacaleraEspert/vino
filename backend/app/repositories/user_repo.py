@@ -3,10 +3,16 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
+
+
+async def _next_user_id(session: AsyncSession) -> int:
+    """Generate next user ID (table has no IDENTITY)."""
+    result = await session.execute(select(func.coalesce(func.max(User.id), 0)))
+    return result.scalar_one() + 1
 
 
 async def get_user_by_nombre(
@@ -77,10 +83,12 @@ async def create_user(
         if existing_wpp:
             raise ValueError("Ese número de WhatsApp ya está vinculado a otra cuenta")
 
+    next_id = await _next_user_id(session)
     user = User(
+        id=next_id,
         Nombre=nombre,
         PasswordHash=password_hash,
-        Apellido=apellido,
+        Apellido=apellido or "",
         gmail=gmail,
         Whatsapp=whatsapp,
         WppEntero=wpp_entero,
@@ -101,7 +109,9 @@ async def get_or_create_google_user(
     if existing:
         return existing, False
 
+    next_id = await _next_user_id(session)
     user = User(
+        id=next_id,
         Nombre=nombre,
         Apellido=apellido or "",
         gmail=gmail,
