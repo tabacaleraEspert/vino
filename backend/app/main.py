@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -14,11 +15,41 @@ configure_logging()
 logger = logging.getLogger(__name__)
 
 
+GMAIL_POLL_INTERVAL_SEC = 90  # Poll every 90 seconds
+
+
+async def _gmail_poll_loop():
+    """Background task that polls Gmail for all connected users."""
+    await asyncio.sleep(15)  # Wait for app to be fully ready
+    while True:
+        try:
+            from app.db.session import get_session_factory
+            from app.services.gmail_poller import poll_all_users
+            factory = get_session_factory()
+            async with factory() as db:
+                results = await poll_all_users(db)
+                await db.commit()
+                total_created = sum(r.get("created", 0) for r in results)
+                if total_created > 0:
+                    logger.info("Gmail poll: created %d movements", total_created)
+        except Exception as e:
+            logger.error("Gmail poll loop error: %s", e)
+        await asyncio.sleep(GMAIL_POLL_INTERVAL_SEC)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting Finanzas API v%s (env=%s)", settings.APP_VERSION, settings.ENV)
+    # Start Gmail polling background task
+    gmail_task = asyncio.create_task(_gmail_poll_loop())
+    logger.info("Gmail poll loop started (interval=%ds)", GMAIL_POLL_INTERVAL_SEC)
     yield
-    # Cleanup: dispose async engine
+    # Cleanup
+    gmail_task.cancel()
+    try:
+        await gmail_task
+    except asyncio.CancelledError:
+        pass
     from app.db.session import _async_engine
     if _async_engine:
         await _async_engine.dispose()

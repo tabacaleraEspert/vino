@@ -7,23 +7,24 @@ Based on the patterns currently used by n8n triggers.
 from __future__ import annotations
 
 # Each filter: if sender contains X AND subject contains Y → it's a bank notification
+# Exact sender emails from n8n triggers + additional banks
 BANK_FILTERS = [
-    # Santander Argentina
+    # Santander Argentina (n8n: Gmail DV, Gmail MM)
     {"sender": "santander", "subjects": ["Pagaste", "Compraste", "Aviso de transferencia"]},
-    # BBVA Argentina
+    # BBVA Argentina (n8n: Gmail IM, Gmail Loli)
     {"sender": "bbva", "subjects": ["Nueva compra", "Compra aprobada", "Realizaste una transferencia"]},
-    # Banco Macro
+    # Banco Macro (n8n: Gmail MM)
     {"sender": "macro", "subjects": ["Aviso de compra"]},
-    # MercadoPago
-    {"sender": "mercadopago", "subjects": ["Pago aprobado", "Tu transferencia fue enviada", "Pagaste"]},
+    # MercadoPago (n8n: Gmail IM, Gmail Loli)
+    {"sender": "mercadopago", "subjects": ["Pago aprobado en", "Pago aprobado", "Tu transferencia fue enviada", "Pagaste"]},
     # Banco Galicia
     {"sender": "galicia", "subjects": ["compra", "Aviso de débito"]},
     # Naranja X
     {"sender": "naranjax", "subjects": ["compra", "pago"]},
-    {"sender": "naranja", "subjects": ["Resumen", "compra"]},
+    {"sender": "naranja", "subjects": ["compra"]},
     # Brubank
     {"sender": "brubank", "subjects": ["compra", "transferencia"]},
-    # Ualá
+    # Uala
     {"sender": "uala", "subjects": ["compra", "pago"]},
 ]
 
