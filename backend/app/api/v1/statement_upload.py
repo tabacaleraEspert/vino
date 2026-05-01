@@ -5,6 +5,7 @@ from decimal import Decimal
 from typing import Any, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -190,4 +191,38 @@ async def confirm_statement(
         "duplicados": duplicated,
         "errores": len(errors),
         "detalle_errores": errors[:10],
+    }
+
+
+# --- Template download + supported banks ---
+
+@router.get("/template")
+async def download_template():
+    """Download an Excel template for manual statement upload."""
+    from app.services.statement_template import generate_template
+    content = generate_template()
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=vino_plantilla_extracto.xlsx"},
+    )
+
+
+@router.get("/supported-banks")
+async def supported_banks():
+    """List banks with native parser support."""
+    return {
+        "banks": [
+            {
+                "name": "Santander",
+                "formats": ["PDF (resumen Visa)", "Excel (.xlsx)"],
+                "parser": "native",
+                "notes": "Parser dedicado. Detecta automaticamente el formato.",
+            },
+        ],
+        "generic": {
+            "formats": ["PDF", "JPG/PNG (screenshot)", "Excel (.xlsx plantilla)"],
+            "parser": "ai",
+            "notes": "Para otros bancos, subi el PDF o una foto del extracto. La IA extrae las transacciones.",
+        },
     }
