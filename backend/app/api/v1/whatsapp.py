@@ -837,6 +837,53 @@ async def recategorize_expense(
 # ---------------------------------------------------------------------------
 
 from fastapi import Form, Request
+import random as _random
+
+
+def _thinking_message(body: str, user_name: str) -> str:
+    """Pick a contextual 'processing' message to send before the real reply."""
+    name = user_name.split(" ")[0] if user_name else ""
+
+    # Generic thinking messages
+    generic = [
+        "Ya te respondo...",
+        "Dame un toque...",
+        "Dejame ver...",
+        "Un segundito...",
+        "Procesando...",
+    ]
+
+    # Context-aware messages (order matters — check queries before expenses)
+    body_lower = body.lower() if body else ""
+
+    if any(w in body_lower for w in ["puedo", "alcanza", "conviene"]):
+        options = [
+            "Analizando tu presupuesto... 🤔",
+            "Dejame ver si te da...",
+            "Revisando tus numeros...",
+        ]
+    elif any(w in body_lower for w in ["cuant", "cuánt", "resum", "como v", "cómo v", "balance", "como me", "cómo me"]):
+        options = [
+            "Buscando tus datos... 📊",
+            "Dejame revisar tus numeros...",
+            f"Ya te paso la info{', ' + name if name else ''}...",
+            "Consultando... 🔍",
+        ]
+    elif any(w in body_lower for w in ["gast", "compr", "pagu", "pague", "almor", "cen", "uber", "taxi", "nafta", "delivery"]):
+        has_number = any(c.isdigit() for c in body)
+        if has_number:
+            options = [
+                "Anotando tu gasto... ✍️",
+                "Ya lo registro...",
+                "Dejame anotarlo... 📝",
+                f"Recibido{', ' + name if name else ''}, ya lo proceso...",
+            ]
+        else:
+            options = generic
+    else:
+        options = generic
+
+    return _random.choice(options)
 
 
 @router.post("/webhook")
@@ -901,6 +948,11 @@ async def whatsapp_webhook(
 
         # Audio → transcribe with Whisper, then process as text
         if "audio" in media_type or "ogg" in media_type:
+            await send_whatsapp(wpp_from, _random.choice([
+                "Escuchando tu audio... 🎧",
+                "Procesando tu mensaje de voz...",
+                "Ya escucho y te respondo...",
+            ]))
             try:
                 import httpx
                 from openai import AsyncOpenAI
@@ -955,6 +1007,10 @@ async def whatsapp_webhook(
 
     if not body:
         return {"status": "ignored", "reason": "empty body"}
+
+    # --- 3b. Send "thinking" message ---
+    thinking = _thinking_message(body, user_name)
+    await send_whatsapp(wpp_from, thinking)
 
     # --- 4. Detect command ---
     cmd = detect_command(body, str(button_payload) if button_payload else None)
