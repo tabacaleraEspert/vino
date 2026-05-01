@@ -895,21 +895,63 @@ async def whatsapp_webhook(
         await send_whatsapp(wpp_from, reply)
         return {"status": "onboarding"}
 
-    # --- 3. Handle photo/ticket ---
+    # --- 3. Handle media (photo or audio) ---
     if media_url:
-        try:
-            result = await register_from_ticket_photo(
-                user_id=user_id,
-                image_url=str(media_url),
-                db=db,
-            )
-            reply = result.get("reply", "No pude leer la imagen.")
-            await send_whatsapp(wpp_from, reply)
-            return {"status": "ticket_processed"}
-        except Exception as e:
-            logger.error("Ticket photo failed: %s", e)
-            await send_whatsapp(wpp_from, "No pude procesar la imagen. Proba con una foto mas clara.")
-            return {"status": "ticket_error"}
+        media_type = str(form.get("MediaContentType0", "")).lower()
+
+        # Audio → transcribe with Whisper, then process as text
+        if "audio" in media_type or "ogg" in media_type:
+            try:
+                import httpx
+                from openai import AsyncOpenAI
+                from app.core.config import settings as _settings
+
+                # Download audio from Twilio
+                async with httpx.AsyncClient() as http:
+                    auth = (settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+                    audio_resp = await http.get(str(media_url), auth=auth, follow_redirects=True, timeout=15)
+                    audio_bytes = audio_resp.content
+
+                # Transcribe with Whisper
+                client = AsyncOpenAI(api_key=_settings.OPENAI_API_KEY)
+                import io
+                audio_file = io.BytesIO(audio_bytes)
+                audio_file.name = "audio.ogg"
+                transcript = await client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio_file,
+                    language="es",
+                )
+                body = transcript.text.strip()
+                logger.info("Audio transcribed: %r", body[:100])
+                if not body:
+                    await send_whatsapp(wpp_from, "No pude entender el audio. Proba de nuevo.")
+                    return {"status": "audio_empty"}
+                # Fall through to text processing below
+            except Exception as e:
+                logger.error("Audio transcription failed: %s", e)
+                await send_whatsapp(wpp_from, "No pude procesar el audio. Proba mandando un texto.")
+                return {"status": "audio_error"}
+
+        # Image → ticket/receipt OCR
+        elif "image" in media_type:
+            try:
+                result = await register_from_ticket_photo(
+                    user_id=user_id,
+                    image_url=str(media_url),
+                    db=db,
+                )
+                reply = result.get("reply", "No pude leer la imagen.")
+                await send_whatsapp(wpp_from, reply)
+                return {"status": "ticket_processed"}
+            except Exception as e:
+                logger.error("Ticket photo failed: %s", e)
+                await send_whatsapp(wpp_from, "No pude procesar la imagen. Proba con una foto mas clara.")
+                return {"status": "ticket_error"}
+
+        else:
+            await send_whatsapp(wpp_from, "Solo puedo procesar fotos de tickets y mensajes de audio.")
+            return {"status": "unsupported_media"}
 
     if not body:
         return {"status": "ignored", "reason": "empty body"}
@@ -989,13 +1031,43 @@ async def whatsapp_webhook(
             reply = result.get("reply", "No pude responder.")
 
         elif intent == Intent.OTHER:
-            reply = (
-                f"No entendi tu mensaje, {user_name}.\n\n"
-                f"Podes:\n"
-                f'• Registrar gastos: _"Gaste 5000 en cafe"_\n'
-                f'• Consultar: _"Cuanto gaste este mes?"_\n'
-                f'• Pedir consejo: _"Puedo comprarme unas zapas de 80k?"_'
-            )
+            # Conversational fallback — respond as financial assistant with context
+            try:
+                from datetime import date as _date
+                from app.api.v1.chat import _build_context, _SYSTEM_PROMPT
+                from openai import AsyncOpenAI
+                from app.core.config import settings as _settings
+
+                today = _date.today()
+                period = f"{today.year}-{today.month:02d}"
+                context = await _build_context(db, user_id, period)
+                system = _SYSTEM_PROMPT.replace("{context}", context)
+                system += (
+                    "\n\nSi el mensaje no tiene que ver con finanzas, responde "
+                    "amablemente y sugeri que te pregunte sobre sus gastos, "
+                    "presupuesto o que registre un gasto."
+                )
+
+                client = AsyncOpenAI(api_key=_settings.OPENAI_API_KEY)
+                response = await client.chat.completions.create(
+                    model="gpt-4.1-mini",
+                    messages=[
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": body},
+                    ],
+                    max_completion_tokens=300,
+                    temperature=0.7,
+                )
+                reply = response.choices[0].message.content or ""
+            except Exception as e:
+                logger.error("OTHER conversational fallback failed: %s", e)
+                reply = (
+                    f"Hola {user_name}! Soy tu asistente de finanzas.\n\n"
+                    f"Podes:\n"
+                    f'• Registrar gastos: _"Gaste 5000 en cafe"_\n'
+                    f'• Consultar: _"Cuanto gaste este mes?"_\n'
+                    f'• Pedir consejo: _"Puedo comprarme unas zapas de 80k?"_'
+                )
 
         else:
             reply = "No entendi. Proba de nuevo."
