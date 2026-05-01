@@ -19,6 +19,7 @@ class User(Base):
     PasswordHash: Mapped[str | None] = mapped_column(String(255))
     OnboardingCompletado: Mapped[bool] = mapped_column(Boolean, server_default="0")
     OnboardingCompletadoAt: Mapped[datetime | None] = mapped_column(DateTime)
+    OnboardingStep: Mapped[int | None] = mapped_column(Integer, server_default="0")
     GmailRefreshToken: Mapped[str | None] = mapped_column(String(500))
     GmailConnectedAt: Mapped[datetime | None] = mapped_column(DateTime)
     GmailLastPolledAt: Mapped[datetime | None] = mapped_column(DateTime)

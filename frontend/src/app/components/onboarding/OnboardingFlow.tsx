@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "../../context/AuthContext";
 import { apiFetch } from "../../../lib/api";
@@ -23,16 +23,43 @@ export function OnboardingFlow() {
     return saved ? Math.min(parseInt(saved, 10), TOTAL_STEPS - 1) : 0;
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [stepLoaded, setStepLoaded] = useState(false);
   const navigate = useNavigate();
   const { user, markOnboardingDone } = useAuth();
+
+  // Load step from backend on mount (overrides localStorage if higher)
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await apiFetch<{ step: number }>("/auth/onboarding/step");
+        const backendStep = res.step || 0;
+        const localStep = parseInt(localStorage.getItem("onboarding_step") || "0", 10);
+        const resolved = Math.max(backendStep, localStep);
+        if (resolved > 0 && resolved < TOTAL_STEPS) {
+          setStep(resolved);
+          localStorage.setItem("onboarding_step", String(resolved));
+        }
+      } catch {}
+      setStepLoaded(true);
+    })();
+  }, []);
+
+  const persistStep = useCallback((nextStep: number) => {
+    localStorage.setItem("onboarding_step", String(nextStep));
+    // Fire and forget — don't block UI
+    apiFetch("/auth/onboarding/step", {
+      method: "PATCH",
+      body: JSON.stringify({ step: nextStep }),
+    }).catch(() => {});
+  }, []);
 
   const goNext = useCallback(() => {
     setStep((s) => {
       const next = s + 1;
-      localStorage.setItem("onboarding_step", String(next));
+      persistStep(next);
       return next;
     });
-  }, []);
+  }, [persistStep]);
 
   const handleBudget = useCallback(async (income: number) => {
     if (isLoading) return;

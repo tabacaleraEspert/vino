@@ -61,7 +61,7 @@ export function Login() {
     );
     setIsLoading(false);
     if (result.ok) {
-      navigate("/");
+      navigate("/onboarding");
     } else {
       setError(result.error || "Error al crear la cuenta");
     }

@@ -179,4 +179,5 @@ def _user_to_dict(user: User) -> dict[str, Any]:
         "PasswordHash": user.PasswordHash or "",
         "ID_Sheets": user.ID_Sheets or "",
         "OnboardingCompletado": bool(user.OnboardingCompletado),
+        "OnboardingStep": user.OnboardingStep or 0,
     }

@@ -138,6 +138,7 @@ async def google_auth(payload: GoogleAuthIn, db: AsyncSession = Depends(get_db))
         "token_type": "bearer",
         "is_new_user": is_new,
         "onboarding_completado": user.get("OnboardingCompletado", False),
+        "onboarding_step": user.get("OnboardingStep", 0),
         "user": {
             "id": user_id,
             "nombre": user.get("Nombre", ""),
@@ -171,6 +172,7 @@ async def login(payload: LoginIn, db: AsyncSession = Depends(get_db)):
         "access_token": token,
         "token_type": "bearer",
         "onboarding_completado": user.get("OnboardingCompletado", False),
+        "onboarding_step": user.get("OnboardingStep", 0),
         "user": {
             "id": str(user.get("id") or user.get("Id") or ""),
             "nombre": user.get("Nombre", ""),
@@ -196,6 +198,41 @@ async def mark_onboarding_complete(
     if not ok:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     return {"onboarding_completado": True}
+
+
+class OnboardingStepIn(BaseModel):
+    step: int
+
+
+@router.get("/onboarding/step")
+async def get_onboarding_step(
+    id_usuario: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get the user's current onboarding step."""
+    user = await get_user_by_id(db, id_usuario)
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    return {"step": user.get("OnboardingStep", 0)}
+
+
+@router.patch("/onboarding/step")
+async def set_onboarding_step(
+    payload: OnboardingStepIn,
+    id_usuario: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Save the user's current onboarding step."""
+    from sqlalchemy import select
+    from app.models.user import User
+    stmt = select(User).where(User.id == id_usuario)
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    user.OnboardingStep = payload.step
+    await db.flush()
+    return {"step": payload.step}
 
 
 class ProfileUpdate(BaseModel):
