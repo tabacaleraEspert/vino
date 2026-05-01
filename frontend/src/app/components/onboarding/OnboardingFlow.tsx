@@ -7,13 +7,15 @@ import { OnboardingStyles } from "./primitives";
 import { ScreenWelcome } from "./screens/ScreenWelcome";
 import { ScreenCategories } from "./screens/ScreenCategories";
 import { ScreenBudget } from "./screens/ScreenBudget";
+import { ScreenGmailConnect } from "./screens/ScreenGmailConnect";
 import { ScreenTourDashboard } from "./screens/ScreenTourDashboard";
 import { ScreenTourCard } from "./screens/ScreenTourCard";
 import { ScreenTourWhatsApp } from "./screens/ScreenTourWhatsApp";
 import { ScreenWhatsAppConnect } from "./screens/ScreenWhatsAppConnect";
 import { ScreenDone } from "./screens/ScreenDone";
 
-const TOTAL_STEPS = 8;
+// Steps: Welcome → Categories → Budget → Gmail → TourDashboard → TourCard → TourWhatsApp → WhatsAppConnect → Done
+const TOTAL_STEPS = 9;
 
 export function OnboardingFlow() {
   const [step, setStep] = useState(() => {
@@ -48,6 +50,20 @@ export function OnboardingFlow() {
     setIsLoading(false);
     goNext();
   }, [goNext, isLoading]);
+
+  const handleGmail = useCallback(async (authCode: string | null) => {
+    if (authCode) {
+      try {
+        await apiFetch("/gmail/connect", {
+          method: "POST",
+          body: JSON.stringify({ code: authCode }),
+        });
+      } catch (e) {
+        console.error("Gmail connect failed:", e);
+      }
+    }
+    goNext();
+  }, [goNext]);
 
   const handleWhatsApp = useCallback(async (phoneNumber: string | null) => {
     if (isLoading) return;
@@ -87,11 +103,12 @@ export function OnboardingFlow() {
       {step === 0 && <ScreenWelcome onNext={goNext} name={firstName} />}
       {step === 1 && <ScreenCategories onNext={goNext} />}
       {step === 2 && <ScreenBudget onNext={handleBudget} isLoading={isLoading} />}
-      {step === 3 && <ScreenTourDashboard onNext={goNext} />}
-      {step === 4 && <ScreenTourCard onNext={goNext} />}
-      {step === 5 && <ScreenTourWhatsApp onNext={goNext} />}
-      {step === 6 && <ScreenWhatsAppConnect onNext={handleWhatsApp} />}
-      {step === 7 && <ScreenDone onFinish={handleFinish} />}
+      {step === 3 && <ScreenGmailConnect onNext={handleGmail} />}
+      {step === 4 && <ScreenTourDashboard onNext={goNext} />}
+      {step === 5 && <ScreenTourCard onNext={goNext} />}
+      {step === 6 && <ScreenTourWhatsApp onNext={goNext} />}
+      {step === 7 && <ScreenWhatsAppConnect onNext={handleWhatsApp} />}
+      {step === 8 && <ScreenDone onFinish={handleFinish} />}
     </>
   );
 }
