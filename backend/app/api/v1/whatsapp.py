@@ -1032,10 +1032,71 @@ async def whatsapp_webhook(
         intent = await classify_intent(body)
         command_data = {}
 
+    # --- 5b. Detect presupuesto/categoría queries before routing ---
+    body_lower = body.lower()
+    is_budget_query = any(w in body_lower for w in [
+        "presupuesto", "presupuestos", "budget",
+        "cuanto me queda", "cuánto me queda", "como viene mi presupuesto",
+        "cómo viene mi presupuesto",
+    ])
+    is_category_query = any(w in body_lower for w in [
+        "categoria", "categoría", "categorias", "categorías",
+        "listame", "listá", "lista",
+    ]) and any(w in body_lower for w in [
+        "tengo", "hay", "lista", "cuales", "cuáles", "que", "qué", "mis",
+    ])
+
     # --- 6. Route by intent ---
     reply = ""
     try:
-        if intent == Intent.DATA:
+        # Budget query — show presupuestos
+        if intent == Intent.QUERY and is_budget_query:
+            from app.services.presupuesto_analysis import budget_vs_actual
+            from datetime import date as _d
+            today = _d.today()
+            period = f"{today.year}-{today.month:02d}"
+            try:
+                analysis = await budget_vs_actual(db, user_id, period)
+                lines = [f"📊 *Presupuesto {analysis['period']}*"]
+                total_p = analysis["total_presupuesto"]
+                total_g = analysis["total_gastado"]
+                pct = analysis["pct_usado_global"]
+                lines.append(f"💰 Total: ${total_p:,.0f}".replace(",", "."))
+                lines.append(f"💸 Gastado: ${total_g:,.0f} ({pct:.0f}%)".replace(",", "."))
+                lines.append(f"✅ Disponible: ${analysis['total_restante']:,.0f}".replace(",", "."))
+                lines.append("")
+                for cat in analysis.get("categorias", []):
+                    emoji = "🟢" if cat["pct_usado"] < 80 else "🟡" if cat["pct_usado"] < 100 else "🔴"
+                    lines.append(
+                        f"{emoji} *{cat['categoria']}*: ${cat['gastado']:,.0f} / ${cat['presupuesto']:,.0f} ({cat['pct_usado']:.0f}%)".replace(",", ".")
+                    )
+                reply = "\n".join(lines)
+            except Exception as e:
+                logger.error("Budget query failed: %s", e)
+                reply = "No pude cargar tus presupuestos."
+
+        # Category listing
+        elif intent == Intent.QUERY and is_category_query:
+            from app.repositories.categoria_repo import list_categorias, list_subcategorias
+            from app.lib.categoryIcons import resolve_icon  # noqa: might not exist
+            cats = await _list_cats(db, user_id)
+            subs = await list_subcategorias(db, user_id)
+            sub_by_cat: dict[int, list] = {}
+            for s in subs:
+                cid = s.get("categoria_id")
+                if cid:
+                    sub_by_cat.setdefault(cid, []).append(s)
+
+            lines = [f"📂 *Tus categorías ({len(cats)}):*"]
+            for cat in cats:
+                cat_subs = sub_by_cat.get(cat["id"], [])
+                sub_names = ", ".join(s.get("nombre", "") for s in cat_subs[:5])
+                lines.append(f"\n*{cat['nombre']}*")
+                if sub_names:
+                    lines.append(f"  _{sub_names}_")
+            reply = "\n".join(lines)
+
+        elif intent == Intent.DATA:
             result = await register_expense(
                 payload=RegisterExpenseRequest(user_id=user_id, message=body, user_name=user_name),
                 db=db,
