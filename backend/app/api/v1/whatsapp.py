@@ -945,9 +945,12 @@ async def whatsapp_webhook(
     # --- 3. Handle media (photo or audio) ---
     if media_url:
         media_type = str(form.get("MediaContentType0", "")).lower()
+        msg_type = str(form.get("MessageType", "")).lower()
+        logger.info("webhook media: type=%s msgtype=%s url=%s", media_type, msg_type, str(media_url)[:80])
 
         # Audio → transcribe with Whisper, then process as text
-        if "audio" in media_type or "ogg" in media_type:
+        is_audio = "audio" in media_type or "ogg" in media_type or msg_type == "audio"
+        if is_audio:
             await send_whatsapp(wpp_from, _random.choice([
                 "Escuchando tu audio... 🎧",
                 "Procesando tu mensaje de voz...",
@@ -955,18 +958,25 @@ async def whatsapp_webhook(
             ]))
             try:
                 import httpx
+                import io
                 from openai import AsyncOpenAI
-                from app.core.config import settings as _settings
+                from app.core.config import settings as _cfg
 
-                # Download audio from Twilio
+                # Download audio from Twilio (needs basic auth)
                 async with httpx.AsyncClient() as http:
-                    auth = (settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
-                    audio_resp = await http.get(str(media_url), auth=auth, follow_redirects=True, timeout=15)
+                    audio_resp = await http.get(
+                        str(media_url),
+                        auth=(_cfg.TWILIO_ACCOUNT_SID, _cfg.TWILIO_AUTH_TOKEN),
+                        follow_redirects=True,
+                        timeout=30,
+                    )
+                    logger.info("Audio download: status=%d size=%d", audio_resp.status_code, len(audio_resp.content))
+                    if audio_resp.status_code != 200:
+                        raise ValueError(f"Download failed: {audio_resp.status_code}")
                     audio_bytes = audio_resp.content
 
                 # Transcribe with Whisper
-                client = AsyncOpenAI(api_key=_settings.OPENAI_API_KEY)
-                import io
+                client = AsyncOpenAI(api_key=_cfg.OPENAI_API_KEY)
                 audio_file = io.BytesIO(audio_bytes)
                 audio_file.name = "audio.ogg"
                 transcript = await client.audio.transcriptions.create(
