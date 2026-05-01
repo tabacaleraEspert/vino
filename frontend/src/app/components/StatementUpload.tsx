@@ -183,6 +183,28 @@ export function StatementUpload() {
             <span className="flex items-center gap-1"><Image className="w-3.5 h-3.5" /> JPG / PNG</span>
             <span>Max 10MB</span>
           </div>
+
+          {/* Supported banks + template */}
+          <div className="mt-6 pt-5 border-t border-gray-100 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold text-gray-600">Bancos con parser automatico</p>
+                <p className="text-xs text-gray-400 mt-0.5">Santander (PDF Visa y Excel)</p>
+              </div>
+              <span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">NATIVO</span>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400">Otros bancos: subi el PDF o screenshot y la IA extrae las transacciones.</p>
+            </div>
+            <a
+              href={`${import.meta.env.VITE_API_URL || "https://vino-backend-bkbge8cwfffsdrhc.brazilsouth-01.azurewebsites.net/api/v1"}/statement/template`}
+              download
+              className="inline-flex items-center gap-2 text-xs font-medium text-purple-600 hover:text-purple-700 transition-colors"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              Descargar plantilla Excel
+            </a>
+          </div>
         </div>
       )}
 
