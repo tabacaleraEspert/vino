@@ -13,6 +13,7 @@ import { UncategorizedReview } from "./components/UncategorizedReview";
 import { Chat } from "./components/Chat";
 import { Debts } from "./components/Debts";
 import { Wallets } from "./components/Wallets";
+import { Settings } from "./components/Settings";
 import { Login } from "./components/Login";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { OnboardingFlow } from "./components/onboarding/OnboardingFlow";
@@ -46,6 +47,7 @@ export const router = createBrowserRouter([
       { path: "chat", Component: Chat },
       { path: "debts", Component: Debts },
       { path: "wallets", Component: Wallets },
+      { path: "settings", Component: Settings },
       { path: "admin", Component: AdminPanel },
     ],
   },

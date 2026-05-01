@@ -1,6 +1,6 @@
 import { Outlet, NavLink } from "react-router";
 import { useEffect, useState } from "react";
-import { Home, Receipt, FolderOpen, Wallet, Store, TrendingUp, LogOut, RefreshCw, Upload, MessageCircle, MoreHorizontal, Users, CreditCard } from "lucide-react";
+import { Home, Receipt, FolderOpen, Wallet, Store, TrendingUp, LogOut, RefreshCw, Upload, MessageCircle, MoreHorizontal, Users, CreditCard, Settings as SettingsIcon } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useData } from "../context/DataContext";
 import { useNavigate } from "react-router";
@@ -38,6 +38,7 @@ export function RootLayout() {
     { to: "/wallets", icon: CreditCard, label: "Billeteras" },
     { to: "/debts", icon: Users, label: "Me deben" },
     { to: "/uncategorized", icon: FolderOpen, label: "Sin categorizar" },
+    { to: "/settings", icon: SettingsIcon, label: "Configuracion" },
   ];
 
   return (
