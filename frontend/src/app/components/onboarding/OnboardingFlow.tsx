@@ -13,8 +13,6 @@ import { ScreenTourWhatsApp } from "./screens/ScreenTourWhatsApp";
 import { ScreenWhatsAppConnect } from "./screens/ScreenWhatsAppConnect";
 import { ScreenDone } from "./screens/ScreenDone";
 
-// Steps: Welcome → Categories → Budget → TourDashboard → TourCard → TourWhatsApp → WhatsAppConnect → Done
-// ScreenGmail is skipped (user already authenticated via Login page)
 const TOTAL_STEPS = 8;
 
 export function OnboardingFlow() {
@@ -22,6 +20,7 @@ export function OnboardingFlow() {
     const saved = localStorage.getItem("onboarding_step");
     return saved ? Math.min(parseInt(saved, 10), TOTAL_STEPS - 1) : 0;
   });
+  const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const { user, markOnboardingDone } = useAuth();
 
@@ -34,7 +33,8 @@ export function OnboardingFlow() {
   }, []);
 
   const handleBudget = useCallback(async (income: number) => {
-    // Call auto-assign to create budgets with 50/30/20 rule
+    if (isLoading) return;
+    setIsLoading(true);
     try {
       const today = new Date();
       const mes = `${String(today.getMonth() + 1).padStart(2, "0")}/${String(today.getFullYear() % 100).padStart(2, "0")}`;
@@ -44,12 +44,14 @@ export function OnboardingFlow() {
       });
     } catch (e) {
       console.error("Auto-assign failed:", e);
-      // Non-blocking — continue onboarding even if this fails
     }
+    setIsLoading(false);
     goNext();
-  }, [goNext]);
+  }, [goNext, isLoading]);
 
   const handleWhatsApp = useCallback(async (phoneNumber: string | null) => {
+    if (isLoading) return;
+    setIsLoading(true);
     if (phoneNumber) {
       try {
         await apiFetch("/auth/profile", {
@@ -60,10 +62,13 @@ export function OnboardingFlow() {
         console.error("WhatsApp connect failed:", e);
       }
     }
+    setIsLoading(false);
     goNext();
-  }, [goNext]);
+  }, [goNext, isLoading]);
 
   const handleFinish = useCallback(async () => {
+    if (isLoading) return;
+    setIsLoading(true);
     try {
       await apiFetch("/auth/onboarding", { method: "PATCH" });
     } catch (e) {
@@ -72,7 +77,7 @@ export function OnboardingFlow() {
     markOnboardingDone();
     localStorage.removeItem("onboarding_step");
     navigate("/", { replace: true });
-  }, [navigate, markOnboardingDone]);
+  }, [navigate, markOnboardingDone, isLoading]);
 
   const firstName = user?.name?.split(" ")[0] || "amig@";
 
@@ -81,7 +86,7 @@ export function OnboardingFlow() {
       <OnboardingStyles />
       {step === 0 && <ScreenWelcome onNext={goNext} name={firstName} />}
       {step === 1 && <ScreenCategories onNext={goNext} />}
-      {step === 2 && <ScreenBudget onNext={handleBudget} />}
+      {step === 2 && <ScreenBudget onNext={handleBudget} isLoading={isLoading} />}
       {step === 3 && <ScreenTourDashboard onNext={goNext} />}
       {step === 4 && <ScreenTourCard onNext={goNext} />}
       {step === 5 && <ScreenTourWhatsApp onNext={goNext} />}

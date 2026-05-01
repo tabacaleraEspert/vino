@@ -1,4 +1,5 @@
 import { apiFetch, getApiToken } from "./api/client";
+import { resolveIcon } from "./categoryIcons";
 export { apiFetch, setApiToken, setOnUnauthorized, getApiToken } from "./api/client";
 
 // Tipos
@@ -519,7 +520,7 @@ export function mapCatalogToCategories(
     return {
       id: cat.id,
       name: cat.nombre,
-      icon: cat.icon || "📁",
+      icon: resolveIcon(cat.icon, cat.nombre),
       color: cat.color || "#6b7280",
       subcategories: subcats.map((s) => ({
         id: getSubId(s),

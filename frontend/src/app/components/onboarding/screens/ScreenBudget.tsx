@@ -52,9 +52,10 @@ const TIERS = [
 
 interface Props {
   onNext: (income: number) => void;
+  isLoading?: boolean;
 }
 
-export function ScreenBudget({ onNext }: Props) {
+export function ScreenBudget({ onNext, isLoading = false }: Props) {
   const [step, setStep] = useState(0);
   const [income, setIncome] = useState(1500000);
   const [animIncome, setAnimIncome] = useState(income);
@@ -424,7 +425,8 @@ export function ScreenBudget({ onNext }: Props) {
           ←
         </button>
         <button
-          onClick={() => onNext(income)}
+          onClick={() => !isLoading && onNext(income)}
+          disabled={isLoading}
           style={{
             flex: 1,
             background: ink,
@@ -435,12 +437,21 @@ export function ScreenBudget({ onNext }: Props) {
             fontSize: 16,
             fontWeight: 700,
             letterSpacing: -0.2,
-            cursor: "pointer",
-            boxShadow: "0 8px 24px rgba(10,10,10,0.18)",
+            cursor: isLoading ? "not-allowed" : "pointer",
+            opacity: isLoading ? 0.5 : 1,
+            boxShadow: isLoading ? "none" : "0 8px 24px rgba(10,10,10,0.18)",
             fontFamily: "-apple-system, system-ui, sans-serif",
+            transition: "opacity .2s",
           }}
         >
-          Crear presupuesto →
+          {isLoading ? (
+            <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+              <span style={{ width: 18, height: 18, border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin .8s linear infinite", display: "inline-block" }} />
+              Creando presupuesto...
+            </span>
+          ) : (
+            "Crear presupuesto →"
+          )}
         </button>
       </div>
     </Frame>

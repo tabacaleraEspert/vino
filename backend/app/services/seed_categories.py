@@ -14,46 +14,48 @@ BUCKET_NECESIDADES = "necesidades"    # 50%
 BUCKET_ESTILO_VIDA = "estilo_vida"    # 30%
 BUCKET_FUTURO = "futuro"              # 20%
 
+# Icons as text keys — SQL Server NVARCHAR can't store emoji (supplementary Unicode).
+# The frontend maps these keys to actual emoji via CATEGORY_ICONS.
 DEFAULT_CATEGORIES = [
     # ── Necesidades (50%) ──
     {
         "nombre": "Vivienda",
-        "icon": "🏠",
+        "icon": "casa",
         "color": "#ec4899",
         "bucket": BUCKET_NECESIDADES,
         "subcategorias": ["Alquiler", "Expensas", "Hipoteca", "Mantenimiento"],
     },
     {
         "nombre": "Comida",
-        "icon": "🍴",
+        "icon": "comida",
         "color": "#14b8a6",
         "bucket": BUCKET_NECESIDADES,
         "subcategorias": ["Súper", "Almacén", "Verdulería", "Carnicería", "Delivery"],
     },
     {
         "nombre": "Transporte",
-        "icon": "🚗",
+        "icon": "auto",
         "color": "#f97316",
         "bucket": BUCKET_NECESIDADES,
         "subcategorias": ["Nafta", "SUBE", "Uber", "Estacionamiento", "Peajes"],
     },
     {
         "nombre": "Servicios",
-        "icon": "💡",
+        "icon": "servicios",
         "color": "#eab308",
         "bucket": BUCKET_NECESIDADES,
         "subcategorias": ["Luz", "Gas", "Agua", "Internet", "Celular"],
     },
     {
         "nombre": "Salud",
-        "icon": "💊",
+        "icon": "salud",
         "color": "#06b6d4",
         "bucket": BUCKET_NECESIDADES,
         "subcategorias": ["Prepaga", "Farmacia", "Consultas", "Gimnasio"],
     },
     {
         "nombre": "Educación",
-        "icon": "🎓",
+        "icon": "educacion",
         "color": "#8b5cf6",
         "bucket": BUCKET_NECESIDADES,
         "subcategorias": ["Cuotas", "Cursos", "Libros"],
@@ -61,21 +63,21 @@ DEFAULT_CATEGORIES = [
     # ── Estilo de vida (30%) ──
     {
         "nombre": "Salidas",
-        "icon": "🍻",
+        "icon": "salidas",
         "color": "#ef4444",
         "bucket": BUCKET_ESTILO_VIDA,
         "subcategorias": ["Restaurantes", "Bar", "Café", "Eventos"],
     },
     {
         "nombre": "Ocio",
-        "icon": "🎬",
+        "icon": "ocio",
         "color": "#d946ef",
         "bucket": BUCKET_ESTILO_VIDA,
         "subcategorias": ["Cine", "Streaming", "Viajes", "Hobbies"],
     },
     {
         "nombre": "Compras",
-        "icon": "👕",
+        "icon": "compras",
         "color": "#57534e",
         "bucket": BUCKET_ESTILO_VIDA,
         "subcategorias": ["Ropa", "Calzado", "Hogar", "Tecnología"],
@@ -83,14 +85,14 @@ DEFAULT_CATEGORIES = [
     # ── Futuro (20%) ──
     {
         "nombre": "Ahorro",
-        "icon": "💰",
+        "icon": "ahorro",
         "color": "#10b981",
         "bucket": BUCKET_FUTURO,
         "subcategorias": ["Caja", "Plazo fijo", "Emergencia", "Metas"],
     },
     {
         "nombre": "Inversión",
-        "icon": "📈",
+        "icon": "inversion",
         "color": "#3b82f6",
         "bucket": BUCKET_FUTURO,
         "subcategorias": ["Acciones", "FCI", "Cripto", "Dólar"],
