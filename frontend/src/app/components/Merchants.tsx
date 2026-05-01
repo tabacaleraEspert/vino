@@ -2,10 +2,11 @@ import { useData } from "../context/DataContext";
 import { parseDateLocal } from "../../lib/api";
 import { Store, Plus, ChevronRight, Search, Calendar, Trash2 } from "lucide-react";
 import { Link } from "react-router";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { toast } from "sonner";
 import { CreateMerchantModal } from "./CreateMerchantModal";
 import { CreateRuleModal } from "./CreateRuleModal";
+import { ComerciosExplainerModal, CEHelpButton } from "./ComerciosExplainerModal";
 
 type SortOrder = "alfa" | "nuevo" | "viejo";
 type CreatedFilter = "all" | "7" | "15" | "30";
@@ -28,6 +29,21 @@ export function Merchants() {
     id: string;
     name: string;
   } | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
+  const [helpSeen, setHelpSeen] = useState(() => localStorage.getItem("comercios_explainer_seen") === "1");
+
+  // Auto-show on first visit
+  useEffect(() => {
+    if (!helpSeen) setShowHelp(true);
+  }, [helpSeen]);
+
+  const closeHelp = () => {
+    setShowHelp(false);
+    if (!helpSeen) {
+      localStorage.setItem("comercios_explainer_seen", "1");
+      setHelpSeen(true);
+    }
+  };
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isDeletingEmpty, setIsDeletingEmpty] = useState(false);
 
@@ -122,7 +138,10 @@ export function Merchants() {
     <div className="p-4 space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="font-semibold">Comercios y Reglas</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="font-semibold">Comercios y Reglas</h2>
+          <CEHelpButton onClick={() => setShowHelp(true)} pulse={!helpSeen} />
+        </div>
         <div className="flex items-center gap-2">
           {merchantStats.filter((m) => m.transactionCount === 0).length > 0 && (
             <button
@@ -154,13 +173,8 @@ export function Merchants() {
         </div>
       </div>
 
-      {/* Información */}
-      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-        <p className="text-sm text-blue-800">
-          Las reglas de comercio asignan automáticamente categorías a tus
-          transacciones según el comercio.
-        </p>
-      </div>
+      {/* Explainer modal */}
+      <ComerciosExplainerModal open={showHelp} onClose={closeHelp} />
 
       {/* Búsqueda y ordenamiento */}
       <div className="flex flex-col sm:flex-row gap-3">
