@@ -214,6 +214,11 @@ async def poll_user_gmail(
         except Exception as e:
             logger.error("Error processing Gmail message %s for user %d: %s", msg_id, user_id, e)
             stats["errors"] += 1
+            # Rollback so next message can proceed
+            try:
+                await db.rollback()
+            except Exception:
+                pass
 
     # Update last polled and last message ID
     stmt = select(User).where(User.id == user_id)

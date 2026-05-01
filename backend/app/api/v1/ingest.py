@@ -24,9 +24,27 @@ from app.utils.parse_utils import parse_date_flex, parse_money
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Defaults para gastos sin regla (según lógica actual de n8n)
-DEFAULT_CATEGORIA_ID = 6       # "Otros"
-DEFAULT_SUBCATEGORIA_ID = 42   # "Gastos no categorizados"
+async def _get_default_category(db, id_usuario: int) -> tuple[int | None, int | None]:
+    """Get the user's 'Otros' category + first subcategory as default."""
+    from sqlalchemy import select, and_
+    from app.models.categoria import Categoria
+    from app.models.subcategoria import SubCategoria
+    stmt = select(Categoria).where(and_(
+        Categoria.Id_usuario == id_usuario,
+        Categoria.Nombre.in_(["Otros", "otros"]),
+    ))
+    result = await db.execute(stmt)
+    cat = result.scalar_one_or_none()
+    if not cat:
+        return None, None
+    # Get first subcategory
+    stmt2 = select(SubCategoria.Id).where(and_(
+        SubCategoria.Id_usuario == id_usuario,
+        SubCategoria.Id_Categoria == cat.Id,
+    )).limit(1)
+    result2 = await db.execute(stmt2)
+    sub_id = result2.scalar_one_or_none()
+    return cat.Id, sub_id
 
 
 @router.post("")
@@ -170,8 +188,7 @@ async def process_ingest(db: AsyncSession, payload: Dict[str, Any]) -> Dict[str,
                 id_categoria = ai_cat_id
                 id_subcategoria = ai_sub_id
             else:
-                id_categoria = DEFAULT_CATEGORIA_ID
-                id_subcategoria = DEFAULT_SUBCATEGORIA_ID
+                id_categoria, id_subcategoria = await _get_default_category(db, id_usuario)
 
             try:
                 regla_match = await create_regla(
