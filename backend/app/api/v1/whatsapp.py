@@ -830,3 +830,182 @@ async def recategorize_expense(
     )
 
     return {"status": "updated", "reply": reply, "categoria": matched_cat["nombre"]}
+
+
+# ---------------------------------------------------------------------------
+# Unified webhook — replaces n8n orchestration
+# ---------------------------------------------------------------------------
+
+from fastapi import Form, Request
+
+
+@router.post("/webhook")
+async def whatsapp_webhook(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Unified Twilio webhook — receives WhatsApp messages, classifies intent,
+    executes the action, and sends the response back via Twilio.
+
+    Replaces the n8n orchestration layer entirely.
+    """
+    from app.services.twilio_client import send_whatsapp
+
+    # Parse Twilio form-encoded webhook
+    form = await request.form()
+    wpp_from = str(form.get("From", "")).strip()
+    body = str(form.get("Body", "")).strip()
+    button_payload = form.get("ButtonPayload")
+    media_url = form.get("MediaUrl0")
+
+    if not wpp_from:
+        return {"status": "ignored", "reason": "no From"}
+
+    # --- 1. Resolve user ---
+    user = await get_user_by_wpp(db, wpp_from)
+    if not user:
+        logger.warning("webhook: unknown sender %s", wpp_from)
+        return {"status": "ignored", "reason": "unknown user"}
+
+    user_id = user["id"]
+    user_name = user.get("Nombre", "")
+
+    # --- 2. Onboarding check ---
+    from datetime import date, timedelta
+    try:
+        six_months_ago = date.today() - timedelta(days=180)
+        total_movs = await _count_gastos(db, user_id, six_months_ago, date.today())
+        is_new_user = total_movs == 0
+    except Exception:
+        is_new_user = False
+
+    if is_new_user:
+        reply = (
+            f"Hola {user_name}! Soy *Vino*, tu asistente de finanzas personales.\n\n"
+            f"Registra gastos mandandome mensajes como:\n"
+            f'_"Almorce $3.500 en el centro"_\n'
+            f'_"Gaste 50k en ropa"_\n'
+            f'_"Uber 2500"_\n\n'
+            f"Tambien podes preguntarme:\n"
+            f'_"Cuanto gaste este mes?"_\n'
+            f'_"Puedo comprarme unas zapatillas de 80k?"_\n\n'
+            f"Empeza registrando tu primer gasto!"
+        )
+        await send_whatsapp(wpp_from, reply)
+        return {"status": "onboarding"}
+
+    # --- 3. Handle photo/ticket ---
+    if media_url:
+        try:
+            result = await register_from_ticket_photo(
+                user_id=user_id,
+                image_url=str(media_url),
+                db=db,
+            )
+            reply = result.get("reply", "No pude leer la imagen.")
+            await send_whatsapp(wpp_from, reply)
+            return {"status": "ticket_processed"}
+        except Exception as e:
+            logger.error("Ticket photo failed: %s", e)
+            await send_whatsapp(wpp_from, "No pude procesar la imagen. Proba con una foto mas clara.")
+            return {"status": "ticket_error"}
+
+    if not body:
+        return {"status": "ignored", "reason": "empty body"}
+
+    # --- 4. Detect command ---
+    cmd = detect_command(body, str(button_payload) if button_payload else None)
+    if cmd:
+        intent = cmd["intent"]
+        command_data = cmd["command_data"]
+    else:
+        # --- 5. Classify with AI ---
+        intent = await classify_intent(body)
+        command_data = {}
+
+    # --- 6. Route by intent ---
+    reply = ""
+    try:
+        if intent == Intent.DATA:
+            result = await register_expense(
+                payload=RegisterExpenseRequest(user_id=user_id, message=body, user_name=user_name),
+                db=db,
+            )
+            reply = result.get("reply", "Registrado.")
+
+        elif intent == Intent.QUERY:
+            result = await whatsapp_query(
+                payload=QueryRequest(user_id=user_id, message=body, user_name=user_name),
+                db=db,
+            )
+            reply = result.get("reply", "No pude responder.")
+
+        elif intent == Intent.SUGERENCIAS:
+            result = await suggest_purchase(
+                payload=PurchaseAdviceRequest(user_id=user_id, message=body, user_name=user_name),
+                db=db,
+            )
+            reply = result.get("reply", "No pude analizar.")
+
+        elif intent == Intent.WEEKLY_RESUME:
+            result = await whatsapp_monthly_summary(
+                payload=MonthlySummaryRequest(user_id=user_id),
+                db=db,
+            )
+            reply = result.get("reply", "No pude generar el resumen.")
+
+        elif intent == Intent.CATEGORIZACION:
+            mov_id = command_data.get("movimiento_id")
+            nueva_cat = command_data.get("nueva_categoria", "")
+            if mov_id and nueva_cat:
+                result = await recategorize_expense(
+                    payload=RecategorizeRequest(
+                        user_id=user_id,
+                        movimiento_id=mov_id,
+                        nueva_categoria=nueva_cat,
+                    ),
+                    db=db,
+                )
+                reply = result.get("reply", "Actualizado.")
+            elif mov_id:
+                # Just CATEGORIZAR <id> — list categories
+                cats = await _list_cats(db, user_id)
+                cat_names = ", ".join(c["nombre"] for c in cats)
+                reply = (
+                    f"Para cambiar la categoria del gasto #{mov_id}, "
+                    f"manda:\n_CAMBIAR {mov_id} <categoria>_\n\n"
+                    f"Categorias: {cat_names}"
+                )
+            else:
+                reply = "Usa: _CAMBIAR <id> <categoria>_"
+
+        elif intent == Intent.PRESUPUESTO:
+            # Query about budget
+            result = await whatsapp_query(
+                payload=QueryRequest(user_id=user_id, message=body, user_name=user_name),
+                db=db,
+            )
+            reply = result.get("reply", "No pude responder.")
+
+        elif intent == Intent.OTHER:
+            reply = (
+                f"No entendi tu mensaje, {user_name}.\n\n"
+                f"Podes:\n"
+                f'• Registrar gastos: _"Gaste 5000 en cafe"_\n'
+                f'• Consultar: _"Cuanto gaste este mes?"_\n'
+                f'• Pedir consejo: _"Puedo comprarme unas zapas de 80k?"_'
+            )
+
+        else:
+            reply = "No entendi. Proba de nuevo."
+
+    except Exception as e:
+        logger.error("webhook intent=%s error: %s", intent, e)
+        reply = "Hubo un error procesando tu mensaje. Proba de nuevo."
+
+    # --- 7. Send reply ---
+    if reply:
+        await send_whatsapp(wpp_from, reply)
+
+    return {"status": "ok", "intent": str(intent)}
