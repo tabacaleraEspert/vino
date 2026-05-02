@@ -251,29 +251,33 @@ export function EditTransactionModal({
           </div>
 
           {/* Cuotas */}
-          {cuotaTotal && cuotaTotal > 1 && (
+          {(transaction.cuotaTotal ?? 0) > 1 && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
               <p className="text-xs font-semibold text-blue-800 mb-2">Cuotas</p>
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1.5">
                   <label className="text-xs text-blue-700">Cuota</label>
                   <input
-                    type="number"
-                    min={1}
-                    max={cuotaTotal}
-                    value={cuotaActual || 1}
-                    onChange={(e) => setCuotaActual(Math.max(1, Math.min(cuotaTotal, parseInt(e.target.value) || 1)))}
+                    type="text"
+                    inputMode="numeric"
+                    value={cuotaActual ?? ""}
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/\D/g, "");
+                      setCuotaActual(v ? parseInt(v, 10) : null);
+                    }}
                     className="w-14 px-2 py-1.5 text-sm bg-white border border-blue-300 rounded-lg outline-none text-center"
                   />
                 </div>
                 <span className="text-xs text-blue-600 font-bold">de</span>
                 <div className="flex items-center gap-1.5">
                   <input
-                    type="number"
-                    min={1}
-                    max={48}
-                    value={cuotaTotal}
-                    onChange={(e) => setCuotaTotal(Math.max(1, parseInt(e.target.value) || 1))}
+                    type="text"
+                    inputMode="numeric"
+                    value={cuotaTotal ?? ""}
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/\D/g, "");
+                      setCuotaTotal(v ? parseInt(v, 10) : null);
+                    }}
                     className="w-14 px-2 py-1.5 text-sm bg-white border border-blue-300 rounded-lg outline-none text-center"
                   />
                   <label className="text-xs text-blue-700">cuotas</label>

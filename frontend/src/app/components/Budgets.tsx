@@ -102,6 +102,8 @@ export function Budgets() {
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [editingTotal, setEditingTotal] = useState(false);
+  const [newTotal, setNewTotal] = useState("");
 
   const period = `${selectedMonth.year}-${String(selectedMonth.month + 1).padStart(2, "0")}`;
   const budgetsForMonth = budgets.filter((b) => {
@@ -179,6 +181,23 @@ export function Budgets() {
     }
   };
 
+  const handleEditTotal = () => {
+    setNewTotal(String(totalAmount));
+    setEditingTotal(true);
+  };
+
+  const handleSaveTotal = async () => {
+    const parsed = parseInt(newTotal.replace(/[^\d]/g, ""), 10);
+    if (!parsed || parsed <= 0) return;
+    const ratio = parsed / totalAmount;
+    // Redistribute proportionally
+    for (const { budget } of budgetsWithSpent) {
+      const newAmount = Math.round(budget.amount * ratio);
+      await updateBudget(budget.id, { amount: newAmount });
+    }
+    setEditingTotal(false);
+  };
+
   const hasBudgets = budgetsWithSpent.length > 0;
 
   return (
@@ -235,9 +254,28 @@ export function Budgets() {
           <Trash2 className="w-4 h-4" />
         </button>
         <p className="text-sm opacity-90 mb-1">Presupuesto Total</p>
-        <p className="text-3xl font-bold mb-4">
-          ${totalAmount.toLocaleString("es-AR")}
-        </p>
+        {editingTotal ? (
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-3xl font-bold">$</span>
+            <input
+              autoFocus
+              type="text"
+              inputMode="numeric"
+              value={parseInt(newTotal.replace(/[^\d]/g, "") || "0", 10).toLocaleString("es-AR")}
+              onChange={(e) => setNewTotal(e.target.value.replace(/[^\d]/g, ""))}
+              onKeyDown={(e) => e.key === "Enter" && handleSaveTotal()}
+              className="text-3xl font-bold bg-white/20 border-b-2 border-white rounded-lg px-2 py-1 outline-none w-48 text-white placeholder:text-white/50"
+            />
+            <button onClick={handleSaveTotal} className="p-2 bg-white/20 rounded-lg hover:bg-white/30">
+              <CheckCircle2 className="w-5 h-5" />
+            </button>
+          </div>
+        ) : (
+          <button onClick={handleEditTotal} className="text-3xl font-bold mb-4 flex items-center gap-2 hover:opacity-80 transition-opacity">
+            ${totalAmount.toLocaleString("es-AR")}
+            <Pencil className="w-4 h-4 opacity-60" />
+          </button>
+        )}
         <div className="flex items-center justify-between text-sm">
           <div>
             <p className="opacity-75">Gastado</p>

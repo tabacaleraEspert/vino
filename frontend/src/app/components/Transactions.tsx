@@ -22,7 +22,7 @@ import { api, parseDateLocal, type Transaction } from "../../lib/api";
 export function Transactions() {
   const navigate = useNavigate();
   const { token } = useAuth();
-  const { categories, merchants, transactions, deleteTransaction, refresh } = useData();
+  const { categories, merchants, transactions, deleteTransaction, refresh, isLoading } = useData();
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [transactionToDelete, setTransactionToDelete] = useState<Transaction | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -245,7 +245,12 @@ export function Transactions() {
       )}
 
       {/* Resultados */}
-      {filteredTransactions.length === 0 ? (
+      {isLoading ? (
+        <div className="bg-white rounded-xl p-8 text-center shadow-sm">
+          <div className="w-10 h-10 border-3 border-gray-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-sm text-gray-500">Cargando transacciones...</p>
+        </div>
+      ) : filteredTransactions.length === 0 ? (
         <div className="bg-white rounded-xl p-8 text-center shadow-sm">
           <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
             <Search className="w-8 h-8 text-gray-400" />
