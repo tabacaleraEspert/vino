@@ -356,6 +356,152 @@ def _parse_santander_amount(s: str) -> float | None:
 
 
 def _parse_bbva_pdf_text(full_text: str) -> dict:
+    """Parse BBVA PDF — auto-detects credit card vs caja de ahorro format."""
+    # Credit card format has "Tarjetas de Crédito" or "Consumos"
+    is_credit_card = "Tarjetas de Cr" in full_text or "Mastercard" in full_text or "VISA" in full_text
+    if is_credit_card and "Consumos" in full_text:
+        return _parse_bbva_credit_card(full_text)
+    return _parse_bbva_caja_ahorro(full_text)
+
+
+_BBVA_MONTH_MAP = {
+    "ene": "01", "feb": "02", "mar": "03", "abr": "04",
+    "may": "05", "jun": "06", "jul": "07", "ago": "08",
+    "sep": "09", "oct": "10", "nov": "11", "dic": "12",
+}
+
+
+def _parse_bbva_credit_card(full_text: str) -> dict:
+    """Parse BBVA credit card (Mastercard/Visa) PDF."""
+    lines = full_text.split("\n")
+    transactions: list[dict] = []
+
+    # Detect card type
+    card_info = "BBVA Tarjeta de Crédito"
+    if "Mastercard" in full_text:
+        card_info = "BBVA Mastercard"
+    elif "VISA" in full_text:
+        card_info = "BBVA Visa"
+
+    # Skip patterns
+    skip_patterns = [
+        "SU PAGO", "CR.RG", "DB.RG", "TOTAL CONSUMOS", "SALDO ACTUAL",
+        "SALDO ANTERIOR", "DEVOLUCION", "IIBB PERCEP", "IVA RG",
+        "IMPUESTO", "COMISION", "COM CUENTA",
+    ]
+
+    # Parse sections: only extract from "Consumos ..." sections, skip "Sus pagos" and "Impuestos"
+    in_consumos = False
+    stop_sections = [
+        "Impuestos, cargos e intereses", "Legales y avisos",
+        "Sus pagos y ajustes", "SALDO ACTUAL", "TOTAL CONSUMOS",
+    ]
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        # Detect "Consumos [Name]" section
+        if re.match(r"^Consumos\s+", stripped):
+            in_consumos = True
+            continue
+
+        # Detect stop sections
+        if any(s in stripped for s in stop_sections):
+            in_consumos = False
+            continue
+
+        # Skip headers
+        if "FECHA" in stripped and "DESCRIPCIÓN" in stripped:
+            continue
+
+        if not in_consumos:
+            continue
+
+        # Skip non-transaction rows
+        if any(skip in stripped for skip in skip_patterns):
+            continue
+
+        # Parse: DD-Mon-YY  DESCRIPTION  [NRO.CUPÓN]  [PESOS]  [DÓLARES]
+        # Examples:
+        #   04-Mar-26 PERSONAL PERSFLOW75010002 03/2 043783 107.726,80
+        #   06-Mar-26 OPENAI *CHATGPT SUBSCR USD 20,00 599549 20,00
+        #   16-Mar-26 LinkedInPreA *23461733 USD 1,44 211122 1,44
+        m = re.match(r"^\s*(\d{2})-(\w{3})-(\d{2})\s+(.+)$", stripped)
+        if not m:
+            continue
+
+        day = m.group(1)
+        month_str = m.group(2).lower()
+        year = f"20{m.group(3)}"
+        month = _BBVA_MONTH_MAP.get(month_str[:3])
+        if not month:
+            continue
+
+        rest = m.group(4).strip()
+
+        # Extract amounts from end
+        amount_pattern = r"-?[\d]+(?:\.[\d]{3})*,\d{2}"
+        amounts = re.findall(amount_pattern, rest)
+
+        if not amounts:
+            continue
+
+        # Remove amounts and cupón number from description
+        desc = rest
+        for amt in amounts:
+            desc = desc.replace(amt, "", 1)
+        # Remove 6-digit cupón numbers
+        desc = re.sub(r"\b\d{6}\b", "", desc)
+        # Remove USD marker
+        has_usd = "USD" in desc
+        desc = re.sub(r"\bUSD\b", "", desc)
+        desc = re.sub(r"\s+", " ", desc).strip()
+
+        if not desc or len(desc) < 2:
+            continue
+
+        # Determine currency and amount
+        if has_usd and amounts:
+            monto = _parse_ar_money(amounts[-1])
+            moneda = "USD"
+        else:
+            # Use the first amount (pesos column)
+            monto = _parse_ar_money(amounts[0])
+            moneda = "ARS"
+
+        if monto is None or monto == 0:
+            continue
+
+        tipo = "Ingreso" if monto < 0 else "Gasto"
+
+        transactions.append({
+            "fecha": f"{year}-{month}-{day}",
+            "descripcion": desc,
+            "monto": round(abs(monto), 2),
+            "moneda": moneda,
+            "tipo": tipo,
+            "categoria_id": None,
+            "subcategoria_id": None,
+        })
+
+    # Statement period
+    statement_period = ""
+    if transactions:
+        from collections import Counter
+        months = [t["fecha"][0:7] for t in transactions]
+        if months:
+            statement_period = Counter(months).most_common(1)[0][0]
+
+    return {
+        "transactions": transactions,
+        "statement_period": statement_period,
+        "card_or_account": card_info,
+    }
+
+
+def _parse_bbva_caja_ahorro(full_text: str) -> dict:
     """Parse BBVA Caja de Ahorro PDF text format into transactions."""
     lines = full_text.split("\n")
 
