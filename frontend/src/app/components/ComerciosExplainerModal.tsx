@@ -93,7 +93,7 @@ function StepSolution({ active }: { active: boolean }) {
         <div style={{ background: "#1F2C34", padding: "10px 14px", display: "flex", alignItems: "center", gap: 9 }}>
           <div style={{ width: 26, height: 26, borderRadius: 13, background: CE.lime, color: CE.ink, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800 }}>V</div>
           <div style={{ flex: 1, color: "#fff" }}>
-            <div className="text-xs font-bold">Vino Bot</div>
+            <div className="text-xs font-bold">Fina Bot</div>
             <div className="text-[9px]" style={{ color: "#25D366" }}>● en linea</div>
           </div>
         </div>

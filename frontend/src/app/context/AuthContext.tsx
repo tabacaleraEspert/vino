@@ -14,6 +14,7 @@ interface AuthContextType {
   onboardingCompletado: boolean;
   login: (username: string, password: string) => Promise<boolean>;
   loginWithGoogle: (credential: string) => Promise<{ ok: boolean; isNewUser: boolean; error?: string }>;
+  loginWithApple: (idToken: string, givenName?: string, familyName?: string) => Promise<{ ok: boolean; isNewUser: boolean; error?: string }>;
   register: (username: string, password: string, apellido?: string, email?: string, whatsapp?: string) => Promise<{ ok: boolean; error?: string }>;
   markOnboardingDone: () => void;
   logout: () => void;
@@ -125,6 +126,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const loginWithApple = async (
+    idToken: string,
+    givenName?: string,
+    familyName?: string,
+  ): Promise<{ ok: boolean; isNewUser: boolean; error?: string }> => {
+    try {
+      const res = await apiFetch<{
+        access_token: string;
+        is_new_user: boolean;
+        user: { id: string; nombre: string; apellido: string; gmail: string };
+      }>("/auth/apple", {
+        method: "POST",
+        body: JSON.stringify({ id_token: idToken, given_name: givenName, family_name: familyName }),
+      });
+      const u = res.user;
+      const newUser: User = {
+        id: u.id,
+        name: `${u.nombre} ${(u.apellido || "").trim()}`.trim(),
+        email: u.gmail || "",
+      };
+      const obCompleted = (res as any).onboarding_completado ?? false;
+      setApiToken(res.access_token);
+      setToken(res.access_token);
+      setUser(newUser);
+      setOnboardingCompletado(obCompleted);
+      localStorage.setItem(TOKEN_KEY, res.access_token);
+      localStorage.setItem(USER_KEY, JSON.stringify(newUser));
+      localStorage.setItem("finanzas_onboarding", String(obCompleted));
+      return { ok: true, isNewUser: res.is_new_user };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Error con Apple Sign-In";
+      return { ok: false, isNewUser: false, error: msg };
+    }
+  };
+
   const register = async (
     username: string,
     password: string,
@@ -156,7 +192,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, onboardingCompletado, login, loginWithGoogle, register, markOnboardingDone, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, token, onboardingCompletado, login, loginWithGoogle, loginWithApple, register, markOnboardingDone, logout, isLoading }}>
       {children}
     </AuthContext.Provider>
   );

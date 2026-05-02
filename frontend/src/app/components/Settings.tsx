@@ -225,7 +225,7 @@ export function Settings() {
       </div>
 
       <p className="text-center text-xs text-gray-400 pt-2">
-        Vino v0.1.0
+        Fina v0.1.0
       </p>
     </div>
   );

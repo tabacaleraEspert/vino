@@ -35,7 +35,7 @@ export function ScreenTourWhatsApp({ onNext }: Props) {
         <div style={{ background: "#1F2C34", padding: "10px 14px", display: "flex", alignItems: "center", gap: 8 }}>
           <div style={{ width: 26, height: 26, borderRadius: 13, background: "#25D366", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 12 }}>V</div>
           <div style={{ flex: 1, color: "#fff" }}>
-            <div style={{ fontSize: 12, fontWeight: 700 }}>Vino Bot</div>
+            <div style={{ fontSize: 12, fontWeight: 700 }}>Fina Bot</div>
             <div style={{ fontSize: 9, color: "#25D366" }}>● en linea</div>
           </div>
         </div>

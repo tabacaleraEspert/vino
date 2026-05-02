@@ -157,6 +157,90 @@ async def google_auth(payload: GoogleAuthIn, db: AsyncSession = Depends(get_db))
     }
 
 
+class AppleAuthIn(BaseModel):
+    id_token: str
+    given_name: str | None = None
+    family_name: str | None = None
+
+
+@router.post("/apple")
+async def apple_auth(payload: AppleAuthIn, db: AsyncSession = Depends(get_db)):
+    """
+    Authenticate via Sign in with Apple.
+
+    Verifies the Apple ID token using Apple's public keys,
+    finds or creates the user, and returns a JWT.
+    """
+    import jwt
+    import httpx
+
+    # Fetch Apple's public keys
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get("https://appleid.apple.com/auth/keys")
+            apple_keys = resp.json()
+    except Exception:
+        raise HTTPException(status_code=500, detail="No se pudo verificar con Apple")
+
+    # Decode and verify the token
+    try:
+        header = jwt.get_unverified_header(payload.id_token)
+        # Find the matching key
+        key = None
+        for k in apple_keys["keys"]:
+            if k["kid"] == header["kid"]:
+                key = jwt.algorithms.RSAAlgorithm.from_jwk(k)
+                break
+        if key is None:
+            raise ValueError("Key not found")
+
+        idinfo = jwt.decode(
+            payload.id_token,
+            key,
+            algorithms=["RS256"],
+            audience="com.vino.finanzas",
+            issuer="https://appleid.apple.com",
+        )
+    except Exception:
+        raise HTTPException(status_code=401, detail="Token de Apple invalido")
+
+    email = idinfo.get("email")
+    if not email:
+        raise HTTPException(status_code=401, detail="Email no disponible de Apple")
+
+    nombre = payload.given_name or email.split("@")[0]
+    apellido = payload.family_name
+
+    user, is_new = await get_or_create_google_user(
+        db, gmail=email, nombre=nombre, apellido=apellido,
+    )
+
+    if is_new:
+        from app.services.seed_categories import seed_default_categories
+        try:
+            await seed_default_categories(db, user["id"])
+        except Exception as e:
+            logger.warning("Failed to seed categories for Apple user %s: %s", user["id"], e)
+
+    user_id = str(user["id"])
+    logger.info("apple_auth_%s email=%s id=%s", "new" if is_new else "existing", email, user_id)
+
+    token = create_access_token(sub=user_id)
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "is_new_user": is_new,
+        "onboarding_completado": user.get("OnboardingCompletado", False),
+        "onboarding_step": user.get("OnboardingStep", 0),
+        "user": {
+            "id": user_id,
+            "nombre": user.get("Nombre", ""),
+            "apellido": user.get("Apellido", ""),
+            "gmail": user.get("gmail", ""),
+        },
+    }
+
+
 @router.post("/login")
 async def login(payload: LoginIn, db: AsyncSession = Depends(get_db)):
     if not payload.username or not payload.password:

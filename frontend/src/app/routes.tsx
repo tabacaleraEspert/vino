@@ -15,6 +15,7 @@ import { Debts } from "./components/Debts";
 import { Wallets } from "./components/Wallets";
 import { Settings } from "./components/Settings";
 import { Login } from "./components/Login";
+import { PrivacyPolicy } from "./components/PrivacyPolicy";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { OnboardingFlow } from "./components/onboarding/OnboardingFlow";
 
@@ -22,6 +23,10 @@ export const router = createBrowserRouter([
   {
     path: "/login",
     Component: Login,
+  },
+  {
+    path: "/privacy",
+    Component: PrivacyPolicy,
   },
   {
     path: "/onboarding",

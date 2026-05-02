@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.vino.finanzas',
-  appName: 'Vino',
+  appName: 'Fina',
   webDir: 'dist',
   server: {
     // En desarrollo, apuntar al dev server local:
