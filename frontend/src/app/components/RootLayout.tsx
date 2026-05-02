@@ -43,7 +43,7 @@ export function RootLayout() {
 
   return (
     <div className="flex flex-col h-screen bg-gray-50 max-w-md mx-auto">
-      <header className="bg-white border-b border-gray-200 px-4 py-3 sticky top-0 z-10">
+      <header className="bg-white border-b border-gray-200 px-4 py-3 sticky top-0 z-10" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)' }}>
         <div className="flex items-center justify-between">
           <div>
             <h1 className="font-semibold text-lg">Finanzas Personales</h1>

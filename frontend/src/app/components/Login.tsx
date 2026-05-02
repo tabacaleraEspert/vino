@@ -98,8 +98,8 @@ export function Login() {
       const { GoogleSignIn } = await import("@capawesome/capacitor-google-sign-in");
       const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
       await GoogleSignIn.initialize({ clientId });
-      const { idToken } = await GoogleSignIn.signIn();
-      const result = await loginWithGoogle(idToken);
+      const signInResult = await GoogleSignIn.signIn();
+      const result = await loginWithGoogle(signInResult.idToken);
       if (result.ok) {
         navigate(result.isNewUser ? "/onboarding" : "/");
       } else {
@@ -117,7 +117,7 @@ export function Login() {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Header */}
-      <header className="py-6 px-6">
+      <header className="py-6 px-6" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 24px)' }}>
         <div className="max-w-md mx-auto flex items-center gap-3">
           <div className="w-9 h-9 bg-blue-600 rounded-lg flex items-center justify-center">
             <span className="text-white font-bold text-lg">V</span>
