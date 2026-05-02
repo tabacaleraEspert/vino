@@ -164,6 +164,23 @@ async def delete_presupuesto_endpoint(
 
 _BUCKET_PCT = {"necesidades": 0.50, "estilo_vida": 0.30, "futuro": 0.20}
 
+# Weighted distribution within each bucket (based on typical Argentine household spending)
+_CATEGORY_WEIGHTS: dict[str, dict[str, float]] = {
+    "necesidades": {
+        "Vivienda": 0.35,
+        "Comida": 0.25,
+        "Transporte": 0.15,
+        "Servicios": 0.12,
+        "Salud": 0.08,
+        "Educación": 0.05,
+        "Educacion": 0.05,
+    },
+    "estilo_vida": {
+        "Ocio": 0.60,
+        "Compras": 0.40,
+    },
+}
+
 
 class AutoAssignIn(BaseModel):
     total: float
@@ -227,11 +244,35 @@ async def auto_assign_budgets(
         bucket_total = total * pct
         if not bucket_cats:
             continue
-        per_cat = round(bucket_total / len(bucket_cats), 2)
+
+        # Use weighted distribution if available, otherwise equal
+        weights = _CATEGORY_WEIGHTS.get(bucket_name, {})
+        cat_weights = []
+        unweighted = []
+        total_known_weight = 0.0
         for cat in bucket_cats:
+            w = weights.get(cat.Nombre)
+            if w is not None:
+                cat_weights.append((cat, w))
+                total_known_weight += w
+            else:
+                unweighted.append(cat)
+
+        # Distribute remaining weight equally among unknown categories
+        remaining_weight = max(0, 1.0 - total_known_weight)
+        if unweighted:
+            per_unknown = remaining_weight / len(unweighted)
+            for cat in unweighted:
+                cat_weights.append((cat, per_unknown))
+        elif total_known_weight > 0:
+            # Normalize to 1.0
+            cat_weights = [(c, w / total_known_weight) for c, w in cat_weights]
+
+        for cat, weight in cat_weights:
+            cat_amount = round(bucket_total * weight, 2)
             row = await upsert_presupuesto(
                 db, id_usuario, periodo_mes,
-                Decimal(str(per_cat)),
+                Decimal(str(cat_amount)),
                 id_categoria=cat.Id,
             )
             created.append(_to_raw(row))
@@ -239,7 +280,8 @@ async def auto_assign_budgets(
                 "categoria": cat.Nombre,
                 "bucket": bucket_name,
                 "pct_bucket": f"{int(pct * 100)}%",
-                "monto": per_cat,
+                "pct_categoria": f"{int(weight * 100)}%",
+                "monto": cat_amount,
             })
 
     return {

@@ -300,6 +300,15 @@ export function Budgets() {
         </div>
       </div>
 
+      {/* Nota editable */}
+      <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
+        <p className="text-xs text-blue-700 leading-relaxed">
+          Esta es nuestra distribucion recomendada basada en datos reales.
+          Podes <strong>editar cada monto</strong> tocando el lapiz, o <strong>cambiar el total</strong> arriba.
+          Los porcentajes se ajustan automaticamente.
+        </p>
+      </div>
+
       {/* Desglose por categoría — agrupado por bucket */}
       {[
         { key: "necesidades", label: "Necesidades", pct: "50%" },
