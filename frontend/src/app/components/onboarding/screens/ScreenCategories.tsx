@@ -1,184 +1,467 @@
-import { useState, useEffect } from "react";
-import { Frame, Eyebrow, Display, Italic, PrimaryBtn } from "../primitives";
-import { lime, ink, subtle, muted } from "../theme";
+import { useState } from "react";
+import { Frame, Eyebrow, Display, Italic, PrimaryBtn, Body } from "../primitives";
+import { lime, ink, subtle, muted, cream } from "../theme";
+import { apiFetch } from "../../../../lib/api";
 
-const CATS = [
-  { i: "🏠", n: "Vivienda", subs: ["Alquiler", "Expensas", "Hipoteca", "Mantenimiento"] },
-  { i: "🍴", n: "Comida", subs: ["Super", "Almacen", "Verduleria", "Carniceria", "Delivery"] },
-  { i: "🚗", n: "Transporte", subs: ["Nafta", "SUBE", "Uber", "Peajes", "Auto"] },
-  { i: "💡", n: "Servicios", subs: ["Luz", "Gas", "Agua", "Internet", "Celular"] },
-  { i: "💊", n: "Salud", subs: ["Prepaga", "Farmacia", "Consultas", "Gimnasio"] },
-  { i: "🍻", n: "Salidas", subs: ["Restaurantes", "Bar", "Cafe", "Eventos"] },
-  { i: "🎬", n: "Ocio", subs: ["Cine", "Streaming", "Viajes", "Hobbies"] },
-  { i: "👕", n: "Compras", subs: ["Ropa", "Calzado", "Hogar", "Tecnologia"] },
-  { i: "🎓", n: "Educacion", subs: ["Cuotas", "Cursos", "Libros"] },
-  { i: "💰", n: "Ahorro", subs: ["Caja", "Plazo fijo", "Emergencia", "Metas"] },
-  { i: "📈", n: "Inversion", subs: ["Acciones", "FCI", "Cripto", "Dolar"] },
-];
+/* ─── Types ─── */
+interface SubCat {
+  name: string;
+  enabled: boolean;
+}
+interface Cat {
+  icon: string;
+  name: string;
+  color: string;
+  bucket: Bucket;
+  subs: SubCat[];
+  enabled: boolean;
+  isCustom?: boolean;
+}
+type Bucket = "necesidades" | "estilo_vida" | "futuro";
 
+const BUCKET_LABELS: Record<Bucket, { title: string; sub: string; pct: string }> = {
+  necesidades: { title: "Necesidades", sub: "Lo esencial para vivir", pct: "50%" },
+  estilo_vida: { title: "Estilo de vida", sub: "Lo que te hace disfrutar", pct: "30%" },
+  futuro: { title: "Tu futuro", sub: "Se calcula automaticamente", pct: "20%" },
+};
+
+const BUCKETS: Bucket[] = ["necesidades", "estilo_vida"];
+
+/* ─── Default recommended categories ─── */
+function defaultCats(): Cat[] {
+  return [
+    { icon: "🏠", name: "Vivienda", color: "#ec4899", bucket: "necesidades", enabled: true, subs: s(["Alquiler", "Expensas", "Hipoteca", "Mantenimiento"]) },
+    { icon: "🍴", name: "Comida", color: "#14b8a6", bucket: "necesidades", enabled: true, subs: s(["Super", "Almacen", "Verduleria", "Carniceria", "Delivery"]) },
+    { icon: "🚗", name: "Transporte", color: "#f97316", bucket: "necesidades", enabled: true, subs: s(["Nafta", "SUBE", "Uber", "Estacionamiento", "Peajes"]) },
+    { icon: "💡", name: "Servicios", color: "#eab308", bucket: "necesidades", enabled: true, subs: s(["Luz", "Gas", "Agua", "Internet", "Celular"]) },
+    { icon: "💊", name: "Salud", color: "#06b6d4", bucket: "necesidades", enabled: true, subs: s(["Prepaga", "Farmacia", "Consultas", "Gimnasio"]) },
+    { icon: "🎓", name: "Educacion", color: "#8b5cf6", bucket: "necesidades", enabled: true, subs: s(["Cuotas", "Cursos", "Libros"]) },
+    { icon: "🎬", name: "Ocio", color: "#d946ef", bucket: "estilo_vida", enabled: true, subs: s(["Restaurantes", "Bar", "Cafe", "Eventos", "Cine", "Streaming", "Viajes", "Hobbies"]) },
+    { icon: "👕", name: "Compras", color: "#57534e", bucket: "estilo_vida", enabled: true, subs: s(["Ropa", "Calzado", "Hogar", "Tecnologia"]) },
+  ];
+}
+function s(names: string[]): SubCat[] {
+  return names.map((n) => ({ name: n, enabled: true }));
+}
+
+/* ─── Icons for custom categories ─── */
+const ICONS = ["📦", "🎵", "🐾", "✈️", "🏋️", "🎮", "💼", "🎁", "🔧", "📱"];
+const COLORS = ["#ef4444", "#f97316", "#eab308", "#14b8a6", "#3b82f6", "#8b5cf6", "#ec4899", "#d946ef"];
+
+/* ─── Component ─── */
 interface Props {
   onNext: () => void;
 }
 
 export function ScreenCategories({ onNext }: Props) {
-  const [openIdx, setOpenIdx] = useState<number | null>(null);
-  const [revealed, setRevealed] = useState(0);
-  const [counter, setCounter] = useState(0);
+  const [cats, setCats] = useState<Cat[]>(defaultCats);
+  const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
+  const [adding, setAdding] = useState<Bucket | null>(null);
+  const [newName, setNewName] = useState("");
+  const [newIcon, setNewIcon] = useState(ICONS[0]);
+  const [newBucket, setNewBucket] = useState<Bucket>("necesidades");
+  const [addingSub, setAddingSub] = useState<number | null>(null);
+  const [newSubName, setNewSubName] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    if (revealed >= CATS.length) return;
-    const t = setTimeout(() => setRevealed((r) => r + 1), revealed === 0 ? 200 : 70);
-    return () => clearTimeout(t);
-  }, [revealed]);
+  const toggleCat = (i: number) => {
+    setCats((p) => p.map((c, j) => (j === i ? { ...c, enabled: !c.enabled } : c)));
+  };
 
-  const totalSubs = CATS.reduce((a, c) => a + c.subs.length, 0);
-  useEffect(() => {
-    if (revealed < CATS.length) return;
-    let f: number;
-    const s = Date.now();
-    const tick = () => {
-      const t = Math.min(1, (Date.now() - s) / 900);
-      setCounter(Math.floor((1 - Math.pow(1 - t, 3)) * totalSubs));
-      if (t < 1) f = requestAnimationFrame(tick);
-    };
-    f = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(f);
-  }, [revealed, totalSubs]);
+  const toggleSub = (ci: number, si: number) => {
+    setCats((p) =>
+      p.map((c, j) =>
+        j === ci ? { ...c, subs: c.subs.map((s, k) => (k === si ? { ...s, enabled: !s.enabled } : s)) } : c
+      )
+    );
+  };
+
+  const addCategory = () => {
+    if (!newName.trim()) return;
+    const bucket = adding || newBucket;
+    setCats((p) => [
+      ...p,
+      {
+        icon: newIcon,
+        name: newName.trim(),
+        color: COLORS[p.length % COLORS.length],
+        bucket,
+        enabled: true,
+        isCustom: true,
+        subs: [],
+      },
+    ]);
+    setNewName("");
+    setAdding(null);
+  };
+
+  const addSubCategory = (ci: number) => {
+    if (!newSubName.trim()) return;
+    setCats((p) =>
+      p.map((c, j) =>
+        j === ci ? { ...c, subs: [...c.subs, { name: newSubName.trim(), enabled: true }] } : c
+      )
+    );
+    setNewSubName("");
+    setAddingSub(null);
+  };
+
+  const handleContinue = async () => {
+    setSaving(true);
+    try {
+      const selected = cats
+        .filter((c) => c.enabled)
+        .map((c) => ({
+          nombre: c.name,
+          icon: c.icon,
+          color: c.color,
+          bucket: c.bucket,
+          subcategorias: c.subs.filter((s) => s.enabled).map((s) => s.name),
+        }));
+      await apiFetch("/categorias/onboarding", {
+        method: "POST",
+        body: JSON.stringify({ categorias: selected }),
+      });
+    } catch (e) {
+      console.error("Save categories failed:", e);
+    }
+    setSaving(false);
+    onNext();
+  };
+
+  const enabledCount = cats.filter((c) => c.enabled).length;
+  const subCount = cats.filter((c) => c.enabled).reduce((a, c) => a + c.subs.filter((s) => s.enabled).length, 0);
 
   return (
     <Frame>
-      <Eyebrow>paso 2 · categorias</Eyebrow>
+      <Eyebrow>paso 2 · tus categorias</Eyebrow>
       <Display>
-        <Italic>11 categorias</Italic>,<br />
-        todo cubierto.
+        <Italic>Personalizá</Italic> tus<br />categorias.
       </Display>
+      <Body>
+        <span style={{ marginTop: 6, display: "block" }}>
+          Te recomendamos estas {enabledCount} categorias y {subCount} subcategorias.
+          Podes activar, desactivar o agregar las que quieras.
+        </span>
+      </Body>
 
-      <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginTop: 8, marginBottom: 14 }}>
-        <div
-          style={{
-            fontFamily: '"SF Mono", monospace',
-            fontSize: 18,
-            fontWeight: 800,
-            letterSpacing: -0.5,
-            fontVariantNumeric: "tabular-nums",
-          }}
-        >
-          {counter}
-        </div>
-        <div style={{ fontSize: 13, color: muted }}>subcategorias · toca para ver</div>
-      </div>
-
-      <div style={{ flex: 1, overflowY: "auto", marginRight: -8, paddingRight: 8 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
-          {CATS.map((c, i) => {
-            const visible = i < revealed;
-            const open = openIdx === i;
-            return (
-              <button
-                key={c.n}
-                onClick={() => setOpenIdx(open ? null : i)}
-                style={{
-                  position: "relative",
-                  background: open ? ink : "#fff",
-                  color: open ? "#fff" : ink,
-                  border: `1px solid ${open ? ink : subtle}`,
-                  borderRadius: 14,
-                  padding: "10px 6px 8px",
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  cursor: "pointer",
-                  overflow: "hidden",
-                  fontFamily: "-apple-system, system-ui, sans-serif",
-                  opacity: visible ? 1 : 0,
-                  transform: visible ? (open ? "scale(1.02)" : "scale(1)") : "translateY(12px) scale(.85)",
-                  transition:
-                    "opacity .35s cubic-bezier(.2,1.4,.4,1), transform .35s cubic-bezier(.2,1.4,.4,1), background .25s, color .25s, border-color .25s",
-                  boxShadow: open ? "0 8px 20px rgba(10,10,10,0.22)" : "none",
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 22,
-                    animation: visible ? `bounceIn .5s cubic-bezier(.2,1.6,.4,1) ${i * 0.04}s both` : "none",
-                  }}
-                >
-                  {c.i}
-                </div>
-                <div style={{ fontSize: 10.5, fontWeight: 700, marginTop: 2, letterSpacing: -0.2, whiteSpace: "nowrap" }}>
-                  {c.n}
-                </div>
-                <div
-                  style={{
-                    fontSize: 8,
-                    fontWeight: 800,
-                    fontFamily: '"SF Mono", monospace',
-                    opacity: 0.55,
-                    marginTop: 1,
-                  }}
-                >
-                  {c.subs.length}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-
-        <div
-          style={{
-            marginTop: openIdx != null ? 14 : 0,
-            maxHeight: openIdx != null ? 200 : 0,
-            overflow: "hidden",
-            transition: "max-height .35s cubic-bezier(.2,.7,.2,1), margin-top .35s",
-          }}
-        >
-          {openIdx != null && (
-            <div style={{ background: ink, color: "#fff", borderRadius: 16, padding: "14px 14px 12px" }}>
+      <div style={{ flex: 1, overflowY: "auto", marginTop: 16, marginRight: -8, paddingRight: 8, paddingBottom: 16 }}>
+        {BUCKETS.map((bucket) => {
+          const bl = BUCKET_LABELS[bucket];
+          const bucketCats = cats.map((c, i) => ({ ...c, _i: i })).filter((c) => c.bucket === bucket);
+          return (
+            <div key={bucket} style={{ marginBottom: 20 }}>
+              {/* Bucket header */}
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                <span style={{ fontSize: 18 }}>{CATS[openIdx].i}</span>
-                <span style={{ fontSize: 14, fontWeight: 800, letterSpacing: -0.3 }}>{CATS[openIdx].n}</span>
-                <span
+                <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: -0.3 }}>{bl.title}</div>
+                <div
                   style={{
-                    marginLeft: "auto",
-                    fontSize: 9,
+                    fontSize: 10,
                     fontWeight: 800,
-                    letterSpacing: 1,
                     background: lime,
                     color: ink,
-                    padding: "2px 6px",
+                    padding: "2px 7px",
                     borderRadius: 4,
-                    textTransform: "uppercase" as const,
                   }}
                 >
-                  {CATS[openIdx].subs.length} subs
-                </span>
+                  {bl.pct}
+                </div>
+                <div style={{ fontSize: 11, color: muted, flex: 1 }}>{bl.sub}</div>
               </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-                {CATS[openIdx].subs.map((s, j) => (
+
+              {/* Category cards */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {bucketCats.map((c) => {
+                  const isOpen = expandedIdx === c._i;
+                  return (
+                    <div key={c._i}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 10,
+                          background: c.enabled ? "#fff" : "rgba(0,0,0,0.03)",
+                          border: `1px solid ${c.enabled ? subtle : "rgba(0,0,0,0.04)"}`,
+                          borderRadius: 12,
+                          padding: "10px 12px",
+                          opacity: c.enabled ? 1 : 0.5,
+                          transition: "opacity .2s, background .2s",
+                        }}
+                      >
+                        {/* Toggle */}
+                        <button
+                          onClick={() => toggleCat(c._i)}
+                          style={{
+                            width: 22,
+                            height: 22,
+                            borderRadius: 6,
+                            border: `2px solid ${c.enabled ? c.color : "#ccc"}`,
+                            background: c.enabled ? c.color : "transparent",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            cursor: "pointer",
+                            flexShrink: 0,
+                            transition: "background .2s, border-color .2s",
+                          }}
+                        >
+                          {c.enabled && (
+                            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                              <path d="M2.5 6L5 8.5L9.5 3.5" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          )}
+                        </button>
+
+                        {/* Icon + name */}
+                        <span style={{ fontSize: 18 }}>{c.icon}</span>
+                        <span style={{ fontSize: 13, fontWeight: 700, flex: 1, letterSpacing: -0.2 }}>{c.name}</span>
+
+                        {/* Sub count + expand */}
+                        <button
+                          onClick={() => setExpandedIdx(isOpen ? null : c._i)}
+                          style={{
+                            fontSize: 10,
+                            fontWeight: 700,
+                            color: muted,
+                            background: "none",
+                            border: "none",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 4,
+                            padding: "4px 0",
+                          }}
+                        >
+                          {c.subs.filter((s) => s.enabled).length}/{c.subs.length} subs
+                          <span style={{ transform: isOpen ? "rotate(180deg)" : "rotate(0)", transition: "transform .2s", fontSize: 12 }}>▾</span>
+                        </button>
+                      </div>
+
+                      {/* Expanded subcategories */}
+                      <div
+                        style={{
+                          maxHeight: isOpen ? 400 : 0,
+                          overflow: "hidden",
+                          transition: "max-height .3s ease",
+                        }}
+                      >
+                        <div style={{ padding: "8px 0 4px 44px", display: "flex", flexWrap: "wrap", gap: 5 }}>
+                          {c.subs.map((sub, si) => (
+                            <button
+                              key={si}
+                              onClick={() => toggleSub(c._i, si)}
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 600,
+                                padding: "5px 10px",
+                                borderRadius: 8,
+                                border: `1px solid ${sub.enabled ? c.color : "#ddd"}`,
+                                background: sub.enabled ? `${c.color}15` : "transparent",
+                                color: sub.enabled ? ink : "#aaa",
+                                cursor: "pointer",
+                                transition: "all .2s",
+                                textDecoration: sub.enabled ? "none" : "line-through",
+                              }}
+                            >
+                              {sub.name}
+                            </button>
+                          ))}
+                          {/* Add subcategory */}
+                          {addingSub === c._i ? (
+                            <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                              <input
+                                autoFocus
+                                value={newSubName}
+                                onChange={(e) => setNewSubName(e.target.value)}
+                                onKeyDown={(e) => e.key === "Enter" && addSubCategory(c._i)}
+                                placeholder="Nueva sub..."
+                                style={{
+                                  fontSize: 11,
+                                  padding: "5px 8px",
+                                  borderRadius: 8,
+                                  border: `1px solid ${c.color}`,
+                                  outline: "none",
+                                  width: 100,
+                                  fontFamily: "inherit",
+                                }}
+                              />
+                              <button
+                                onClick={() => addSubCategory(c._i)}
+                                style={{ fontSize: 11, fontWeight: 700, color: c.color, background: "none", border: "none", cursor: "pointer" }}
+                              >
+                                +
+                              </button>
+                              <button
+                                onClick={() => { setAddingSub(null); setNewSubName(""); }}
+                                style={{ fontSize: 11, color: "#aaa", background: "none", border: "none", cursor: "pointer" }}
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setAddingSub(c._i)}
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 600,
+                                padding: "5px 10px",
+                                borderRadius: 8,
+                                border: "1px dashed #ccc",
+                                background: "transparent",
+                                color: muted,
+                                cursor: "pointer",
+                              }}
+                            >
+                              + agregar
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Add category to this bucket */}
+                {adding === bucket ? (
                   <div
-                    key={s}
                     style={{
-                      background: "rgba(255,255,255,0.12)",
-                      borderRadius: 8,
-                      padding: "5px 9px",
-                      fontSize: 11,
-                      fontWeight: 600,
-                      opacity: 0,
-                      animation: `subPop .35s cubic-bezier(.2,1.6,.4,1) ${j * 0.05}s forwards`,
+                      background: "#fff",
+                      border: `1px solid ${subtle}`,
+                      borderRadius: 12,
+                      padding: "10px 12px",
                     }}
                   >
-                    {s}
+                    <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 8 }}>
+                      {ICONS.map((ic) => (
+                        <button
+                          key={ic}
+                          onClick={() => setNewIcon(ic)}
+                          style={{
+                            fontSize: 16,
+                            padding: 2,
+                            border: newIcon === ic ? `2px solid ${ink}` : "2px solid transparent",
+                            borderRadius: 6,
+                            background: "none",
+                            cursor: "pointer",
+                          }}
+                        >
+                          {ic}
+                        </button>
+                      ))}
+                    </div>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <input
+                        autoFocus
+                        value={newName}
+                        onChange={(e) => setNewName(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && addCategory()}
+                        placeholder="Nombre de la categoria"
+                        style={{
+                          flex: 1,
+                          fontSize: 13,
+                          padding: "8px 10px",
+                          borderRadius: 8,
+                          border: `1px solid ${subtle}`,
+                          outline: "none",
+                          fontFamily: "inherit",
+                        }}
+                      />
+                      <button
+                        onClick={addCategory}
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 700,
+                          padding: "8px 14px",
+                          borderRadius: 8,
+                          background: ink,
+                          color: "#fff",
+                          border: "none",
+                          cursor: "pointer",
+                        }}
+                      >
+                        Agregar
+                      </button>
+                      <button
+                        onClick={() => { setAdding(null); setNewName(""); }}
+                        style={{
+                          fontSize: 13,
+                          padding: "8px 10px",
+                          borderRadius: 8,
+                          background: "none",
+                          border: `1px solid ${subtle}`,
+                          cursor: "pointer",
+                          color: muted,
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
                   </div>
-                ))}
+                ) : (
+                  <button
+                    onClick={() => { setAdding(bucket); setNewBucket(bucket); }}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 6,
+                      padding: "10px 12px",
+                      border: "1px dashed rgba(0,0,0,0.15)",
+                      borderRadius: 12,
+                      background: "transparent",
+                      cursor: "pointer",
+                      fontSize: 12,
+                      fontWeight: 600,
+                      color: muted,
+                    }}
+                  >
+                    + Agregar categoria
+                  </button>
+                )}
               </div>
             </div>
-          )}
+          );
+        })}
+
+        {/* Tu Futuro section - informational */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: -0.3 }}>{BUCKET_LABELS.futuro.title}</div>
+            <div
+              style={{
+                fontSize: 10,
+                fontWeight: 800,
+                background: lime,
+                color: ink,
+                padding: "2px 7px",
+                borderRadius: 4,
+              }}
+            >
+              20%
+            </div>
+          </div>
+          <div
+            style={{
+              background: `${lime}22`,
+              border: `1px solid ${lime}55`,
+              borderRadius: 12,
+              padding: "12px 14px",
+              fontSize: 12,
+              color: muted,
+              lineHeight: 1.5,
+            }}
+          >
+            💡 Tu ahorro se calcula automaticamente: es lo que sobra despues de tus gastos.
+            No necesitas una categoria para eso. Mas adelante vamos a tener un modulo
+            de inversiones para que puedas trackear tu plata.
+          </div>
         </div>
       </div>
 
-      <div style={{ marginTop: 12 }}>
-        <PrimaryBtn onClick={onNext}>Continuar →</PrimaryBtn>
+      <div style={{ marginTop: 8 }}>
+        <PrimaryBtn onClick={handleContinue} disabled={saving || enabledCount === 0}>
+          {saving ? "Guardando..." : `Continuar con ${enabledCount} categorias →`}
+        </PrimaryBtn>
       </div>
     </Frame>
   );

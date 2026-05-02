@@ -62,18 +62,11 @@ DEFAULT_CATEGORIES = [
     },
     # ── Estilo de vida (30%) ──
     {
-        "nombre": "Salidas",
-        "icon": "salidas",
-        "color": "#ef4444",
-        "bucket": BUCKET_ESTILO_VIDA,
-        "subcategorias": ["Restaurantes", "Bar", "Café", "Eventos"],
-    },
-    {
         "nombre": "Ocio",
         "icon": "ocio",
         "color": "#d946ef",
         "bucket": BUCKET_ESTILO_VIDA,
-        "subcategorias": ["Cine", "Streaming", "Viajes", "Hobbies"],
+        "subcategorias": ["Restaurantes", "Bar", "Café", "Eventos", "Cine", "Streaming", "Viajes", "Hobbies"],
     },
     {
         "nombre": "Compras",
@@ -81,21 +74,6 @@ DEFAULT_CATEGORIES = [
         "color": "#57534e",
         "bucket": BUCKET_ESTILO_VIDA,
         "subcategorias": ["Ropa", "Calzado", "Hogar", "Tecnología"],
-    },
-    # ── Futuro (20%) ──
-    {
-        "nombre": "Ahorro",
-        "icon": "ahorro",
-        "color": "#10b981",
-        "bucket": BUCKET_FUTURO,
-        "subcategorias": ["Caja", "Plazo fijo", "Emergencia", "Metas"],
-    },
-    {
-        "nombre": "Inversión",
-        "icon": "inversion",
-        "color": "#3b82f6",
-        "bucket": BUCKET_FUTURO,
-        "subcategorias": ["Acciones", "FCI", "Cripto", "Dólar"],
     },
 ]
 

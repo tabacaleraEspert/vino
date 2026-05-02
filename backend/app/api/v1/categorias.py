@@ -1,11 +1,15 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import delete as sa_delete
 
 from app.db.session import get_db
 from app.deps import get_current_user_id
+from app.models.categoria import Categoria
+from app.models.subcategoria import SubCategoria
 from app.repositories.categoria_repo import (
     list_categorias,
     get_categoria,
@@ -16,6 +20,7 @@ from app.repositories.categoria_repo import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class SubcategoryIn(BaseModel):
@@ -27,6 +32,18 @@ class CategoryIn(BaseModel):
     icon: str = "📁"
     color: str = "#6b7280"
     subcategories: Optional[list[SubcategoryIn]] = None
+
+
+class OnboardingCatIn(BaseModel):
+    nombre: str
+    icon: str = "📁"
+    color: str = "#6b7280"
+    bucket: str = "necesidades"
+    subcategorias: list[str] = []
+
+
+class OnboardingPayload(BaseModel):
+    categorias: list[OnboardingCatIn]
 
 
 class CategoryPatch(BaseModel):
@@ -84,6 +101,45 @@ async def delete_categoria_endpoint(
     if not await delete_categoria(db, id_usuario, id):
         raise HTTPException(status_code=404, detail="Categoría no encontrada")
     return {"deleted": True, "id": str(id)}
+
+
+@router.post("/onboarding")
+async def onboarding_categories(
+    payload: OnboardingPayload,
+    id_usuario: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Replace all categories for this user with the onboarding selection."""
+    # Delete existing subcategories and categories
+    await db.execute(sa_delete(SubCategoria).where(SubCategoria.Id_usuario == id_usuario))
+    await db.execute(sa_delete(Categoria).where(Categoria.Id_usuario == id_usuario))
+    await db.flush()
+
+    created = 0
+    for cat_data in payload.categorias:
+        cat = Categoria(
+            Id_usuario=id_usuario,
+            Nombre=cat_data.nombre,
+            Icon=cat_data.icon,
+            Color=cat_data.color,
+            Bucket=cat_data.bucket,
+        )
+        db.add(cat)
+        await db.flush()
+
+        for sub_name in cat_data.subcategorias:
+            sub = SubCategoria(
+                Id_usuario=id_usuario,
+                Id_Categoria=cat.Id,
+                Nombre_SubCategoria=sub_name,
+            )
+            db.add(sub)
+            created += 1
+        created += 1
+
+    await db.flush()
+    logger.info("Onboarding categories: %d items for user %d", created, id_usuario)
+    return {"created": created}
 
 
 @router.post("/{id}/subcategorias")
