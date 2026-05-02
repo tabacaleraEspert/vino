@@ -240,6 +240,12 @@ async def patch_movimiento(
         updates["CategoriaManual"] = True
     if "comercioId" in payload or "ComercioId" in payload:
         updates["ComercioId"] = str(payload.get("comercioId") or payload.get("ComercioId") or "").strip() or None
+    if "cuotaActual" in payload or "CuotaActual" in payload:
+        val = payload.get("cuotaActual") or payload.get("CuotaActual")
+        updates["CuotaActual"] = int(val) if val else None
+    if "cuotaTotal" in payload or "CuotaTotal" in payload:
+        val = payload.get("cuotaTotal") or payload.get("CuotaTotal")
+        updates["CuotaTotal"] = int(val) if val else None
 
     if not updates:
         existing = await repo_get(db, id_usuario, id)

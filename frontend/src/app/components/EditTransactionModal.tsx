@@ -29,6 +29,8 @@ export function EditTransactionModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [cuotaActual, setCuotaActual] = useState<number | null>(null);
+  const [cuotaTotal, setCuotaTotal] = useState<number | null>(null);
 
   useEffect(() => {
     if (show && transaction) {
@@ -38,6 +40,8 @@ export function EditTransactionModal({
       setMerchantId(transaction.merchantId || "");
       setCategoryId(transaction.categoryId || "");
       setSubcategoryId(transaction.subcategoryId || "");
+      setCuotaActual(transaction.cuotaActual || null);
+      setCuotaTotal(transaction.cuotaTotal || null);
       setError("");
       setShowDeleteConfirm(false);
     }
@@ -67,14 +71,17 @@ export function EditTransactionModal({
     setIsSubmitting(true);
     setError("");
     try {
-      await updateTransaction(transaction.id, {
+      const updates: Record<string, any> = {
         description: description.trim(),
         amount: -amountNum,
         date,
         merchantId,
         categoryId,
         subcategoryId: subcategoryId || undefined,
-      });
+      };
+      if (cuotaActual) updates.cuotaActual = cuotaActual;
+      if (cuotaTotal) updates.cuotaTotal = cuotaTotal;
+      await updateTransaction(transaction.id, updates);
       await api.movimientos.invalidateCache();
       await refresh();
       toast.success("Gasto actualizado correctamente");
@@ -242,6 +249,38 @@ export function EditTransactionModal({
               )}
             </div>
           </div>
+
+          {/* Cuotas */}
+          {cuotaTotal && cuotaTotal > 1 && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <p className="text-xs font-semibold text-blue-800 mb-2">Cuotas</p>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <label className="text-xs text-blue-700">Cuota</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={cuotaTotal}
+                    value={cuotaActual || 1}
+                    onChange={(e) => setCuotaActual(Math.max(1, Math.min(cuotaTotal, parseInt(e.target.value) || 1)))}
+                    className="w-14 px-2 py-1.5 text-sm bg-white border border-blue-300 rounded-lg outline-none text-center"
+                  />
+                </div>
+                <span className="text-xs text-blue-600 font-bold">de</span>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    min={1}
+                    max={48}
+                    value={cuotaTotal}
+                    onChange={(e) => setCuotaTotal(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-14 px-2 py-1.5 text-sm bg-white border border-blue-300 rounded-lg outline-none text-center"
+                  />
+                  <label className="text-xs text-blue-700">cuotas</label>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Botones */}
           <div className="flex gap-3 pt-2">

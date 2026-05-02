@@ -18,10 +18,6 @@ export function MonthSelector() {
   };
 
   const goNext = () => {
-    const now = new Date();
-    const atCurrent = selectedMonth.month === now.getMonth() && selectedMonth.year === now.getFullYear();
-    if (atCurrent) return;
-
     if (selectedMonth.month === 11) {
       setSelectedMonth({ month: 0, year: selectedMonth.year + 1 });
     } else {
@@ -29,15 +25,24 @@ export function MonthSelector() {
     }
   };
 
+  const goToday = () => {
+    const n = new Date();
+    setSelectedMonth({ month: n.getMonth(), year: n.getFullYear() });
+  };
+
   const now = new Date();
-  const canGoNext =
-    selectedMonth.year < now.getFullYear() ||
-    (selectedMonth.year === now.getFullYear() && selectedMonth.month < now.getMonth());
+  const isFuture =
+    selectedMonth.year > now.getFullYear() ||
+    (selectedMonth.year === now.getFullYear() && selectedMonth.month > now.getMonth());
 
   return (
     <div
       className={`flex items-center justify-between rounded-xl px-4 py-3 ${
-        isCurrentMonth ? "bg-white shadow-sm" : "bg-amber-50 border border-amber-200"
+        isCurrentMonth
+          ? "bg-white shadow-sm"
+          : isFuture
+          ? "bg-blue-50 border border-blue-200"
+          : "bg-amber-50 border border-amber-200"
       }`}
     >
       <button
@@ -46,15 +51,22 @@ export function MonthSelector() {
       >
         <ChevronLeft className="w-5 h-5 text-gray-600" />
       </button>
-      <span className="font-semibold text-gray-800">
-        {MONTH_NAMES[selectedMonth.month]} {selectedMonth.year}
-      </span>
+      <div className="flex flex-col items-center">
+        <span className="font-semibold text-gray-800">
+          {MONTH_NAMES[selectedMonth.month]} {selectedMonth.year}
+        </span>
+        {!isCurrentMonth && (
+          <button
+            onClick={goToday}
+            className="text-[10px] font-bold text-blue-600 hover:text-blue-700 mt-0.5"
+          >
+            Volver a hoy
+          </button>
+        )}
+      </div>
       <button
         onClick={goNext}
-        disabled={!canGoNext}
-        className={`p-2 -mr-2 rounded-lg transition-colors ${
-          canGoNext ? "hover:bg-gray-100" : "opacity-40 cursor-not-allowed"
-        }`}
+        className="p-2 -mr-2 rounded-lg hover:bg-gray-100 transition-colors"
       >
         <ChevronRight className="w-5 h-5 text-gray-600" />
       </button>
