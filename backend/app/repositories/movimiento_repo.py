@@ -327,12 +327,13 @@ async def list_comercios_from_movimientos(
     id_usuario: int,
     limit: int = 500,
 ) -> list[str]:
-    """List unique merchant names from movimientos."""
+    """List unique merchant names from card/email movimientos only (not manual/whatsapp)."""
     stmt = text(
         "SELECT DISTINCT LTRIM(RTRIM(m.Descripcion)) AS nombre "
         "FROM dbo.movimientos m "
         "WHERE m.Id_usuario = :uid AND m.Descripcion IS NOT NULL "
         "AND LTRIM(RTRIM(m.Descripcion)) != '' "
+        "AND m.MedioCarga IN ('Gmail', 'Statement', 'statement') "
         "ORDER BY nombre "
         "OFFSET 0 ROWS FETCH NEXT :lim ROWS ONLY"
     )

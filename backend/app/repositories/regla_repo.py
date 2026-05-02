@@ -78,13 +78,13 @@ async def create_regla(
     session: AsyncSession,
     id_usuario: int,
     patron: str,
-    id_subcategoria: int,
+    id_subcategoria: int | None = None,
     id_categoria: int | None = None,
     prioridad: int = 100,
     confianza: str = "MANUAL",
 ) -> dict[str, Any]:
     # Resolve categoria from subcategoria if not provided
-    if id_categoria is None:
+    if id_categoria is None and id_subcategoria is not None:
         sub_stmt = select(SubCategoria).where(and_(
             SubCategoria.Id_usuario == id_usuario,
             SubCategoria.Id == id_subcategoria,
@@ -93,6 +93,8 @@ async def create_regla(
         if not sub:
             raise ValueError("Subcategoría no encontrada")
         id_categoria = sub.Id_Categoria
+    elif id_categoria is None:
+        raise ValueError("Categoría o subcategoría es requerida")
 
     regla = ReglaComercio(
         Id_usuario=id_usuario,

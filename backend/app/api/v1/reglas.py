@@ -114,12 +114,15 @@ async def post_regla(
         patron = _merchant_id_to_patron(str(payload.get("merchantId", "")))
         if not patron:
             raise HTTPException(status_code=404, detail="Comercio no encontrado")
-        sub_id = str(payload.get("subcategoryId") or payload.get("categoryId") or "").strip()
-        if not sub_id:
+        sub_id = str(payload.get("subcategoryId") or "").strip()
+        cat_id = str(payload.get("categoryId") or "").strip()
+        if not sub_id and not cat_id:
             raise HTTPException(status_code=400, detail="subcategoryId o categoryId requerido")
         try:
             created = await create_regla(
-                db, id_usuario, patron=patron, id_subcategoria=int(sub_id),
+                db, id_usuario, patron=patron,
+                id_subcategoria=int(sub_id) if sub_id else None,
+                id_categoria=int(cat_id) if cat_id and not sub_id else None,
             )
             return {
                 "id": created["id"],

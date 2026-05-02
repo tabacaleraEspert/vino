@@ -56,13 +56,14 @@ async def create_comercio(
     db: AsyncSession = Depends(get_db),
 ):
     """Create a merchant rule."""
-    if not payload.defaultSubcategoryId:
-        raise HTTPException(status_code=400, detail="defaultSubcategoryId es requerido")
+    if not payload.defaultCategoryId and not payload.defaultSubcategoryId:
+        raise HTTPException(status_code=400, detail="Categoría o subcategoría es requerida")
     try:
         created = await create_regla(
             db, id_usuario,
             patron=payload.name,
-            id_subcategoria=int(payload.defaultSubcategoryId),
+            id_categoria=int(payload.defaultCategoryId) if payload.defaultCategoryId else None,
+            id_subcategoria=int(payload.defaultSubcategoryId) if payload.defaultSubcategoryId else None,
         )
         return {
             "id": str(created["id"]),

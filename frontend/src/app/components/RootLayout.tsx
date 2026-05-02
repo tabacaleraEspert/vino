@@ -1,11 +1,12 @@
 import { Outlet, NavLink } from "react-router";
 import { useEffect, useState } from "react";
-import { Home, Receipt, FolderOpen, Wallet, Store, TrendingUp, LogOut, RefreshCw, Upload, MessageCircle, MoreHorizontal, Users, CreditCard, Settings as SettingsIcon } from "lucide-react";
+import { Home, Receipt, FolderOpen, Wallet, Store, TrendingUp, LogOut, RefreshCw, Upload, MessageCircle, MoreHorizontal, Users, CreditCard, Settings as SettingsIcon, Plus } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useData } from "../context/DataContext";
 import { useNavigate } from "react-router";
 import { api } from "@/lib/api";
 import { apiFetch } from "@/lib/api/client";
+import { QuickAddExpense } from "./QuickAddExpense";
 
 export function RootLayout() {
   const { user, logout } = useAuth();
@@ -34,6 +35,7 @@ export function RootLayout() {
   };
 
   const [showMore, setShowMore] = useState(false);
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
 
   const navItems = [
     { to: "/", icon: Home, label: "Inicio" },
@@ -127,6 +129,23 @@ export function RootLayout() {
           </div>
         </div>
       )}
+
+      {/* FAB - Quick Add */}
+      <button
+        onClick={() => setShowQuickAdd(true)}
+        className="fixed z-50 w-14 h-14 rounded-full shadow-lg flex items-center justify-center transition-all active:scale-90 hover:shadow-xl"
+        style={{
+          bottom: 76,
+          right: "max(16px, calc(50% - 224px + 16px))",
+          background: "linear-gradient(135deg, #D8FF3C 0%, #b8e600 100%)",
+          boxShadow: "0 4px 20px rgba(216,255,60,0.4)",
+        }}
+      >
+        <Plus className="w-7 h-7 text-black" strokeWidth={2.5} />
+      </button>
+
+      {/* Quick Add Modal */}
+      <QuickAddExpense open={showQuickAdd} onClose={() => setShowQuickAdd(false)} />
 
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 max-w-md mx-auto z-50">
         <div className="grid grid-cols-6">

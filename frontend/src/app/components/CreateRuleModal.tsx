@@ -43,7 +43,7 @@ export function CreateRuleModal({
       await addMerchantRule({
         merchantId: merchant.id,
         categoryId: selectedCategoryId,
-        subcategoryId: selectedSubcategoryId || undefined,
+        subcategoryId: selectedSubcategoryId || null,
       });
       setSelectedCategoryId("");
       setSelectedSubcategoryId("");
