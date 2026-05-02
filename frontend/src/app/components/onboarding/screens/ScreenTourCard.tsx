@@ -68,10 +68,28 @@ export function ScreenTourCard({ onNext }: Props) {
           </div>
         ))}
       </div>
-      <div style={{ margin: "12px 0" }}>
+      <div style={{ margin: "12px 0", display: "flex", flexDirection: "column", gap: 8 }}>
         <Body>Cada compra entra <strong style={{ color: ink }}>auto-categorizada</strong>. Cero planillas.</Body>
+        <div style={{
+          background: `${lime}22`,
+          border: `1px solid ${lime}55`,
+          borderRadius: 12,
+          padding: "12px 14px",
+          fontSize: 12,
+          lineHeight: 1.5,
+          color: ink,
+        }}>
+          <strong>Para activar esto necesitas:</strong>
+          <ol style={{ margin: "6px 0 0", paddingLeft: 18 }}>
+            <li>Conectar tu <strong>Gmail</strong> (en el siguiente paso)</li>
+            <li>Tener activadas las <strong>notificaciones por email</strong> de tu banco (Santander, BBVA, Macro, etc.)</li>
+          </ol>
+          <div style={{ fontSize: 11, color: "rgba(10,10,10,0.55)", marginTop: 6 }}>
+            Fina lee solo los mails de tu banco para registrar gastos. No accedemos a ningun otro email.
+          </div>
+        </div>
       </div>
-      <PrimaryBtn onClick={onNext}>Siguiente →</PrimaryBtn>
+      <PrimaryBtn onClick={onNext}>Conectar Gmail →</PrimaryBtn>
     </Frame>
   );
 }

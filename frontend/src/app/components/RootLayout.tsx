@@ -5,15 +5,27 @@ import { useAuth } from "../context/AuthContext";
 import { useData } from "../context/DataContext";
 import { useNavigate } from "react-router";
 import { api } from "@/lib/api";
+import { apiFetch } from "@/lib/api/client";
 
 export function RootLayout() {
   const { user, logout } = useAuth();
   const { isLoading, error, refresh } = useData();
   const navigate = useNavigate();
   const [backendVersion, setBackendVersion] = useState<string | null>(null);
+  const [hasMissingSetup, setHasMissingSetup] = useState(false);
 
   useEffect(() => {
     api.health().then((r) => setBackendVersion(r.version)).catch(() => setBackendVersion(null));
+
+    // Check if Gmail or WhatsApp are missing
+    Promise.all([
+      apiFetch<{ whatsapp?: string; whatsapp_vinculado?: boolean }>("/auth/profile").catch(() => null),
+      apiFetch<{ connected?: boolean }>("/gmail/status").catch(() => null),
+    ]).then(([profile, gmail]) => {
+      const missingWhatsapp = !profile?.whatsapp_vinculado;
+      const missingGmail = !gmail?.connected;
+      setHasMissingSetup(missingWhatsapp || missingGmail);
+    });
   }, []);
 
   const handleLogout = () => {
@@ -100,13 +112,16 @@ export function RootLayout() {
                 to={to}
                 onClick={() => setShowMore(false)}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+                  `flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors relative ${
                     isActive ? "text-blue-600 bg-blue-50" : "text-gray-700 hover:bg-gray-50"
                   }`
                 }
               >
                 <Icon className="w-5 h-5" />
                 <span className="text-sm font-medium">{label}</span>
+                {to === "/settings" && hasMissingSetup && (
+                  <span className="w-2 h-2 bg-red-500 rounded-full ml-auto" />
+                )}
               </NavLink>
             ))}
           </div>
@@ -141,7 +156,7 @@ export function RootLayout() {
           {/* More button */}
           <button
             onClick={() => setShowMore((p) => !p)}
-            className={`flex flex-col items-center justify-center py-2 px-0.5 transition-colors ${
+            className={`flex flex-col items-center justify-center py-2 px-0.5 transition-colors relative ${
               showMore ? "text-blue-600 bg-blue-50" : "text-gray-600 hover:bg-gray-50"
             }`}
           >
@@ -149,6 +164,9 @@ export function RootLayout() {
             <span className="truncate w-full text-center text-[10px] font-medium leading-tight">
               Más
             </span>
+            {hasMissingSetup && (
+              <span className="absolute top-1.5 right-2.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white" />
+            )}
           </button>
         </div>
       </nav>

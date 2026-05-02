@@ -355,8 +355,170 @@ def _parse_santander_amount(s: str) -> float | None:
         return None
 
 
+def _parse_bbva_pdf_text(full_text: str) -> dict:
+    """Parse BBVA Caja de Ahorro PDF text format into transactions."""
+    lines = full_text.split("\n")
+
+    transactions: list[dict] = []
+    statement_year = ""
+
+    # Extract year from document — look for "Vencimiento DD.YY" or similar
+    for line in lines:
+        m = re.search(r"Vencimiento\s+\d{1,2}\.(\d{2})\b", line)
+        if m:
+            statement_year = f"20{m.group(1)}"
+            break
+    if not statement_year:
+        # Fallback: look for "Período DD/MM/YYYY" or 4-digit year anywhere
+        for line in lines:
+            m = re.search(r"(\d{4})", line)
+            if m and m.group(1).startswith("20"):
+                statement_year = m.group(1)
+                break
+    if not statement_year:
+        statement_year = "2026"
+
+    # Skip patterns — non-transaction entries
+    skip_patterns = [
+        "SALDO ANTERIOR", "TOTAL MOVIMIENTOS", "SALDO AL",
+        "INTERESES GANADOS", "IVA TASA GENERAL", "COMISION POR RENTA",
+        "IMPUESTO SOBRE", "COMISION", "IMPUESTO",
+    ]
+
+    # Section boundaries: only parse "Movimientos en cuentas"
+    in_movimientos_section = False
+    stop_sections = [
+        "Transferencias", "Inversiones", "Legales y avisos",
+        "OPERACIONES REALIZADAS", "LIQUIDACIONES DE DERECHOS",
+    ]
+
+    # Parse each line looking for DD/MM pattern at start
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        # Detect start of "Movimientos en cuentas" section
+        if "Movimientos en cuentas" in stripped:
+            in_movimientos_section = True
+            continue
+
+        # Detect end of section
+        if in_movimientos_section and any(s in stripped for s in stop_sections):
+            in_movimientos_section = False
+            continue
+
+        if not in_movimientos_section:
+            continue
+
+        # Skip column headers
+        if "FECHA" in stripped and "CONCEPTO" in stripped:
+            continue
+
+        # Skip non-transaction rows
+        if any(skip.lower() in stripped.lower() for skip in skip_patterns):
+            continue
+
+        # Try to match transaction line
+        # Format: DD/MM  NNN  DESCRIPTION  [DEBITO]  [CREDITO]  SALDO
+        # We need a flexible approach since columns may or may not have values
+        m = re.match(r"^\s*(\d{2}/\d{2})\s+(\d{2,3})\s+(.+)$", stripped)
+        if not m:
+            continue
+
+        fecha_str = m.group(1)  # DD/MM
+        concepto_and_amounts = m.group(3).strip()
+
+        # Extract amounts from the end of the line
+        # Amounts look like: -749.993,85 or 44.208,00 or -1.351.330,62
+        # There can be 2 or 3 amounts at the end (debito, credito, saldo)
+        amount_pattern = r"-?[\d]+(?:\.[\d]{3})*,\d{2}"
+        amounts = re.findall(amount_pattern, concepto_and_amounts)
+
+        if len(amounts) < 2:
+            # Need at least debito/credito + saldo
+            continue
+
+        # The last amount is always SALDO — ignore it
+        # If there are 3 amounts: debito, credito, saldo
+        # If there are 2 amounts: either (debito, saldo) or (credito, saldo)
+        # Determine by sign: negative = debito
+
+        # Remove amounts from description
+        desc = concepto_and_amounts
+        for amt in amounts:
+            desc = desc.replace(amt, "", 1)
+        desc = re.sub(r"\s+", " ", desc).strip()
+
+        if not desc or len(desc) < 2:
+            continue
+
+        # Parse the transaction amount (not saldo)
+        # With 3 amounts: amounts[0]=debito, amounts[1]=credito, amounts[2]=saldo
+        # With 2 amounts: amounts[0]=debito or credito, amounts[1]=saldo
+        saldo_str = amounts[-1]  # last is always saldo
+
+        monto_val = None
+        tipo = ""
+
+        if len(amounts) >= 3:
+            # Both debito and credito columns present
+            debito_str = amounts[-3]
+            credito_str = amounts[-2]
+            debito_val = _parse_ar_money(debito_str)
+            credito_val = _parse_ar_money(credito_str)
+            if debito_val is not None and debito_val < 0:
+                monto_val = abs(debito_val)
+                tipo = "Gasto"
+            elif credito_val is not None and credito_val > 0:
+                monto_val = credito_val
+                tipo = "Ingreso"
+        else:
+            # Only one amount + saldo
+            val = _parse_ar_money(amounts[0])
+            if val is not None:
+                if val < 0:
+                    monto_val = abs(val)
+                    tipo = "Gasto"
+                else:
+                    monto_val = val
+                    tipo = "Ingreso"
+
+        if monto_val is None or monto_val == 0:
+            continue
+
+        # Build full date
+        day, month = fecha_str.split("/")
+        fecha = f"{statement_year}-{month}-{day}"
+
+        transactions.append({
+            "fecha": fecha,
+            "descripcion": desc,
+            "monto": round(monto_val, 2),
+            "moneda": "ARS",
+            "tipo": tipo,
+            "categoria_id": None,
+            "subcategoria_id": None,
+        })
+
+    # Determine statement period from transactions
+    statement_period = ""
+    if transactions:
+        # Use the most common month among transactions
+        from collections import Counter
+        months = [t["fecha"][0:7] for t in transactions]
+        if months:
+            statement_period = Counter(months).most_common(1)[0][0]
+
+    return {
+        "transactions": transactions,
+        "statement_period": statement_period,
+        "card_or_account": "BBVA Caja de Ahorro",
+    }
+
+
 async def extract_from_pdf(pdf_bytes: bytes, categories: list[dict]) -> dict:
-    """Extract transactions from a PDF. Detects Santander format, falls back to AI."""
+    """Extract transactions from a PDF. Detects Santander/BBVA format, falls back to AI."""
     from PyPDF2 import PdfReader
     import io
 
@@ -379,7 +541,15 @@ async def extract_from_pdf(pdf_bytes: bytes, categories: list[dict]) -> dict:
 
     if is_santander:
         result = _parse_santander_pdf_text(full_text)
-        # AI categorization
+        if result["transactions"] and categories:
+            result["transactions"] = await _ai_categorize_batch(result["transactions"], categories)
+        return result
+
+    # Detect BBVA format
+    is_bbva = "BBVA" in full_text and "Movimientos en cuentas" in full_text
+
+    if is_bbva:
+        result = _parse_bbva_pdf_text(full_text)
         if result["transactions"] and categories:
             result["transactions"] = await _ai_categorize_batch(result["transactions"], categories)
         return result

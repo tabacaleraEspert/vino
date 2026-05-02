@@ -92,6 +92,10 @@ export function Settings() {
 
   const whatsappChanged = whatsapp.trim() !== whatsappSaved;
 
+  const missingGmail = gmailStatus !== null && !gmailStatus.connected;
+  const missingWhatsapp = !whatsappSaved;
+  const hasPending = missingGmail || missingWhatsapp;
+
   return (
     <div className="p-4 space-y-6 max-w-lg mx-auto">
       <h2 className="text-lg font-semibold">Configuracion</h2>
@@ -99,6 +103,29 @@ export function Settings() {
       {message && (
         <div className={`rounded-lg p-3 text-sm font-medium ${message.includes("Error") ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
           {message}
+        </div>
+      )}
+
+      {/* Pending setup banner */}
+      {hasPending && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2">
+          <p className="text-sm font-semibold text-amber-900">Te falta configurar:</p>
+          <ul className="space-y-1.5">
+            {missingGmail && (
+              <li className="flex items-center gap-2 text-sm text-amber-800">
+                <span className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0" />
+                <Mail className="w-4 h-4" />
+                <span><strong>Gmail</strong> — Para detectar gastos automaticamente desde tu banco</span>
+              </li>
+            )}
+            {missingWhatsapp && (
+              <li className="flex items-center gap-2 text-sm text-amber-800">
+                <span className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0" />
+                <MessageCircle className="w-4 h-4" />
+                <span><strong>WhatsApp</strong> — Para registrar gastos y consultar tu balance por mensaje</span>
+              </li>
+            )}
+          </ul>
         </div>
       )}
 
