@@ -54,11 +54,12 @@ async def create_categoria(
     nombre: str,
     icon: str = "📁",
     color: str = "#6b7280",
+    bucket: str = "necesidades",
 ) -> dict[str, Any]:
-    cat = Categoria(Id_usuario=id_usuario, Nombre=nombre, Icon=icon, Color=color)
+    cat = Categoria(Id_usuario=id_usuario, Nombre=nombre, Icon=icon, Color=color, Bucket=bucket)
     session.add(cat)
     await session.flush()
-    return {"id": cat.Id, "nombre": cat.Nombre, "icon": cat.Icon, "color": cat.Color}
+    return {"id": cat.Id, "nombre": cat.Nombre, "icon": cat.Icon, "color": cat.Color, "bucket": cat.Bucket}
 
 
 async def update_categoria(

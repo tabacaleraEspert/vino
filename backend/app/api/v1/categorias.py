@@ -31,6 +31,7 @@ class CategoryIn(BaseModel):
     name: str
     icon: str = "📁"
     color: str = "#6b7280"
+    bucket: str = "necesidades"
     subcategories: Optional[list[SubcategoryIn]] = None
 
 
@@ -66,7 +67,7 @@ async def post_categoria(
     id_usuario: int = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    created = await create_categoria(db, id_usuario, nombre=payload.name, icon=payload.icon, color=payload.color)
+    created = await create_categoria(db, id_usuario, nombre=payload.name, icon=payload.icon, color=payload.color, bucket=payload.bucket)
     if payload.subcategories:
         for s in payload.subcategories:
             await create_subcategoria(db, id_usuario, categoria_id=created["id"], nombre=s.name)

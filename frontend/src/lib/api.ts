@@ -171,6 +171,7 @@ export const api = {
           name: data.name,
           icon: data.icon || "📁",
           color: data.color || "#6b7280",
+          bucket: data.bucket || "necesidades",
           subcategories: (data.subcategories ?? []).map((s) => ({ name: s.name })),
         }),
       }),

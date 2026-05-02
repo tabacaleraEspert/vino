@@ -29,8 +29,15 @@ export function CreateCategoryModal({ isOpen, onClose }: CreateCategoryModalProp
   const [name, setName] = useState("");
   const [selectedIcon, setSelectedIcon] = useState(AVAILABLE_ICONS[0]);
   const [selectedColor, setSelectedColor] = useState(AVAILABLE_COLORS[2]);
+  const [selectedBucket, setSelectedBucket] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const BUCKETS = [
+    { value: "necesidades", label: "Necesidades", desc: "Lo que no podés dejar de pagar" },
+    { value: "estilo_vida", label: "Estilo de vida", desc: "Lo que disfrutás pero podrías recortar" },
+    { value: "otros", label: "Otros", desc: "No estoy seguro" },
+  ];
 
   if (!isOpen) return null;
 
@@ -41,17 +48,23 @@ export function CreateCategoryModal({ isOpen, onClose }: CreateCategoryModalProp
       setError("Por favor ingresa un nombre para la categoría");
       return;
     }
+    if (!selectedBucket) {
+      setError("Elegí a qué grupo pertenece esta categoría");
+      return;
+    }
     setIsSubmitting(true);
     try {
       await addCategory({
         name: name.trim(),
         icon: selectedIcon,
         color: selectedColor,
+        bucket: selectedBucket,
         subcategories: [],
       });
       setName("");
       setSelectedIcon(AVAILABLE_ICONS[0]);
       setSelectedColor(AVAILABLE_COLORS[2]);
+      setSelectedBucket("");
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al crear");
@@ -111,6 +124,32 @@ export function CreateCategoryModal({ isOpen, onClose }: CreateCategoryModalProp
             {error && (
               <p className="text-sm text-red-600 mt-2">{error}</p>
             )}
+          </div>
+
+          {/* Selector de grupo */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              ¿A qué grupo pertenece? *
+            </label>
+            <div className="space-y-2">
+              {BUCKETS.map((b) => (
+                <button
+                  key={b.value}
+                  type="button"
+                  onClick={() => { setSelectedBucket(b.value); setError(""); }}
+                  className={`w-full text-left px-4 py-3 rounded-lg border-2 transition-all ${
+                    selectedBucket === b.value
+                      ? "border-blue-500 bg-blue-50"
+                      : "border-gray-200 bg-gray-50 hover:border-gray-300"
+                  }`}
+                >
+                  <p className={`text-sm font-semibold ${selectedBucket === b.value ? "text-blue-700" : "text-gray-800"}`}>
+                    {b.label}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-0.5">{b.desc}</p>
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Selector de icono */}
