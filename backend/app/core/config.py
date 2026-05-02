@@ -21,6 +21,8 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5173",
         "http://localhost:3000",
         "https://lively-sand-05dbb8b0f.1.azurestaticapps.net",
+        "capacitor://localhost",
+        "ionic://localhost",
     ]
 
     SQL_SERVER: str | None = None
