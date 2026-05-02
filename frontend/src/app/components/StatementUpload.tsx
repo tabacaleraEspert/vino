@@ -19,14 +19,29 @@ interface ExtractedTx {
   comercio_identificado?: string;
 }
 
-type Step = "upload" | "processing" | "review" | "confirming" | "done";
+type Step = "select-bank" | "upload" | "processing" | "review" | "confirming" | "done";
+
+interface BankOption {
+  id: string;
+  name: string;
+  logo: string;
+  formats: string;
+  native: boolean;
+}
+
+const BANKS: BankOption[] = [
+  { id: "santander", name: "Santander", logo: "🔴", formats: "PDF (Visa), Excel", native: true },
+  { id: "bbva", name: "BBVA Frances", logo: "🔵", formats: "PDF (Caja de Ahorro)", native: true },
+  { id: "otro", name: "Otro banco", logo: "🏦", formats: "PDF, Excel, Imagen", native: false },
+];
 
 export function StatementUpload() {
   const { categories, refresh } = useData();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [step, setStep] = useState<Step>("upload");
+  const [step, setStep] = useState<Step>("select-bank");
+  const [selectedBank, setSelectedBank] = useState<BankOption | null>(null);
   const [error, setError] = useState("");
   const [fileName, setFileName] = useState("");
   const [statementInfo, setStatementInfo] = useState({ period: "", card: "" });
@@ -134,14 +149,57 @@ export function StatementUpload() {
     <div className="p-4 space-y-4 max-w-2xl mx-auto">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <button onClick={() => navigate(-1)} className="p-2 hover:bg-gray-100 rounded-lg">
+        <button onClick={() => {
+          if (step === "upload") { setStep("select-bank"); setSelectedBank(null); }
+          else navigate(-1);
+        }} className="p-2 hover:bg-gray-100 rounded-lg">
           <ArrowLeft className="w-5 h-5 text-gray-600" />
         </button>
         <div>
-          <h2 className="font-semibold text-lg">Cargar extracto</h2>
-          <p className="text-sm text-gray-500">Subi un resumen bancario o de tarjeta</p>
+          <h2 className="font-semibold text-lg">
+            {step === "select-bank" ? "Cargar extracto" : selectedBank ? `Extracto ${selectedBank.name}` : "Cargar extracto"}
+          </h2>
+          <p className="text-sm text-gray-500">
+            {step === "select-bank" ? "Selecciona tu banco" : "Subi tu resumen bancario o de tarjeta"}
+          </p>
         </div>
       </div>
+
+      {/* Select Bank */}
+      {step === "select-bank" && (
+        <div className="space-y-3">
+          <p className="text-sm text-gray-600 px-1">Selecciona tu banco para un mejor procesamiento:</p>
+          {BANKS.map((bank) => (
+            <button
+              key={bank.id}
+              onClick={() => { setSelectedBank(bank); setStep("upload"); }}
+              className="w-full flex items-center gap-4 p-4 bg-white border border-gray-200 rounded-xl hover:border-purple-300 hover:bg-purple-50 transition-all text-left"
+            >
+              <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center text-2xl flex-shrink-0">
+                {bank.logo}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="font-semibold text-gray-900">{bank.name}</p>
+                  {bank.native && (
+                    <span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">NATIVO</span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500 mt-0.5">Formatos: {bank.formats}</p>
+              </div>
+              <svg className="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          ))}
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mt-4">
+            <p className="text-xs text-blue-700">
+              <strong>Bancos nativos</strong> tienen parser optimizado — extraen transacciones con precision.
+              Para otros bancos usamos IA que funciona bien pero puede necesitar ajustes.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Upload */}
       {step === "upload" && (
@@ -184,27 +242,11 @@ export function StatementUpload() {
             <span>Max 10MB</span>
           </div>
 
-          {/* Supported banks + template */}
-          <div className="mt-6 pt-5 border-t border-gray-100 space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-semibold text-gray-600">Bancos con parser automatico</p>
-                <p className="text-xs text-gray-400 mt-0.5">Santander (PDF Visa y Excel)</p>
-              </div>
-              <span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">NATIVO</span>
-            </div>
-            <div>
-              <p className="text-xs text-gray-400">Otros bancos: subi el PDF o screenshot y la IA extrae las transacciones.</p>
-            </div>
-            <a
-              href={`${import.meta.env.VITE_API_URL || "https://vino-backend-bkbge8cwfffsdrhc.brazilsouth-01.azurewebsites.net/api/v1"}/statement/template`}
-              download
-              className="inline-flex items-center gap-2 text-xs font-medium text-purple-600 hover:text-purple-700 transition-colors"
-            >
-              <FileText className="w-3.5 h-3.5" />
-              Descargar plantilla Excel
-            </a>
-          </div>
+          {selectedBank && !selectedBank.native && (
+            <p className="mt-4 text-xs text-gray-400 text-center">
+              Usamos IA para procesar extractos de {selectedBank.name}. Puede necesitar ajustes manuales.
+            </p>
+          )}
         </div>
       )}
 
