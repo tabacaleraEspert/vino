@@ -79,7 +79,7 @@ app.add_middleware(
         "https://lively-sand-05dbb8b0f.1.azurestaticapps.net",
         *settings.CORS_ORIGINS,
     ],
-    allow_origin_regex=r"https://[a-zA-Z0-9.-]+\.azurestaticapps\.net|http://(localhost|127\.0\.0\.1)(:\d+)?",
+    allow_origin_regex=r"https://[a-zA-Z0-9.-]+\.azurestaticapps\.net|https?://(localhost|127\.0\.0\.1)(:\d+)?|capacitor://localhost|ionic://localhost",
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
