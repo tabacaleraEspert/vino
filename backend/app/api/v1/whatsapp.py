@@ -364,41 +364,96 @@ async def register_expense(
         except Exception:
             pass
 
-    # Step 5: Create movement
-    try:
-        created = await create_movimiento(
-            db,
-            id_usuario=payload.user_id,
-            fecha=fecha,
-            tipo=tipo,
-            moneda=moneda,
-            monto=Decimal(str(monto)),
-            medio_carga="Wpp",
-            descripcion=descripcion,
-            id_categoria=id_categoria,
-            id_subcategoria=id_subcategoria,
-            comercio_id=str(regla_match["id"]) if regla_match else None,
-            categoria_manual=False,
-            origen="Wpp",
-            origen_id=None,
-            id_credito_debito=id_credito_debito,
-            id_medio_pago_final=id_medio_pago_final,
-        )
-    except Exception as e:
-        logger.error("Failed to create movement: %s", e)
-        return {"status": "error", "reply": f"Error al registrar el gasto: {e}"}
-
-    mov_id_raw = created.get("id") or created.get("Id")
-
-    # Step 5b: Handle cuotas and splits
+    # Step 5: Handle cuotas
     cuota_actual = extracted.get("cuota_actual")
     cuota_total = extracted.get("cuota_total")
     monto_total_compra = extracted.get("monto_total_compra")
+
+    # When cuota_total > 1, create one movement per installment across months
+    if cuota_total and cuota_total > 1:
+        from dateutil.relativedelta import relativedelta
+
+        monto_total = monto_total_compra or monto
+        monto_cuota = round(monto_total / cuota_total, 2)
+        base_descripcion = descripcion or ""
+        comercio_id_val = str(regla_match["id"]) if regla_match else None
+
+        first_created = None
+        try:
+            for i in range(cuota_total):
+                cuota_fecha = fecha + relativedelta(months=i)
+                cuota_desc = f"{base_descripcion} ({i + 1:02d}/{cuota_total:02d})".strip()
+
+                created = await create_movimiento(
+                    db,
+                    id_usuario=payload.user_id,
+                    fecha=cuota_fecha,
+                    tipo=tipo,
+                    moneda=moneda,
+                    monto=Decimal(str(monto_cuota)),
+                    medio_carga="Wpp",
+                    descripcion=cuota_desc,
+                    id_categoria=id_categoria,
+                    id_subcategoria=id_subcategoria,
+                    comercio_id=comercio_id_val,
+                    categoria_manual=False,
+                    origen="Wpp",
+                    origen_id=None,
+                    id_credito_debito=id_credito_debito,
+                    id_medio_pago_final=id_medio_pago_final,
+                    cuota_actual=i + 1,
+                    cuota_total=cuota_total,
+                    monto_total_compra=Decimal(str(monto_total)),
+                )
+                if i == 0:
+                    first_created = created
+        except Exception as e:
+            logger.error("Failed to create cuota movements: %s", e)
+            return {"status": "error", "reply": f"Error al registrar las cuotas: {e}"}
+
+        created = first_created
+        monto = monto_cuota  # for display below
+    else:
+        # Single movement (no cuotas)
+        try:
+            cuota_kw: dict = {}
+            if cuota_total == 1 or cuota_actual:
+                cuota_kw["cuota_actual"] = cuota_actual or 1
+                cuota_kw["cuota_total"] = cuota_total or 1
+                if monto_total_compra:
+                    cuota_kw["monto_total_compra"] = Decimal(str(monto_total_compra))
+
+            created = await create_movimiento(
+                db,
+                id_usuario=payload.user_id,
+                fecha=fecha,
+                tipo=tipo,
+                moneda=moneda,
+                monto=Decimal(str(monto)),
+                medio_carga="Wpp",
+                descripcion=descripcion,
+                id_categoria=id_categoria,
+                id_subcategoria=id_subcategoria,
+                comercio_id=str(regla_match["id"]) if regla_match else None,
+                categoria_manual=False,
+                origen="Wpp",
+                origen_id=None,
+                id_credito_debito=id_credito_debito,
+                id_medio_pago_final=id_medio_pago_final,
+                **cuota_kw,
+            )
+        except Exception as e:
+            logger.error("Failed to create movement: %s", e)
+            return {"status": "error", "reply": f"Error al registrar el gasto: {e}"}
+
+    mov_id_raw = created.get("id") or created.get("Id")
+
+    # Step 5b: Handle splits
     es_split = extracted.get("es_split", False)
     split_participantes = extracted.get("split_participantes")
     split_nombres = extracted.get("split_nombres", [])
 
-    if cuota_total or es_split:
+    if es_split:
         try:
             from sqlalchemy import select, and_
             from app.models.movimiento_orm import Movimiento as MovModel
@@ -406,19 +461,13 @@ async def register_expense(
             result = await db.execute(stmt)
             mov_obj = result.scalar_one_or_none()
             if mov_obj:
-                if cuota_total:
-                    mov_obj.CuotaActual = cuota_actual or 1
-                    mov_obj.CuotaTotal = cuota_total
-                    if monto_total_compra:
-                        mov_obj.MontoTotalCompra = Decimal(str(monto_total_compra))
-                if es_split:
-                    mov_obj.EsSplit = True
-                    if split_participantes:
-                        mov_obj.SplitParticipantes = split_participantes
-                    mov_obj.SplitTotal = Decimal(str(monto))
+                mov_obj.EsSplit = True
+                if split_participantes:
+                    mov_obj.SplitParticipantes = split_participantes
+                mov_obj.SplitTotal = Decimal(str(monto))
                 await db.flush()
         except Exception as e:
-            logger.warning("Failed to set cuota/split fields: %s", e)
+            logger.warning("Failed to set split fields: %s", e)
 
     # Step 5c: Create debts for split
     if es_split and split_participantes and split_participantes > 1:
@@ -487,8 +536,10 @@ async def register_expense(
 
     # Cuotas info
     if cuota_total and cuota_total > 1:
-        monto_total_fmt = f"${monto_total_compra:,.0f}".replace(",", ".") if monto_total_compra else "?"
-        reply += f"\n💳 Cuota {cuota_actual or 1}/{cuota_total} (total: {monto_total_fmt})"
+        monto_total_val = monto_total_compra or monto * cuota_total
+        monto_total_fmt = f"${monto_total_val:,.0f}".replace(",", ".")
+        monto_cuota_fmt = f"${monto:,.0f}".replace(",", ".")
+        reply += f"\n💳 {cuota_total} cuotas de {monto_cuota_fmt} (total: {monto_total_fmt})"
 
     # Split info
     if es_split and split_participantes and split_participantes > 1:

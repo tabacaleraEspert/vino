@@ -21,6 +21,7 @@ export function QuickAddExpense({ open, onClose }: Props) {
   const [selectedSubId, setSelectedSubId] = useState<string | null>(null);
   const [description, setDescription] = useState("");
   const [fecha, setFecha] = useState(TODAY());
+  const [cuotas, setCuotas] = useState(1);
   const [step, setStep] = useState<"amount" | "category" | "details" | "saving" | "done">("amount");
   const [saving, setSaving] = useState(false);
   const descRef = useRef<HTMLInputElement>(null);
@@ -33,6 +34,7 @@ export function QuickAddExpense({ open, onClose }: Props) {
       setSelectedSubId(null);
       setDescription("");
       setFecha(TODAY());
+      setCuotas(1);
       setStep("amount");
       setSaving(false);
     }
@@ -92,6 +94,7 @@ export function QuickAddExpense({ open, onClose }: Props) {
       if (description.trim()) payload.descripcion = description.trim();
       if (selectedCatId) payload.idCategoria = Number(selectedCatId);
       if (selectedSubId) payload.idSubcategoria = Number(selectedSubId);
+      if (cuotas > 1) payload.cuotas = cuotas;
 
       await api.movimientos.create(payload);
       setStep("done");
@@ -281,6 +284,31 @@ export function QuickAddExpense({ open, onClose }: Props) {
                 </div>
               </div>
             )}
+
+            {/* Cuotas */}
+            <div>
+              <p className="text-xs font-bold text-white/40 uppercase tracking-wider mb-2">Cuotas</p>
+              <div className="flex flex-wrap gap-1.5">
+                {[1, 3, 6, 9, 12, 18, 24].map((n) => (
+                  <button
+                    key={n}
+                    onClick={() => setCuotas(n)}
+                    className="px-3 py-2 rounded-xl text-xs font-semibold transition-all active:scale-95"
+                    style={{
+                      background: cuotas === n ? "#D8FF3C" : "rgba(255,255,255,0.08)",
+                      color: cuotas === n ? "#0a0a0f" : "rgba(255,255,255,0.7)",
+                    }}
+                  >
+                    {n === 1 ? "Sin cuotas" : `${n} cuotas`}
+                  </button>
+                ))}
+              </div>
+              {cuotas > 1 && (
+                <p className="text-xs text-white/50 mt-2 font-medium">
+                  {cuotas}x ${(numericAmount / cuotas).toLocaleString("es-AR", { maximumFractionDigits: 0 })} = ${numericAmount.toLocaleString("es-AR", { maximumFractionDigits: 0 })} total
+                </p>
+              )}
+            </div>
 
             {/* Description */}
             <div>

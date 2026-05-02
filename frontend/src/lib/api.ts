@@ -50,6 +50,9 @@ export interface Transaction {
   categoryId: string;
   subcategoryId?: string;
   merchantId: string;
+  cuotaActual?: number | null;
+  cuotaTotal?: number | null;
+  montoTotalCompra?: number | null;
 }
 
 // Formatos de respuesta del backend (Sheets)
@@ -119,6 +122,12 @@ export interface MovimientoItem {
   idCategoria?: string;
   idSubcategoria?: string;
   medio_pago: string;
+  cuotaActual?: number | null;
+  cuotaTotal?: number | null;
+  montoTotalCompra?: number | null;
+  CuotaActual?: number | null;
+  CuotaTotal?: number | null;
+  MontoTotalCompra?: number | null;
 }
 
 export interface MovimientosPaginatedResponse {
@@ -732,5 +741,8 @@ export function mapMovimientoItemToTransaction(
     categoryId: category?.id || "unknown",
     subcategoryId: subcategory?.id,
     merchantId: item.comercioId || merchant?.id || "",
+    cuotaActual: item.cuotaActual ?? item.CuotaActual ?? null,
+    cuotaTotal: item.cuotaTotal ?? item.CuotaTotal ?? null,
+    montoTotalCompra: item.montoTotalCompra ?? item.MontoTotalCompra ?? null,
   };
 }

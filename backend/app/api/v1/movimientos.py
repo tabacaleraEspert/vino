@@ -144,6 +144,53 @@ async def post_movimiento(
             id_cat = resolved["categoria_id"]
             id_sub = resolved["subcategoria_id"]
 
+    # Cuotas (installments)
+    cuotas_raw = payload.get("cuotas") or payload.get("cuota_total")
+    cuotas = int(cuotas_raw) if cuotas_raw and int(cuotas_raw) > 1 else 1
+    monto_total_raw = payload.get("monto_total") or payload.get("MontoTotalCompra")
+
+    if cuotas > 1:
+        from dateutil.relativedelta import relativedelta
+
+        monto_total = round(monto, 2)
+        if monto_total_raw:
+            monto_total = round(float(monto_total_raw), 2)
+        monto_cuota = round(monto_total / cuotas, 2)
+        base_descripcion = descripcion or ""
+        comercio_id = payload.get("ComercioId") or payload.get("comercioId")
+        categoria_manual = bool(payload.get("Id_Categoria") or payload.get("idCategoria"))
+        origen = str(payload.get("Origen") or "").strip() or None
+        origen_id = str(payload.get("Origen_Id") or "").strip() or None
+
+        first_created = None
+        for i in range(cuotas):
+            cuota_fecha = fecha + relativedelta(months=i)
+            cuota_desc = f"{base_descripcion} ({i + 1:02d}/{cuotas:02d})".strip()
+
+            created = await repo_create(
+                db,
+                id_usuario=id_usuario,
+                fecha=cuota_fecha,
+                tipo=tipo,
+                moneda=moneda,
+                monto=Decimal(str(monto_cuota)),
+                medio_carga=medio_carga,
+                descripcion=cuota_desc,
+                id_categoria=id_cat,
+                id_subcategoria=id_sub,
+                comercio_id=comercio_id,
+                categoria_manual=categoria_manual,
+                origen=origen,
+                origen_id=origen_id,
+                cuota_actual=i + 1,
+                cuota_total=cuotas,
+                monto_total_compra=Decimal(str(monto_total)),
+            )
+            if i == 0:
+                first_created = created
+
+        return first_created
+
     created = await repo_create(
         db,
         id_usuario=id_usuario,

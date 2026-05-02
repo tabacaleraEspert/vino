@@ -331,9 +331,16 @@ export function Transactions() {
                           </p>
                         </div>
                         <div className="flex items-center gap-1">
-                          <p className="text-sm font-semibold text-red-600">
-                            -${Math.abs(transaction.amount).toLocaleString("es-MX")}
-                          </p>
+                          <div className="text-right">
+                            <p className="text-sm font-semibold text-red-600">
+                              -${Math.abs(transaction.amount).toLocaleString("es-MX")}
+                            </p>
+                            {transaction.cuotaTotal && transaction.cuotaTotal > 1 && (
+                              <span className="text-[10px] font-medium text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full">
+                                {transaction.cuotaActual}/{transaction.cuotaTotal}
+                              </span>
+                            )}
+                          </div>
                           <button
                             onClick={(e) => {
                               e.preventDefault();
