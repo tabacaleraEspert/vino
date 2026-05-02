@@ -517,20 +517,41 @@ def _parse_bbva_pdf_text(full_text: str) -> dict:
     }
 
 
-async def extract_from_pdf(pdf_bytes: bytes, categories: list[dict]) -> dict:
-    """Extract transactions from a PDF. Detects Santander/BBVA format, falls back to AI."""
-    from PyPDF2 import PdfReader
+def _extract_pdf_text(pdf_bytes: bytes) -> str:
+    """Extract text from PDF, trying PyPDF2 first, then pdfplumber as fallback."""
     import io
 
-    reader = PdfReader(io.BytesIO(pdf_bytes))
-    pages_text = []
-    for page in reader.pages:
-        text = page.extract_text() or ""
-        pages_text.append(text)
+    # Try PyPDF2 first (faster)
+    try:
+        from PyPDF2 import PdfReader
+        reader = PdfReader(io.BytesIO(pdf_bytes))
+        pages = [page.extract_text() or "" for page in reader.pages]
+        text = "\n".join(pages)
+        if len(text.strip()) >= 100:
+            return text
+    except Exception:
+        pass
 
-    full_text = "\n".join(pages_text)
+    # Fallback to pdfplumber (handles more PDF formats)
+    try:
+        import pdfplumber
+        pdf = pdfplumber.open(io.BytesIO(pdf_bytes))
+        pages = [page.extract_text() or "" for page in pdf.pages]
+        pdf.close()
+        text = "\n".join(pages)
+        if len(text.strip()) >= 100:
+            return text
+    except Exception:
+        pass
 
-    if len(full_text.strip()) < 100:
+    return ""
+
+
+async def extract_from_pdf(pdf_bytes: bytes, categories: list[dict]) -> dict:
+    """Extract transactions from a PDF. Detects Santander/BBVA format, falls back to AI."""
+    full_text = _extract_pdf_text(pdf_bytes)
+
+    if not full_text:
         return {
             "transactions": [],
             "error": "El PDF parece ser escaneado. Probá subiendo una foto o screenshot del extracto.",
@@ -546,7 +567,7 @@ async def extract_from_pdf(pdf_bytes: bytes, categories: list[dict]) -> dict:
         return result
 
     # Detect BBVA format
-    is_bbva = "BBVA" in full_text and "Movimientos en cuentas" in full_text
+    is_bbva = "BBVA" in full_text or "AVBB" in full_text  # "AVBB" is reversed "BBVA" in some PDF encodings
 
     if is_bbva:
         result = _parse_bbva_pdf_text(full_text)
