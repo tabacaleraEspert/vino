@@ -87,7 +87,7 @@ async def extract_statement(
         sid = tx.get("subcategoria_id")
         tx["categoria_nombre"] = cat_map.get(cid, "") if cid else ""
         tx["subcategoria_nombre"] = sub_map.get(sid, "") if sid else ""
-        tx["included"] = True
+        tx["included"] = tx.get("tipo") != "Ingreso"
 
     return {
         "status": "ok",
