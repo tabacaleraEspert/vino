@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     MASTER_KEY: str = "dev_master_change_me"
     OPENAI_API_KEY: str = ""
     GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_IOS_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
     GMAIL_TOKEN_KEY: str = ""  # Fernet key for encrypting Gmail refresh tokens
     TWILIO_ACCOUNT_SID: str = ""

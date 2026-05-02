@@ -100,15 +100,24 @@ async def google_auth(payload: GoogleAuthIn, db: AsyncSession = Depends(get_db))
     if not settings.GOOGLE_CLIENT_ID:
         raise HTTPException(status_code=500, detail="Google OAuth no configurado")
 
-    # Verify Google ID token (sync call — run in threadpool)
-    try:
-        idinfo = await asyncio.to_thread(
-            id_token.verify_oauth2_token,
-            payload.credential,
-            google_requests.Request(),
-            settings.GOOGLE_CLIENT_ID,
-        )
-    except ValueError:
+    # Verify Google ID token — accept both web and iOS client IDs
+    allowed_client_ids = [settings.GOOGLE_CLIENT_ID]
+    if settings.GOOGLE_IOS_CLIENT_ID:
+        allowed_client_ids.append(settings.GOOGLE_IOS_CLIENT_ID)
+
+    idinfo = None
+    for cid in allowed_client_ids:
+        try:
+            idinfo = await asyncio.to_thread(
+                id_token.verify_oauth2_token,
+                payload.credential,
+                google_requests.Request(),
+                cid,
+            )
+            break
+        except ValueError:
+            continue
+    if idinfo is None:
         raise HTTPException(status_code=401, detail="Token de Google inválido")
 
     email = idinfo.get("email")
