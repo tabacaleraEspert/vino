@@ -8,6 +8,7 @@ export interface Category {
   name: string;
   icon: string;
   color: string;
+  bucket?: string;
   subcategories?: Subcategory[];
 }
 
@@ -531,6 +532,7 @@ export function mapCatalogToCategories(
       name: cat.nombre,
       icon: resolveIcon(cat.icon, cat.nombre),
       color: cat.color || "#6b7280",
+      bucket: cat.bucket || "",
       subcategories: subcats.map((s) => ({
         id: getSubId(s),
         name: getSubNombre(s),

@@ -300,11 +300,26 @@ export function Budgets() {
         </div>
       </div>
 
-      {/* Desglose por categoría */}
-      <div className="bg-white rounded-xl shadow-sm p-4">
-        <h3 className="font-medium text-gray-800 mb-4">Desglose por categoría</h3>
+      {/* Desglose por categoría — agrupado por bucket */}
+      {[
+        { key: "necesidades", label: "Necesidades", pct: "50%" },
+        { key: "estilo_vida", label: "Estilo de vida", pct: "30%" },
+        { key: "", label: "Otras", pct: "" },
+      ].map((bucket) => {
+        const bucketGroups = grouped.filter(({ category }) =>
+          bucket.key ? category.bucket === bucket.key : !category.bucket || !["necesidades", "estilo_vida", "futuro"].includes(category.bucket)
+        );
+        if (bucketGroups.length === 0) return null;
+        return (
+      <div key={bucket.key} className="bg-white rounded-xl shadow-sm p-4">
+        <div className="flex items-center gap-2 mb-4">
+          <h3 className="font-medium text-gray-800">{bucket.label}</h3>
+          {bucket.pct && (
+            <span className="text-[10px] font-bold bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">{bucket.pct}</span>
+          )}
+        </div>
         <div className="space-y-4">
-          {grouped.map(({ category, categoryBudgets, subcategoryBudgets, catTotalAmount, catTotalSpent, catPercentage, catStatus }) => {
+          {bucketGroups.map(({ category, categoryBudgets, subcategoryBudgets, catTotalAmount, catTotalSpent, catPercentage, catStatus }) => {
             const remaining = catTotalAmount - catTotalSpent;
             return (
               <div key={category.id} className="space-y-1.5">
@@ -347,136 +362,8 @@ export function Budgets() {
           })}
         </div>
       </div>
-
-      {/* Lista expandible por categoría (subcategorías) */}
-      <div className="space-y-3">
-        {grouped.filter(g => g.subcategoryBudgets.length > 0).map(({ category, categoryBudgets, subcategoryBudgets, catTotalAmount, catTotalSpent, catPercentage, catStatus }) => {
-          const hasSub = subcategoryBudgets.length > 0;
-          const isExpanded = expandedCategories.has(category.id);
-
-          return (
-            <div
-              key={category.id}
-              className="bg-white rounded-xl shadow-sm overflow-hidden"
-            >
-              {/* Header de categoría */}
-              <div
-                className={`flex items-center gap-3 p-4 group cursor-pointer ${
-                  hasSub ? "hover:bg-gray-50" : ""
-                }`}
-                onClick={() => hasSub && toggleExpand(category.id)}
-              >
-                <div
-                  className="w-12 h-12 rounded-full flex items-center justify-center text-2xl flex-shrink-0"
-                  style={{ backgroundColor: `${category.color}20` }}
-                >
-                  {category.icon}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium">{category.name}</p>
-                  <p className="text-xs text-gray-500">
-                    ${catTotalSpent.toLocaleString("es-AR")} de $
-                    {catTotalAmount.toLocaleString("es-AR")}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {catStatus === "over" ? (
-                    <AlertCircle className="w-5 h-5 text-red-500" />
-                  ) : catStatus === "near" ? (
-                    <AlertCircle className="w-5 h-5 text-yellow-500" />
-                  ) : (
-                    <CheckCircle2 className="w-5 h-5 text-green-500" />
-                  )}
-                  <span
-                    className={`text-sm font-semibold ${
-                      catStatus === "over" ? "text-red-600" : catStatus === "near" ? "text-yellow-600" : "text-green-600"
-                    }`}
-                  >
-                    {catPercentage.toFixed(0)}%
-                  </span>
-                  {/* Edit button — always visible for category-level budgets */}
-                  {categoryBudgets.length > 0 && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setEditingBudget(categoryBudgets[0].budget);
-                      }}
-                      className="p-1.5 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors"
-                    >
-                      <Pencil className="w-4 h-4" />
-                    </button>
-                  )}
-                  {hasSub && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleExpand(category.id);
-                      }}
-                      className="p-1 hover:bg-gray-200 rounded transition-colors"
-                    >
-                      {isExpanded ? (
-                        <ChevronDown className="w-5 h-5 text-gray-600" />
-                      ) : (
-                        <ChevronRight className="w-5 h-5 text-gray-600" />
-                      )}
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Progreso total categoría */}
-              <div className="px-4 pb-3">
-                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all ${
-                      catStatus === "over" ? "bg-red-500" : catStatus === "near" ? "bg-yellow-500" : "bg-green-500"
-                    }`}
-                    style={{ width: `${Math.min(catPercentage, 100)}%` }}
-                  />
-                </div>
-              </div>
-
-              {/* Presupuestos de categoría (sin subcategoría) */}
-              {categoryBudgets.map(({ budget, spent }) => (
-                <div key={budget.id} className="px-4 pb-3">
-                  <BudgetCard
-                    budget={budget}
-                    spent={spent}
-                    isSubcategory={false}
-                    onEdit={() => setEditingBudget(budget)}
-                  />
-                </div>
-              ))}
-
-              {/* Subcategorías expandibles */}
-              {hasSub && (
-                <div className="border-t border-gray-100">
-                  {isExpanded && (
-                    <div className="p-4 pt-2 space-y-3">
-                      {subcategoryBudgets.map(({ budget, spent }) => {
-                        const sub = category.subcategories?.find((s) => s.id === budget.subcategoryId);
-                        return (
-                          <div key={budget.id} className="pl-4 border-l-2 border-purple-200">
-                            <p className="text-xs font-medium text-purple-600 mb-2">
-                              {sub?.name ?? "Subcategoría"}
-                            </p>
-                            <BudgetCard
-                              budget={budget}
-                              spent={spent}
-                              isSubcategory={true}
-                              onEdit={() => setEditingBudget(budget)}
-                            />
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+        );
+      })}
 
       {/* Botón para agregar presupuesto */}
       <button
