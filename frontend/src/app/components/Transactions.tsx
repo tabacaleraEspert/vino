@@ -60,9 +60,16 @@ export function Transactions() {
   const [amountMin, setAmountMin] = useState("");
   const [amountMax, setAmountMax] = useState("");
   const [searchParams] = useSearchParams();
+  const { setSelectedMonth } = useMonth();
   const [selectedCurrency, setSelectedCurrency] = useState<string>(() => {
     const cur = searchParams.get("currency");
-    return cur === "ARS" || cur === "USD" ? cur : "all";
+    if (cur === "ARS" || cur === "USD") {
+      // Reset to current month when coming from wallets
+      const now = new Date();
+      setSelectedMonth({ month: now.getMonth(), year: now.getFullYear() });
+      return cur;
+    }
+    return "all";
   });
 
   const filteredTransactions = transactionsInMonth.filter((t) => {
