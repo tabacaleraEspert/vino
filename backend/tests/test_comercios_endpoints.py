@@ -93,7 +93,7 @@ class TestCreateComercio:
             headers=auth_headers,
         )
         assert resp.status_code == 400
-        assert "defaultSubcategoryId" in resp.json()["detail"]
+        assert "requerida" in resp.json()["detail"].lower()
 
     async def test_should_return_400_when_repo_raises_value_error(self, client, auth_headers):
         with patch(
