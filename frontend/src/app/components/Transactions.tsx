@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router";
 import { useData } from "../context/DataContext";
 import { useMonth } from "../context/MonthContext";
 import { MonthSelector } from "./MonthSelector";
@@ -58,7 +59,11 @@ export function Transactions() {
   const [dateTo, setDateTo] = useState("");
   const [amountMin, setAmountMin] = useState("");
   const [amountMax, setAmountMax] = useState("");
-  const [selectedCurrency, setSelectedCurrency] = useState<string>("all");
+  const [searchParams] = useSearchParams();
+  const [selectedCurrency, setSelectedCurrency] = useState<string>(() => {
+    const cur = searchParams.get("currency");
+    return cur === "ARS" || cur === "USD" ? cur : "all";
+  });
 
   const filteredTransactions = transactionsInMonth.filter((t) => {
     // Filtro de búsqueda

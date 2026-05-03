@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { Plus, Wallet, TrendingDown, TrendingUp, Settings, Loader2 } from "lucide-react";
+import { useNavigate } from "react-router";
+import { Plus, Wallet, TrendingDown, TrendingUp, Settings, Loader2, ChevronRight } from "lucide-react";
 import { api } from "../../lib/api";
 
 interface WalletData {
@@ -17,6 +18,7 @@ interface WalletData {
 }
 
 export function Wallets() {
+  const navigate = useNavigate();
   const [wallets, setWallets] = useState<WalletData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -151,7 +153,11 @@ export function Wallets() {
       ) : (
         <div className="space-y-3">
           {wallets.filter(w => w.activa).map((w) => (
-            <div key={w.id} className="bg-white rounded-xl p-4 shadow-sm">
+            <button
+              key={w.id}
+              onClick={() => navigate(`/transactions?currency=${w.moneda}`)}
+              className="bg-white rounded-xl p-4 shadow-sm w-full text-left hover:bg-gray-50 transition-colors"
+            >
               <div className="flex items-center gap-3 mb-3">
                 <div
                   className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl"
@@ -163,10 +169,11 @@ export function Wallets() {
                   <p className="font-medium text-gray-800">{w.nombre}</p>
                   <p className="text-xs text-gray-400">{w.moneda}{w.es_default ? " · Default" : ""}</p>
                 </div>
-                <div className="text-right">
+                <div className="flex items-center gap-2">
                   <p className={`text-lg font-bold ${w.saldo_actual >= 0 ? "text-gray-800" : "text-red-600"}`}>
                     {w.moneda === "USD" ? "US" : ""}${w.saldo_actual.toLocaleString("es-AR")}
                   </p>
+                  <ChevronRight className="w-4 h-4 text-gray-400" />
                 </div>
               </div>
               <div className="flex items-center gap-4 text-xs text-gray-500">
@@ -179,7 +186,7 @@ export function Wallets() {
                   <span>Ingresos: ${w.ingresos_total.toLocaleString("es-AR")}</span>
                 </div>
               </div>
-            </div>
+            </button>
           ))}
         </div>
       )}
