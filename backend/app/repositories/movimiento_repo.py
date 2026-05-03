@@ -202,6 +202,7 @@ async def create_movimiento(
     cuota_actual: int | None = None,
     cuota_total: int | None = None,
     monto_total_compra: Decimal | None = None,
+    id_billetera: int | None = None,
 ) -> dict[str, Any]:
     """Create a new movimiento and return it with JOINed names."""
     mov = Movimiento(
@@ -222,6 +223,7 @@ async def create_movimiento(
         Id_Medio_Pago_Final=id_medio_pago_final,
         CuotaActual=cuota_actual,
         CuotaTotal=cuota_total,
+        Id_Billetera=id_billetera,
         MontoTotalCompra=monto_total_compra,
     )
     session.add(mov)

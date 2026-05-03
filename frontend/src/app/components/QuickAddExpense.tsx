@@ -17,6 +17,7 @@ const TODAY = () => {
 export function QuickAddExpense({ open, onClose }: Props) {
   const { categories, refresh } = useData();
   const [amount, setAmount] = useState("0");
+  const [moneda, setMoneda] = useState<"ARS" | "USD">("ARS");
   const [selectedCatId, setSelectedCatId] = useState<string | null>(null);
   const [selectedSubId, setSelectedSubId] = useState<string | null>(null);
   const [description, setDescription] = useState("");
@@ -30,6 +31,7 @@ export function QuickAddExpense({ open, onClose }: Props) {
   useEffect(() => {
     if (open) {
       setAmount("0");
+      setMoneda("ARS");
       setSelectedCatId(null);
       setSelectedSubId(null);
       setDescription("");
@@ -88,7 +90,7 @@ export function QuickAddExpense({ open, onClose }: Props) {
         fecha,
         monto: numericAmount,
         tipo: "Gasto",
-        moneda: "ARS",
+        moneda,
         MedioCarga: "Manual",
       };
       if (description.trim()) payload.descripcion = description.trim();
@@ -156,7 +158,13 @@ export function QuickAddExpense({ open, onClose }: Props) {
         {/* Amount Display */}
         <div className="px-5 pt-2 pb-4">
           <div className="flex items-baseline gap-1">
-            <span className="text-2xl font-bold text-white/40">$</span>
+            <button
+              onClick={() => setMoneda(moneda === "ARS" ? "USD" : "ARS")}
+              className="text-2xl font-bold transition-colors active:scale-95"
+              style={{ color: moneda === "USD" ? "#D8FF3C" : "rgba(255,255,255,0.4)" }}
+            >
+              {moneda === "USD" ? "U$S" : "$"}
+            </button>
             <span
               className="font-bold tracking-tight transition-all duration-200"
               style={{
@@ -168,7 +176,20 @@ export function QuickAddExpense({ open, onClose }: Props) {
               {displayAmount}
             </span>
           </div>
-          {/* Date + category tag */}
+          {/* Date + currency + category tag */}
+          <div className="flex items-center gap-2 mt-2">
+            <button
+              onClick={() => setMoneda(moneda === "ARS" ? "USD" : "ARS")}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all"
+              style={{
+                background: moneda === "USD" ? "#D8FF3C20" : "rgba(255,255,255,0.1)",
+                color: moneda === "USD" ? "#D8FF3C" : "rgba(255,255,255,0.5)",
+                border: `1px solid ${moneda === "USD" ? "#D8FF3C50" : "rgba(255,255,255,0.1)"}`,
+              }}
+            >
+              {moneda === "USD" ? "🇺🇸 USD" : "🇦🇷 ARS"}
+            </button>
+          </div>
           <div className="flex items-center gap-2 mt-2">
             <input
               type="date"

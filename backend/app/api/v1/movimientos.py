@@ -144,6 +144,21 @@ async def post_movimiento(
             id_cat = resolved["categoria_id"]
             id_sub = resolved["subcategoria_id"]
 
+    # Auto-assign wallet based on currency
+    id_billetera = payload.get("Id_Billetera") or payload.get("idBilletera")
+    if not id_billetera:
+        from sqlalchemy import select, and_
+        from app.models.billetera import Billetera
+        stmt = select(Billetera.Id).where(and_(
+            Billetera.Id_usuario == id_usuario,
+            Billetera.Moneda == moneda,
+            Billetera.Activa == True,
+        )).order_by(Billetera.EsDefault.desc()).limit(1)
+        result = await db.execute(stmt)
+        wallet_id = result.scalar_one_or_none()
+        if wallet_id:
+            id_billetera = wallet_id
+
     # Cuotas (installments)
     cuotas_raw = payload.get("cuotas") or payload.get("cuota_total")
     cuotas = int(cuotas_raw) if cuotas_raw and int(cuotas_raw) > 1 else 1
@@ -185,6 +200,7 @@ async def post_movimiento(
                 cuota_actual=i + 1,
                 cuota_total=cuotas,
                 monto_total_compra=Decimal(str(monto_total)),
+                id_billetera=id_billetera,
             )
             if i == 0:
                 first_created = created
@@ -206,6 +222,7 @@ async def post_movimiento(
         categoria_manual=bool(payload.get("Id_Categoria") or payload.get("idCategoria")),
         origen=str(payload.get("Origen") or "").strip() or None,
         origen_id=str(payload.get("Origen_Id") or "").strip() or None,
+        id_billetera=id_billetera,
     )
     return created
 

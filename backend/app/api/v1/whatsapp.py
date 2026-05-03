@@ -271,6 +271,9 @@ async def register_expense(
         }
 
     moneda = extracted.get("moneda", "ARS") or "ARS"
+    # Heuristic: amounts under 200 are almost certainly USD in Argentina
+    if moneda == "ARS" and monto < 200:
+        moneda = "USD"
     comercio_raw = extracted.get("comercio", "") or ""
     descripcion = extracted.get("descripcion", "") or comercio_raw or "Gasto WhatsApp"
     tipo = extracted.get("tipo", "Gasto") or "Gasto"
