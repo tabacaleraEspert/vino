@@ -13,7 +13,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "./ui/alert-dialog";
-import { Search, Filter, X, Calendar, DollarSign, Store, Edit2, Trash2, Upload, AlertCircle } from "lucide-react";
+import { Search, Filter, X, Calendar, DollarSign, Store, Edit2, Trash2, Upload, AlertCircle, Wallet } from "lucide-react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { useAuth } from "../context/AuthContext";
@@ -58,6 +58,7 @@ export function Transactions() {
   const [dateTo, setDateTo] = useState("");
   const [amountMin, setAmountMin] = useState("");
   const [amountMax, setAmountMax] = useState("");
+  const [selectedCurrency, setSelectedCurrency] = useState<string>("all");
 
   const filteredTransactions = transactionsInMonth.filter((t) => {
     // Filtro de búsqueda
@@ -91,6 +92,10 @@ export function Transactions() {
     const matchesAmountMax =
       !amountMax || Math.abs(t.amount) <= parseFloat(amountMax);
 
+    // Filtro de moneda
+    const matchesCurrency =
+      selectedCurrency === "all" || t.currency === selectedCurrency;
+
     return (
       matchesSearch &&
       matchesCategory &&
@@ -99,7 +104,8 @@ export function Transactions() {
       matchesDateFrom &&
       matchesDateTo &&
       matchesAmountMin &&
-      matchesAmountMax
+      matchesAmountMax &&
+      matchesCurrency
     );
   });
 
@@ -112,6 +118,7 @@ export function Transactions() {
   const hasActiveFilters =
     selectedMerchant !== "all" ||
     selectedSubcategory !== "all" ||
+    selectedCurrency !== "all" ||
     dateFrom ||
     dateTo ||
     amountMin ||
@@ -122,6 +129,7 @@ export function Transactions() {
     setSelectedCategory("all");
     setSelectedMerchant("all");
     setSelectedSubcategory("all");
+    setSelectedCurrency("all");
     setDateFrom("");
     setDateTo("");
     setAmountMin("");
@@ -454,6 +462,30 @@ export function Transactions() {
                     </option>
                   ))}
                 </select>
+              </div>
+
+              {/* Filtro por moneda */}
+              <div>
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                  <Wallet className="w-4 h-4" />
+                  Moneda
+                </label>
+                <div className="flex gap-2">
+                  {["all", "ARS", "USD"].map((cur) => (
+                    <button
+                      key={cur}
+                      type="button"
+                      onClick={() => setSelectedCurrency(cur)}
+                      className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                        selectedCurrency === cur
+                          ? "bg-blue-600 text-white"
+                          : "bg-gray-50 border border-gray-200 text-gray-700 hover:bg-gray-100"
+                      }`}
+                    >
+                      {cur === "all" ? "Todas" : cur === "ARS" ? "🇦🇷 ARS" : "🇺🇸 USD"}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Filtro por subcategoría */}
