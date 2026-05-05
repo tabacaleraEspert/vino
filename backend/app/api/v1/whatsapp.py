@@ -2,6 +2,8 @@
 import logging
 from typing import Any, Dict
 
+from app.utils.dates import today_ar as _today
+
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -55,10 +57,10 @@ async def whatsapp_intake(
     body = payload.Body.strip()
 
     # --- 1b. Onboarding: check if first interaction ---
-    from datetime import date, timedelta
+    from datetime import timedelta
     try:
-        six_months_ago = date.today() - timedelta(days=180)
-        total_movs = await _count_gastos(db, user["id"], six_months_ago, date.today())
+        six_months_ago = _today() - timedelta(days=180)
+        total_movs = await _count_gastos(db, user["id"], six_months_ago, _today())
         is_new_user = total_movs == 0
     except Exception:
         is_new_user = False
@@ -281,7 +283,7 @@ async def register_expense(
 
     # Parse fecha
     fecha_str = extracted.get("fecha")
-    today = date.today()
+    today = _today()
     if fecha_str == "ayer":
         fecha = today - timedelta(days=1)
     elif fecha_str and fecha_str != "null":
@@ -660,9 +662,9 @@ async def register_from_ticket_photo(
 
     # Parse date
     fecha_str = extracted.get("fecha")
-    fecha = parse_date_flex(fecha_str) if fecha_str else date.today()
+    fecha = parse_date_flex(fecha_str) if fecha_str else _today()
     if not fecha:
-        fecha = date.today()
+        fecha = _today()
 
     # Resolve category
     id_categoria = None
@@ -779,10 +781,9 @@ async def whatsapp_monthly_summary(
     Can be triggered by n8n cron or by user request.
     Uses previous month if we're in the first 5 days, otherwise current month.
     """
-    from datetime import date
     from app.services.monthly_summary import generate_monthly_summary
 
-    today = date.today()
+    today = _today()
     # In first 5 days of month, summarize previous month
     if today.day <= 5:
         prev = today.replace(day=1) - timedelta(days=1)
@@ -973,10 +974,10 @@ async def whatsapp_webhook(
     user_name = user.get("Nombre", "")
 
     # --- 2. Onboarding check ---
-    from datetime import date, timedelta
+    from datetime import timedelta
     try:
-        six_months_ago = date.today() - timedelta(days=180)
-        total_movs = await _count_gastos(db, user_id, six_months_ago, date.today())
+        six_months_ago = _today() - timedelta(days=180)
+        total_movs = await _count_gastos(db, user_id, six_months_ago, _today())
         is_new_user = total_movs == 0
     except Exception:
         is_new_user = False
@@ -1219,7 +1220,7 @@ async def whatsapp_webhook(
                 from openai import AsyncOpenAI
                 from app.core.config import settings as _settings
 
-                today = _date.today()
+                today = _today()
                 period = f"{today.year}-{today.month:02d}"
                 context = await _build_context(db, user_id, period)
                 system = _SYSTEM_PROMPT.replace("{context}", context)

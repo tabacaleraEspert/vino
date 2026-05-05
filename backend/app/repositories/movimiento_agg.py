@@ -190,7 +190,8 @@ async def gastos_categoria_por_periodo(
     moneda: str = "ARS",
 ) -> list[dict[str, Any]]:
     """Monthly totals for a category over the last N months. For trend analysis."""
-    today = date.today()
+    from app.utils.dates import today_ar
+    today = today_ar()
     start = date(today.year, today.month, 1) - timedelta(days=months_back * 31)
     start = date(start.year, start.month, 1)
 

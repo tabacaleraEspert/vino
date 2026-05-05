@@ -126,7 +126,8 @@ Ejemplos:
 
 def resolve_periodo(periodo: str, ref_date: date | None = None) -> tuple[date, date, str]:
     """Convert a period keyword into a concrete date range."""
-    today = ref_date or date.today()
+    from app.utils.dates import today_ar
+    today = ref_date or today_ar()
 
     match periodo:
         case "hoy":
