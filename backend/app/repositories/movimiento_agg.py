@@ -4,11 +4,21 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import Any
 
-from sqlalchemy import and_, func, select, case, literal_column
+from sqlalchemy import and_, or_, func, select, case, literal_column
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.movimiento_orm import Movimiento
 from app.models.categoria import Categoria
+
+
+def _moneda_filter(moneda: str):
+    """Build moneda filter — ARS includes NULL/empty (legacy rows)."""
+    if moneda == "ARS":
+        return or_(
+            Movimiento.Moneda == "ARS",
+            func.ltrim(func.rtrim(func.coalesce(Movimiento.Moneda, ""))) == "",
+        )
+    return Movimiento.Moneda == moneda
 
 
 async def sum_gastos_mes(
@@ -24,7 +34,7 @@ async def sum_gastos_mes(
         Movimiento.Fecha >= from_date,
         Movimiento.Fecha <= to_date,
         Movimiento.TipoMovimiento == "Gasto",
-        Movimiento.Moneda == moneda,
+        _moneda_filter(moneda),
     ))
     result = await session.execute(stmt)
     return float(result.scalar_one())
@@ -59,7 +69,7 @@ async def gastos_por_categoria(
             Movimiento.Fecha >= from_date,
             Movimiento.Fecha <= to_date,
             Movimiento.TipoMovimiento == "Gasto",
-            Movimiento.Moneda == moneda,
+            _moneda_filter(moneda),
         ))
         .group_by(Movimiento.Id_Categoria, Categoria.Nombre)
         .order_by(func.sum(Movimiento.Monto).desc())
@@ -91,7 +101,7 @@ async def mayor_gasto_mes(
         Movimiento.Fecha >= from_date,
         Movimiento.Fecha <= to_date,
         Movimiento.TipoMovimiento == "Gasto",
-        Movimiento.Moneda == moneda,
+        _moneda_filter(moneda),
     ))
     result = await session.execute(stmt)
     return float(result.scalar_one())
@@ -110,7 +120,7 @@ async def count_gastos_mes(
         Movimiento.Fecha >= from_date,
         Movimiento.Fecha <= to_date,
         Movimiento.TipoMovimiento == "Gasto",
-        Movimiento.Moneda == moneda,
+        _moneda_filter(moneda),
     ))
     result = await session.execute(stmt)
     return result.scalar_one()
@@ -135,7 +145,7 @@ async def avg_ticket_por_categoria(
         Movimiento.Fecha >= from_date,
         Movimiento.Fecha <= to_date,
         Movimiento.TipoMovimiento == "Gasto",
-        Movimiento.Moneda == moneda,
+        _moneda_filter(moneda),
     ]
     if id_categoria is not None:
         conditions.append(Movimiento.Id_Categoria == id_categoria)
@@ -196,7 +206,7 @@ async def gastos_categoria_por_periodo(
             Movimiento.Id_Categoria == id_categoria,
             Movimiento.Fecha >= start,
             Movimiento.TipoMovimiento == "Gasto",
-            Movimiento.Moneda == moneda,
+            _moneda_filter(moneda),
         ))
         .group_by(func.year(Movimiento.Fecha), func.month(Movimiento.Fecha))
         .order_by(func.year(Movimiento.Fecha), func.month(Movimiento.Fecha))
@@ -232,7 +242,7 @@ async def gastos_por_dia_semana(
             Movimiento.Fecha >= from_date,
             Movimiento.Fecha <= to_date,
             Movimiento.TipoMovimiento == "Gasto",
-            Movimiento.Moneda == moneda,
+            _moneda_filter(moneda),
         ))
         .group_by(func.datepart(literal_column("'weekday'"), Movimiento.Fecha))
     )
