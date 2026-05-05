@@ -1,6 +1,8 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Frame, Eyebrow, Display, Italic, Body, PrimaryBtn } from "../primitives";
 import { lime, ink, muted, subtle } from "../theme";
+import { OtpInput } from "../../OtpInput";
+import { apiFetch } from "../../../../lib/api";
 
 interface Props {
   onNext: (phoneNumber: string | null) => void;
@@ -11,8 +13,24 @@ export function ScreenWhatsAppConnect({ onNext }: Props) {
   const [touched, setTouched] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // OTP state
+  const [step, setStep] = useState<"phone" | "otp">("phone");
+  const [fullPhone, setFullPhone] = useState("");
+  const [otp, setOtp] = useState("");
+  const [sending, setSending] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [error, setError] = useState("");
+  const [resendCooldown, setResendCooldown] = useState(0);
+
   const cleaned = digits.replace(/\D/g, "");
   const isValid = cleaned.length === 10 || cleaned.length === 11;
+
+  // Resend cooldown timer
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const t = setTimeout(() => setResendCooldown(resendCooldown - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendCooldown]);
 
   const formatted = (() => {
     const d = cleaned;
@@ -28,19 +46,126 @@ export function ScreenWhatsAppConnect({ onNext }: Props) {
     return prefix + rest.slice(0, 2) + " " + rest.slice(2, 6) + "-" + rest.slice(6, 10);
   })();
 
+  const sendCode = async (phone: string) => {
+    setSending(true);
+    setError("");
+    try {
+      await apiFetch("/auth/whatsapp/send-code", {
+        method: "POST",
+        body: JSON.stringify({ whatsapp: phone }),
+      });
+      setFullPhone(phone);
+      setStep("otp");
+      setOtp("");
+      setResendCooldown(60);
+    } catch (e: any) {
+      setError(e?.message || "No se pudo enviar el codigo");
+    }
+    setSending(false);
+  };
+
   const handleSubmit = () => {
     setTouched(true);
     if (!isValid) {
       inputRef.current?.focus();
       return;
     }
-    // Normalize: ensure starts with 9
     const normalized = cleaned.startsWith("9") ? cleaned : "9" + cleaned;
-    const full = `+54${normalized}`;
-    onNext(full);
+    const phone = `+54${normalized}`;
+    sendCode(phone);
+  };
+
+  const handleVerify = async () => {
+    if (otp.length !== 6) return;
+    setVerifying(true);
+    setError("");
+    try {
+      await apiFetch("/auth/whatsapp/verify-code", {
+        method: "POST",
+        body: JSON.stringify({ whatsapp: fullPhone, code: otp }),
+      });
+      onNext(fullPhone);
+    } catch (e: any) {
+      setError(e?.message || "Codigo incorrecto o expirado");
+      setOtp("");
+    }
+    setVerifying(false);
+  };
+
+  const handleResend = () => {
+    if (resendCooldown > 0) return;
+    sendCode(fullPhone);
   };
 
   const showError = touched && !isValid && cleaned.length > 0;
+
+  if (step === "otp") {
+    return (
+      <Frame>
+        <Eyebrow>paso 8 de 9</Eyebrow>
+        <Display>
+          Verifica tu <Italic>numero</Italic>.
+        </Display>
+        <div style={{ marginTop: 12, marginBottom: 24 }}>
+          <Body>
+            Enviamos un codigo de 6 digitos a{" "}
+            <strong>{fullPhone}</strong> por WhatsApp.
+          </Body>
+        </div>
+
+        <div style={{ marginBottom: 20 }}>
+          <OtpInput value={otp} onChange={setOtp} disabled={verifying} />
+        </div>
+
+        {error && (
+          <div style={{ color: "#DC2626", fontSize: 13, fontWeight: 600, textAlign: "center", marginBottom: 12 }}>
+            {error}
+          </div>
+        )}
+
+        <div style={{ flex: 1 }} />
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <PrimaryBtn onClick={handleVerify} disabled={otp.length !== 6 || verifying}>
+            {verifying ? "Verificando..." : "Verificar →"}
+          </PrimaryBtn>
+          <div style={{ display: "flex", justifyContent: "center", gap: 16, marginTop: 4 }}>
+            <button
+              onClick={handleResend}
+              disabled={resendCooldown > 0 || sending}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: resendCooldown > 0 ? muted : ink,
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: resendCooldown > 0 ? "default" : "pointer",
+                padding: "8px 0",
+                fontFamily: "-apple-system, system-ui, sans-serif",
+              }}
+            >
+              {sending ? "Enviando..." : resendCooldown > 0 ? `Reenviar (${resendCooldown}s)` : "Reenviar codigo"}
+            </button>
+            <button
+              onClick={() => { setStep("phone"); setError(""); setOtp(""); }}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: muted,
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+                padding: "8px 0",
+                fontFamily: "-apple-system, system-ui, sans-serif",
+              }}
+            >
+              Cambiar numero
+            </button>
+          </div>
+        </div>
+      </Frame>
+    );
+  }
 
   return (
     <Frame>
@@ -89,7 +214,7 @@ export function ScreenWhatsAppConnect({ onNext }: Props) {
               maxWidth: "75%",
             }}
           >
-            gaste 4500 en cafe ☕
+            gaste 4500 en cafe
           </div>
         </div>
         <div style={{ display: "flex", justifyContent: "flex-start" }}>
@@ -104,10 +229,16 @@ export function ScreenWhatsAppConnect({ onNext }: Props) {
               maxWidth: "75%",
             }}
           >
-            ✓ Anotado en <span style={{ color: lime, fontWeight: 700 }}>Comida</span>
+            Anotado en <span style={{ color: lime, fontWeight: 700 }}>Comida</span>
           </div>
         </div>
       </div>
+
+      {error && (
+        <div style={{ color: "#DC2626", fontSize: 13, fontWeight: 600, textAlign: "center", marginBottom: 8 }}>
+          {error}
+        </div>
+      )}
 
       {/* Input de numero */}
       <div
@@ -169,8 +300,8 @@ export function ScreenWhatsAppConnect({ onNext }: Props) {
       <div style={{ flex: 1 }} />
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <PrimaryBtn onClick={handleSubmit} disabled={!isValid}>
-          Conectar WhatsApp →
+        <PrimaryBtn onClick={handleSubmit} disabled={!isValid || sending}>
+          {sending ? "Enviando codigo..." : "Conectar WhatsApp →"}
         </PrimaryBtn>
         <button
           onClick={() => onNext(null)}

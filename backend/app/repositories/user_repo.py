@@ -1,6 +1,7 @@
 """Async repository for Users."""
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import func, select
@@ -165,6 +166,70 @@ async def complete_onboarding(session: AsyncSession, user_id: int) -> bool:
     user.OnboardingCompletadoAt = datetime.now(UTC)
     await session.flush()
     return True
+
+
+async def save_wpp_otp(
+    session: AsyncSession,
+    user_id: int,
+    code: str,
+    phone: str,
+    expires_at: datetime,
+) -> bool:
+    """Save a WhatsApp OTP code for verification."""
+    stmt = select(User).where(User.id == user_id)
+    result = await session.execute(stmt)
+    user = result.scalar_one_or_none()
+    if not user:
+        return False
+    user.WppOtpCode = code
+    user.WppOtpPhone = phone
+    user.WppOtpExpiresAt = expires_at
+    await session.flush()
+    return True
+
+
+async def verify_and_link_wpp(
+    session: AsyncSession,
+    user_id: int,
+    code: str,
+    phone: str,
+) -> dict[str, Any] | None:
+    """
+    Verify OTP code and link WhatsApp number if correct.
+    Returns None on failure, user dict on success.
+    """
+    from datetime import datetime, UTC
+
+    stmt = select(User).where(User.id == user_id)
+    result = await session.execute(stmt)
+    user = result.scalar_one_or_none()
+    if not user:
+        return None
+
+    # Validate OTP
+    if not user.WppOtpCode or not user.WppOtpExpiresAt or not user.WppOtpPhone:
+        return None
+    if user.WppOtpCode != code:
+        return None
+    if user.WppOtpPhone != phone:
+        return None
+    if datetime.now(UTC) > user.WppOtpExpiresAt.replace(tzinfo=UTC):
+        return None
+
+    # Check uniqueness
+    wpp_entero = f"whatsapp:{phone}"
+    existing = await get_user_by_wpp(session, wpp_entero)
+    if existing and existing["id"] != user_id:
+        raise ValueError("Ese número de WhatsApp ya está vinculado a otra cuenta")
+
+    # Link and clear OTP
+    user.Whatsapp = phone
+    user.WppEntero = wpp_entero
+    user.WppOtpCode = None
+    user.WppOtpExpiresAt = None
+    user.WppOtpPhone = None
+    await session.flush()
+    return _user_to_dict(user)
 
 
 def _user_to_dict(user: User) -> dict[str, Any]:

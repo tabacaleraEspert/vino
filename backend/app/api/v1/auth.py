@@ -15,7 +15,9 @@ from app.repositories.user_repo import (
     get_or_create_google_user,
     get_user_by_nombre,
     get_user_by_id,
+    save_wpp_otp,
     update_user_profile,
+    verify_and_link_wpp,
 )
 
 router = APIRouter()
@@ -387,3 +389,93 @@ async def update_profile(
         "message": "Perfil actualizado",
         "whatsapp_vinculado": bool(wpp_entero),
     }
+
+
+# ---------------------------------------------------------------------------
+# WhatsApp OTP verification
+# ---------------------------------------------------------------------------
+
+class WhatsAppSendCode(BaseModel):
+    whatsapp: str
+
+
+class WhatsAppVerifyCode(BaseModel):
+    whatsapp: str
+    code: str
+
+
+def _normalize_wpp(raw: str) -> str:
+    """Normalize a WhatsApp number to +country format."""
+    cleaned = raw.strip().replace(" ", "").replace("-", "")
+    if not cleaned.startswith("+"):
+        cleaned = "+" + cleaned
+    return cleaned
+
+
+@router.post("/whatsapp/send-code")
+async def whatsapp_send_code(
+    payload: WhatsAppSendCode,
+    id_usuario: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Send a 6-digit verification code to a WhatsApp number."""
+    import secrets
+    from datetime import datetime, timedelta, UTC
+
+    phone = _normalize_wpp(payload.whatsapp)
+    if len(phone) < 10:
+        raise HTTPException(status_code=400, detail="Numero de WhatsApp invalido")
+
+    code = f"{secrets.randbelow(1000000):06d}"
+    expires_at = datetime.now(UTC) + timedelta(minutes=5)
+
+    saved = await save_wpp_otp(db, id_usuario, code, phone, expires_at)
+    if not saved:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    # Send code via WhatsApp — use template if configured, freeform as fallback
+    from app.services.twilio_client import send_whatsapp
+
+    wpp_to = f"whatsapp:{phone}"
+    otp_template = settings.TWILIO_OTP_CONTENT_SID
+    if otp_template:
+        sent = await send_whatsapp(
+            wpp_to,
+            content_sid=otp_template,
+            content_variables={"1": code},
+        )
+    else:
+        sent = await send_whatsapp(
+            wpp_to,
+            f"Tu codigo de verificacion de *Fina* es: *{code}*\n\nExpira en 5 minutos.",
+        )
+    if not sent:
+        raise HTTPException(status_code=502, detail="No se pudo enviar el mensaje de WhatsApp")
+
+    await db.commit()
+    return {"message": "Codigo enviado", "expires_in": 300}
+
+
+@router.post("/whatsapp/verify-code")
+async def whatsapp_verify_code(
+    payload: WhatsAppVerifyCode,
+    id_usuario: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Verify a WhatsApp OTP code and link the number to the user."""
+    phone = _normalize_wpp(payload.whatsapp)
+    code = payload.code.strip()
+
+    if len(code) != 6 or not code.isdigit():
+        raise HTTPException(status_code=400, detail="El codigo debe ser de 6 digitos")
+
+    try:
+        result = await verify_and_link_wpp(db, id_usuario, code, phone)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+    if not result:
+        raise HTTPException(status_code=400, detail="Codigo incorrecto o expirado")
+
+    await db.commit()
+    return {"message": "WhatsApp verificado", "whatsapp_vinculado": True}

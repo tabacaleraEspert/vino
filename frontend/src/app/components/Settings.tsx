@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useGoogleLogin } from "@react-oauth/google";
 import { useAuth } from "../context/AuthContext";
 import { apiFetch } from "../../lib/api";
-import { Mail, MessageCircle, User, LogOut, CheckCircle, XCircle, Loader2, Shield } from "lucide-react";
+import { Mail, MessageCircle, User, LogOut, CheckCircle, Loader2, Shield } from "lucide-react";
+import { OtpInput } from "./OtpInput";
 
 interface GmailStatus {
   connected: boolean;
@@ -19,6 +20,13 @@ export function Settings() {
   const [gmailLoading, setGmailLoading] = useState(false);
   const [message, setMessage] = useState("");
 
+  // OTP state
+  const [otpStep, setOtpStep] = useState<"idle" | "sent" | "verifying">("idle");
+  const [otpCode, setOtpCode] = useState("");
+  const [otpPhone, setOtpPhone] = useState("");
+  const [otpError, setOtpError] = useState("");
+  const [resendCooldown, setResendCooldown] = useState(0);
+
   // Load current profile + gmail status
   useEffect(() => {
     (async () => {
@@ -34,22 +42,86 @@ export function Settings() {
     })();
   }, []);
 
-  // Save WhatsApp
-  const saveWhatsapp = async () => {
+  // Resend cooldown timer
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const t = setTimeout(() => setResendCooldown(resendCooldown - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendCooldown]);
+
+  // Send OTP code
+  const sendCode = async () => {
+    const raw = whatsapp.trim();
+    if (!raw) return;
     setSaving(true);
-    setMessage("");
+    setOtpError("");
+    // Normalize: add +54 if no country code
+    let phone = raw.replace(/[\s-]/g, "");
+    if (!phone.startsWith("+")) phone = "+54" + phone;
+    setOtpPhone(phone);
+    try {
+      await apiFetch("/auth/whatsapp/send-code", {
+        method: "POST",
+        body: JSON.stringify({ whatsapp: phone }),
+      });
+      setOtpStep("sent");
+      setOtpCode("");
+      setResendCooldown(60);
+    } catch (e: any) {
+      setOtpError(e?.message || "No se pudo enviar el codigo");
+    }
+    setSaving(false);
+  };
+
+  // Verify OTP code
+  const verifyCode = async () => {
+    if (otpCode.length !== 6) return;
+    setOtpStep("verifying");
+    setOtpError("");
+    try {
+      await apiFetch("/auth/whatsapp/verify-code", {
+        method: "POST",
+        body: JSON.stringify({ whatsapp: otpPhone, code: otpCode }),
+      });
+      setWhatsappSaved(whatsapp.trim());
+      setOtpStep("idle");
+      setOtpCode("");
+      setMessage("WhatsApp verificado");
+      setTimeout(() => setMessage(""), 3000);
+    } catch (e: any) {
+      setOtpError(e?.message || "Codigo incorrecto o expirado");
+      setOtpCode("");
+      setOtpStep("sent");
+    }
+  };
+
+  const handleResend = () => {
+    if (resendCooldown > 0) return;
+    sendCode();
+  };
+
+  const disconnectWhatsapp = async () => {
+    if (!confirm("Desconectar WhatsApp? No vas a poder registrar gastos ni consultar por mensaje.")) return;
+    setSaving(true);
     try {
       await apiFetch("/auth/profile", {
         method: "PATCH",
-        body: JSON.stringify({ whatsapp: whatsapp.trim() || "" }),
+        body: JSON.stringify({ whatsapp: "" }),
       });
-      setWhatsappSaved(whatsapp.trim());
-      setMessage("WhatsApp actualizado");
+      setWhatsapp("");
+      setWhatsappSaved("");
+      setMessage("WhatsApp desconectado");
       setTimeout(() => setMessage(""), 3000);
-    } catch (e) {
-      setMessage("Error al guardar");
+    } catch {
+      setMessage("Error al desconectar");
     }
     setSaving(false);
+  };
+
+  const cancelOtp = () => {
+    setOtpStep("idle");
+    setOtpCode("");
+    setOtpError("");
   };
 
   // Gmail connect
@@ -209,29 +281,77 @@ export function Settings() {
         <p className="text-sm text-gray-500">
           Registra gastos y consulta tu balance por mensaje.
         </p>
-        <div className="flex gap-2">
-          <div className="flex items-center gap-1 flex-1">
-            <span className="text-sm font-medium text-gray-500 pl-1">+54</span>
-            <input
-              type="tel"
-              value={whatsapp}
-              onChange={(e) => setWhatsapp(e.target.value)}
-              placeholder="9 11 1234-5678"
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
-            />
-          </div>
-          <button
-            onClick={saveWhatsapp}
-            disabled={saving || !whatsappChanged}
-            className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {saving ? "..." : "Guardar"}
-          </button>
-        </div>
-        {whatsappSaved && (
-          <div className="flex items-center gap-1.5 text-sm text-green-700">
-            <CheckCircle className="w-3.5 h-3.5" />
-            Vinculado
+
+        {otpStep === "idle" ? (
+          <>
+            <div className="flex gap-2">
+              <div className="flex items-center gap-1 flex-1">
+                <span className="text-sm font-medium text-gray-500 pl-1">+54</span>
+                <input
+                  type="tel"
+                  value={whatsapp}
+                  onChange={(e) => setWhatsapp(e.target.value)}
+                  placeholder="9 11 1234-5678"
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                />
+              </div>
+              <button
+                onClick={sendCode}
+                disabled={saving || !whatsappChanged || !whatsapp.trim()}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {saving ? "..." : whatsappSaved ? "Cambiar" : "Verificar"}
+              </button>
+            </div>
+            {whatsappSaved && (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-sm text-green-700">
+                  <CheckCircle className="w-3.5 h-3.5" />
+                  Verificado
+                </div>
+                <button
+                  onClick={disconnectWhatsapp}
+                  disabled={saving}
+                  className="text-sm text-red-600 hover:text-red-700 font-medium disabled:opacity-50"
+                >
+                  Desconectar
+                </button>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-sm text-gray-600">
+              Ingresa el codigo de 6 digitos que enviamos a <strong>{otpPhone}</strong>
+            </p>
+            <OtpInput value={otpCode} onChange={setOtpCode} disabled={otpStep === "verifying"} />
+            {otpError && (
+              <p className="text-sm text-red-600 font-medium text-center">{otpError}</p>
+            )}
+            <div className="flex items-center justify-between">
+              <button
+                onClick={cancelOtp}
+                className="text-sm text-gray-500 hover:text-gray-700 font-medium"
+              >
+                Cancelar
+              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleResend}
+                  disabled={resendCooldown > 0 || saving}
+                  className="text-sm text-gray-500 hover:text-gray-700 font-medium disabled:opacity-50"
+                >
+                  {resendCooldown > 0 ? `Reenviar (${resendCooldown}s)` : "Reenviar"}
+                </button>
+                <button
+                  onClick={verifyCode}
+                  disabled={otpCode.length !== 6 || otpStep === "verifying"}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {otpStep === "verifying" ? "..." : "Verificar"}
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>

@@ -24,6 +24,9 @@ class User(Base):
     GmailConnectedAt: Mapped[datetime | None] = mapped_column(DateTime)
     GmailLastPolledAt: Mapped[datetime | None] = mapped_column(DateTime)
     GmailLastMessageId: Mapped[str | None] = mapped_column(String(100))
+    WppOtpCode: Mapped[str | None] = mapped_column(String(10))
+    WppOtpExpiresAt: Mapped[datetime | None] = mapped_column(DateTime)
+    WppOtpPhone: Mapped[str | None] = mapped_column(String(50))
     CreatedAt: Mapped[datetime | None] = mapped_column(DateTime, server_default=func.now())
     UpdatedAt: Mapped[datetime | None] = mapped_column(DateTime, server_default=func.now())
 

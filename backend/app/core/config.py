@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     TWILIO_ACCOUNT_SID: str = ""
     TWILIO_AUTH_TOKEN: str = ""
     TWILIO_WHATSAPP_FROM: str = ""  # whatsapp:+1234567890
+    TWILIO_OTP_CONTENT_SID: str = ""  # Content Template SID for OTP (e.g. HXXXXXXXXXXX)
     CORS_ORIGINS: list[str] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",

@@ -11,13 +11,21 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 
-async def send_whatsapp(to: str, body: str) -> bool:
+async def send_whatsapp(
+    to: str,
+    body: str | None = None,
+    *,
+    content_sid: str | None = None,
+    content_variables: dict | None = None,
+) -> bool:
     """
     Send a WhatsApp message via Twilio API.
 
     Args:
         to: Recipient in format "whatsapp:+5491112345678"
-        body: Message text (supports WhatsApp markdown: *bold*, _italic_)
+        body: Message text (freeform — only works within 24h session window)
+        content_sid: Twilio Content Template SID (for pre-approved templates)
+        content_variables: Template variable values, e.g. {"1": "123456"}
 
     Returns:
         True if sent successfully, False on error.
@@ -32,20 +40,32 @@ async def send_whatsapp(to: str, body: str) -> bool:
         f"{settings.TWILIO_ACCOUNT_SID}:{settings.TWILIO_AUTH_TOKEN}".encode()
     ).decode()
 
+    import json
+
+    data: dict[str, str] = {
+        "From": settings.TWILIO_WHATSAPP_FROM,
+        "To": to,
+    }
+    if content_sid:
+        data["ContentSid"] = content_sid
+        if content_variables:
+            data["ContentVariables"] = json.dumps(content_variables)
+    elif body:
+        data["Body"] = body
+    else:
+        logger.error("send_whatsapp: must provide body or content_sid")
+        return False
+
     try:
         async with httpx.AsyncClient() as client:
             resp = await client.post(
                 url,
-                data={
-                    "From": settings.TWILIO_WHATSAPP_FROM,
-                    "To": to,
-                    "Body": body,
-                },
+                data=data,
                 headers={"Authorization": f"Basic {auth}"},
                 timeout=15,
             )
             if resp.status_code in (200, 201):
-                logger.info("WhatsApp sent to %s (%d chars)", to, len(body))
+                logger.info("WhatsApp sent to %s (template=%s)", to, content_sid or "freeform")
                 return True
             else:
                 logger.error("Twilio error %d: %s", resp.status_code, resp.text[:200])

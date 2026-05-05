@@ -93,22 +93,10 @@ export function OnboardingFlow() {
     goNext();
   }, [goNext]);
 
-  const handleWhatsApp = useCallback(async (phoneNumber: string | null) => {
-    if (isLoading) return;
-    setIsLoading(true);
-    if (phoneNumber) {
-      try {
-        await apiFetch("/auth/profile", {
-          method: "PATCH",
-          body: JSON.stringify({ whatsapp: phoneNumber }),
-        });
-      } catch (e) {
-        console.error("WhatsApp connect failed:", e);
-      }
-    }
-    setIsLoading(false);
+  const handleWhatsApp = useCallback((_phoneNumber: string | null) => {
+    // Phone is already saved by the OTP verification flow in ScreenWhatsAppConnect
     goNext();
-  }, [goNext, isLoading]);
+  }, [goNext]);
 
   const handleFinish = useCallback(async () => {
     if (isLoading) return;
