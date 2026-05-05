@@ -1263,3 +1263,19 @@ async def whatsapp_webhook(
         await send_whatsapp(wpp_from, reply)
 
     return {"status": "ok", "intent": str(intent)}
+
+
+# ---------------------------------------------------------------------------
+# Inactivity reminder — triggered by Azure Timer daily
+# ---------------------------------------------------------------------------
+
+@router.post("/reminders/inactivity")
+async def trigger_inactivity_reminders(
+    _: None = Depends(require_master_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Send reminders to users who haven't logged expenses in 2+ days."""
+    from app.services.inactivity_reminder import send_inactivity_reminders
+    stats = await send_inactivity_reminders(db)
+    await db.commit()
+    return stats
