@@ -87,7 +87,12 @@ async def patch_categoria(
         if not cat:
             raise HTTPException(status_code=404, detail="Categoría no encontrada")
         return cat
-    updated = await update_categoria(db, id_usuario, id, **patch)
+    updated = await update_categoria(
+        db, id_usuario, id,
+        nombre=patch.get("name"),
+        icon=patch.get("icon"),
+        color=patch.get("color"),
+    )
     if not updated:
         raise HTTPException(status_code=404, detail="Categoría no encontrada")
     return updated
