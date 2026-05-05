@@ -299,24 +299,27 @@ async def find_duplicate_cross_source(
     id_usuario: int,
     monto: float,
     fecha: date,
+    moneda: str = "ARS",
     descripcion: str | None = None,
-    window_minutes: int = 5,
+    window_minutes: int = 10,
 ) -> dict[str, Any] | None:
     """
     Cross-source deduplication: find an existing movement with the same
-    user + amount + date, created within the last N minutes.
+    user + amount + currency + date, created within the last N minutes.
 
-    Catches: bank email + MercadoPago email for the same purchase.
+    Catches: bank email + MercadoPago email for the same purchase,
+    or duplicate notifications from the same source.
     """
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, UTC
 
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     window_start = now - timedelta(minutes=window_minutes)
 
-    # Match by: same user, same amount (exact), same date, recent timestamp
+    # Match by: same user, same amount (exact), same currency, same date, recent timestamp
     conditions = [
         Movimiento.Id_usuario == id_usuario,
         Movimiento.Monto == monto,
+        Movimiento.Moneda == moneda,
         Movimiento.Fecha == fecha,
         Movimiento.Timestamp >= window_start,
     ]

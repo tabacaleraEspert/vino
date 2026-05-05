@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any
 
 from openai import AsyncOpenAI
@@ -21,13 +22,30 @@ def _get_client() -> AsyncOpenAI:
     return _client
 
 
+# Regex patterns that indicate USD in email text
+_USD_PATTERNS = re.compile(
+    r"US\$\s*[\d.,]+"       # US$ 2.050
+    r"|U\$S\s*[\d.,]+"      # U$S 2.050
+    r"|USD\s*[\d.,]+"       # USD 2050
+    r"|dólares"             # "dólares"
+    r"|dolares"             # "dolares"
+    r"|transferencia de US"  # "transferencia de US$ ..."
+    , re.IGNORECASE,
+)
+
+
+def _text_mentions_usd(text: str) -> bool:
+    """Check if text contains USD currency indicators."""
+    return bool(_USD_PATTERNS.search(text))
+
+
 _EXTRACT_PROMPT = """\
 Extraé los datos de un gasto desde un email de notificación bancaria argentina.
 El email viene de un banco o fintech (Santander, BBVA, Macro, MercadoPago, Galicia, etc.).
 
 Extraé estos campos:
 - monto: número (sin $ ni puntos ni comas). Si hay moneda extranjera, convertí a la moneda indicada.
-- moneda: "ARS" por defecto. "USD" si dice dólares.
+- moneda: "ARS" por defecto. "USD" si dice dólares, US$, USD, U$S, o cualquier referencia a dólares/moneda extranjera.
 - comercio_raw: nombre del comercio tal como aparece en el email.
 - descripcion: resumen corto (ej: "Compra en Carrefour", "Transferencia a Juan").
 - tipo: "Gasto" para compras/pagos/transferencias enviadas. "Ingreso" para cobros/transferencias recibidas.
@@ -86,6 +104,14 @@ async def extract_expense_from_email(
         )
         raw = (response.choices[0].message.content or "").strip()
         data = json.loads(raw)
+
+        # Post-extraction USD detection — GPT sometimes misses "US$" / "U$S"
+        if data.get("moneda", "ARS") == "ARS" and data.get("datos_completos"):
+            full_text = f"{subject} {body_truncated}"
+            if _text_mentions_usd(full_text):
+                logger.info("email_extract: overriding moneda ARS→USD based on text indicators")
+                data["moneda"] = "USD"
+
         logger.info("email_extract result: %s", {k: v for k, v in data.items() if k != "body"})
         return data
     except Exception as e:

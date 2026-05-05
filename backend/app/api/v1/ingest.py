@@ -135,7 +135,8 @@ async def process_ingest(db: AsyncSession, payload: Dict[str, Any]) -> Dict[str,
     # --- 3b. Cross-source dedup (bank + MercadoPago for same purchase) ---
     if monto > 0 and fecha:
         cross_dup = await find_duplicate_cross_source(
-            db, id_usuario, monto=round(monto, 2), fecha=fecha, window_minutes=5
+            db, id_usuario, monto=round(monto, 2), fecha=fecha,
+            moneda=moneda, window_minutes=10,
         )
         if cross_dup:
             logger.info("Cross-source duplicate detected: mov %s matches existing %s", comercio_raw, cross_dup.get("id"))
