@@ -1,5 +1,5 @@
-import { useState, useCallback, useEffect, useRef } from "react";
-import { X, ChevronRight, Zap, Check } from "lucide-react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import { X, ChevronRight, Zap, Check, Search } from "lucide-react";
 import { useData } from "../context/DataContext";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
@@ -15,11 +15,14 @@ const TODAY = () => {
 };
 
 export function QuickAddExpense({ open, onClose }: Props) {
-  const { categories, refresh } = useData();
+  const { categories, merchants, refresh } = useData();
   const [amount, setAmount] = useState("0");
   const [moneda, setMoneda] = useState<"ARS" | "USD">("ARS");
   const [selectedCatId, setSelectedCatId] = useState<string | null>(null);
   const [selectedSubId, setSelectedSubId] = useState<string | null>(null);
+  const [selectedMerchantId, setSelectedMerchantId] = useState<string | null>(null);
+  const [merchantSearch, setMerchantSearch] = useState("");
+  const [merchantOpen, setMerchantOpen] = useState(false);
   const [description, setDescription] = useState("");
   const [fecha, setFecha] = useState(TODAY());
   const [cuotas, setCuotas] = useState(1);
@@ -34,6 +37,9 @@ export function QuickAddExpense({ open, onClose }: Props) {
       setMoneda("ARS");
       setSelectedCatId(null);
       setSelectedSubId(null);
+      setSelectedMerchantId(null);
+      setMerchantSearch("");
+      setMerchantOpen(false);
       setDescription("");
       setFecha(TODAY());
       setCuotas(1);
@@ -96,6 +102,7 @@ export function QuickAddExpense({ open, onClose }: Props) {
       if (description.trim()) payload.descripcion = description.trim();
       if (selectedCatId) payload.idCategoria = Number(selectedCatId);
       if (selectedSubId) payload.idSubcategoria = Number(selectedSubId);
+      if (selectedMerchantId) payload.comercioId = selectedMerchantId;
       if (cuotas > 1) payload.cuotas = cuotas;
 
       await api.movimientos.create(payload);
@@ -112,6 +119,13 @@ export function QuickAddExpense({ open, onClose }: Props) {
   };
 
   const selectedCat = categories.find((c) => c.id === selectedCatId);
+  const selectedMerchant = merchants.find((m) => m.id === selectedMerchantId);
+
+  const filteredMerchants = useMemo(() => {
+    if (!merchantSearch.trim()) return merchants.slice(0, 20);
+    const q = merchantSearch.toLowerCase();
+    return merchants.filter((m) => m.name.toLowerCase().includes(q)).slice(0, 20);
+  }, [merchants, merchantSearch]);
 
   if (!open) return null;
 
@@ -328,6 +342,65 @@ export function QuickAddExpense({ open, onClose }: Props) {
                 <p className="text-xs text-white/50 mt-2 font-medium">
                   {cuotas}x ${(numericAmount / cuotas).toLocaleString("es-AR", { maximumFractionDigits: 0 })} = ${numericAmount.toLocaleString("es-AR", { maximumFractionDigits: 0 })} total
                 </p>
+              )}
+            </div>
+
+            {/* Comercio (optional) */}
+            <div>
+              <p className="text-xs font-bold text-white/40 uppercase tracking-wider mb-2">Comercio (opcional)</p>
+              {selectedMerchant && !merchantOpen ? (
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 px-4 py-3 rounded-xl bg-white/8 text-white text-sm font-medium border border-white/10">
+                    {selectedMerchant.name}
+                  </div>
+                  <button
+                    onClick={() => { setSelectedMerchantId(null); setMerchantSearch(""); }}
+                    className="p-2 rounded-xl bg-white/8 text-white/50 hover:text-white/80 transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-white/8 border border-white/10 focus-within:border-[#D8FF3C]/50 transition-colors">
+                    <Search className="w-4 h-4 text-white/30 flex-shrink-0" />
+                    <input
+                      type="text"
+                      value={merchantSearch}
+                      onChange={(e) => { setMerchantSearch(e.target.value); setMerchantOpen(true); }}
+                      onFocus={() => setMerchantOpen(true)}
+                      placeholder="Buscar comercio..."
+                      className="flex-1 bg-transparent text-white text-sm font-medium placeholder:text-white/25 outline-none"
+                    />
+                    {merchantOpen && (
+                      <button onClick={() => setMerchantOpen(false)} className="text-white/40">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                  {merchantOpen && filteredMerchants.length > 0 && (
+                    <div className="absolute z-10 left-0 right-0 mt-1 max-h-36 overflow-y-auto rounded-xl bg-[#1a1a2e] border border-white/10 shadow-xl">
+                      {filteredMerchants.map((m) => (
+                        <button
+                          key={m.id}
+                          onClick={() => {
+                            setSelectedMerchantId(m.id);
+                            setMerchantSearch("");
+                            setMerchantOpen(false);
+                            // Auto-assign category if merchant has default
+                            if (m.defaultCategoryId && !selectedCatId) {
+                              setSelectedCatId(m.defaultCategoryId);
+                              if (m.defaultSubcategoryId) setSelectedSubId(m.defaultSubcategoryId);
+                            }
+                          }}
+                          className="w-full px-4 py-2.5 text-left text-sm text-white/80 hover:bg-white/10 transition-colors first:rounded-t-xl last:rounded-b-xl"
+                        >
+                          {m.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
 
