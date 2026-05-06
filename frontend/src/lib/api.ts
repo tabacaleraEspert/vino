@@ -182,6 +182,7 @@ export const api = {
           ...(data.name != null && { name: data.name }),
           ...(data.icon != null && { icon: data.icon }),
           ...(data.color != null && { color: data.color }),
+          ...(data.bucket != null && { bucket: data.bucket }),
         }),
       }),
     delete: (id: string) =>

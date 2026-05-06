@@ -69,6 +69,7 @@ async def update_categoria(
     nombre: str | None = None,
     icon: str | None = None,
     color: str | None = None,
+    bucket: str | None = None,
 ) -> dict[str, Any] | None:
     stmt = select(Categoria).where(and_(
         Categoria.Id_usuario == id_usuario,
@@ -84,8 +85,10 @@ async def update_categoria(
         cat.Icon = icon
     if color is not None:
         cat.Color = color
+    if bucket is not None:
+        cat.Bucket = bucket
     await session.flush()
-    return {"id": cat.Id, "nombre": cat.Nombre, "icon": cat.Icon, "color": cat.Color}
+    return {"id": cat.Id, "nombre": cat.Nombre, "icon": cat.Icon, "color": cat.Color, "bucket": cat.Bucket}
 
 
 async def delete_categoria(

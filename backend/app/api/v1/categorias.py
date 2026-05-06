@@ -51,6 +51,7 @@ class CategoryPatch(BaseModel):
     name: Optional[str] = None
     icon: Optional[str] = None
     color: Optional[str] = None
+    bucket: Optional[str] = None
 
 
 @router.get("")
@@ -92,6 +93,7 @@ async def patch_categoria(
         nombre=patch.get("name"),
         icon=patch.get("icon"),
         color=patch.get("color"),
+        bucket=patch.get("bucket"),
     )
     if not updated:
         raise HTTPException(status_code=404, detail="Categoría no encontrada")

@@ -32,6 +32,7 @@ export function EditCategoryModal({ isOpen, onClose, categoryId }: EditCategoryM
   const [name, setName] = useState("");
   const [selectedIcon, setSelectedIcon] = useState(AVAILABLE_ICONS[0]);
   const [selectedColor, setSelectedColor] = useState(AVAILABLE_COLORS[2]);
+  const [selectedBucket, setSelectedBucket] = useState("necesidades");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -42,6 +43,7 @@ export function EditCategoryModal({ isOpen, onClose, categoryId }: EditCategoryM
       setName(category.name);
       setSelectedIcon(category.icon || AVAILABLE_ICONS[0]);
       setSelectedColor(category.color || AVAILABLE_COLORS[2]);
+      setSelectedBucket(category.bucket || "necesidades");
       setError("");
       setShowDeleteConfirm(false);
     }
@@ -74,6 +76,7 @@ export function EditCategoryModal({ isOpen, onClose, categoryId }: EditCategoryM
         name: name.trim(),
         icon: selectedIcon,
         color: selectedColor,
+        bucket: selectedBucket,
       });
       onClose();
     } catch (err) {
@@ -191,6 +194,34 @@ export function EditCategoryModal({ isOpen, onClose, categoryId }: EditCategoryM
                   {selectedColor === color && (
                     <Check className="w-5 h-5 text-white mx-auto" strokeWidth={3} />
                   )}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Tipo (bucket 50/30/20) */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-3">
+              Tipo
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {([
+                { value: "necesidades", label: "Necesidad", desc: "50%", color: "#22c55e" },
+                { value: "estilo_vida", label: "Estilo de vida", desc: "30%", color: "#3b82f6" },
+                { value: "futuro", label: "Futuro", desc: "20%", color: "#8b5cf6" },
+              ] as const).map((b) => (
+                <button
+                  key={b.value}
+                  type="button"
+                  onClick={() => setSelectedBucket(b.value)}
+                  className={`px-3 py-3 rounded-lg text-center transition-all border-2 ${
+                    selectedBucket === b.value
+                      ? "border-gray-900 bg-gray-50"
+                      : "border-gray-200 hover:border-gray-300"
+                  }`}
+                >
+                  <p className="text-sm font-semibold">{b.label}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{b.desc}</p>
                 </button>
               ))}
             </div>
