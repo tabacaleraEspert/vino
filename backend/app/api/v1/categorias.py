@@ -146,6 +146,7 @@ async def onboarding_categories(
         created += 1
 
     await db.flush()
+    await db.commit()
     logger.info("Onboarding categories: %d items for user %d", created, id_usuario)
     return {"created": created}
 

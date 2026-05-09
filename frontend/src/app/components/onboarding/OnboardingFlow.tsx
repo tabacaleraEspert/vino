@@ -62,6 +62,14 @@ export function OnboardingFlow() {
     });
   }, [persistStep]);
 
+  const goBack = useCallback(() => {
+    setStep((s) => {
+      const prev = Math.max(0, s - 1);
+      persistStep(prev);
+      return prev;
+    });
+  }, [persistStep]);
+
   const handleBudget = useCallback(async (income: number) => {
     if (isLoading) return;
     setIsLoading(true);
@@ -117,15 +125,15 @@ export function OnboardingFlow() {
     <>
       <OnboardingStyles />
       {step === 0 && <ScreenWelcome onNext={goNext} name={firstName} />}
-      {step === 1 && <ScreenBudgetTheory onNext={goNext} />}
-      {step === 2 && <ScreenCategories onNext={goNext} />}
-      {step === 3 && <ScreenBudget onNext={handleBudget} isLoading={isLoading} />}
-      {step === 4 && <ScreenTourCard onNext={goNext} />}
-      {step === 5 && <ScreenGmailConnect onNext={handleGmail} />}
-      {step === 6 && <ScreenTourDashboard onNext={goNext} />}
-      {step === 7 && <ScreenTourWhatsApp onNext={goNext} />}
-      {step === 8 && <ScreenWhatsAppConnect onNext={handleWhatsApp} />}
-      {step === 9 && <ScreenDone onFinish={handleFinish} />}
+      {step === 1 && <ScreenBudgetTheory onNext={goNext} onBack={goBack} />}
+      {step === 2 && <ScreenCategories onNext={goNext} onBack={goBack} />}
+      {step === 3 && <ScreenBudget onNext={handleBudget} onBack={goBack} isLoading={isLoading} />}
+      {step === 4 && <ScreenTourCard onNext={goNext} onBack={goBack} />}
+      {step === 5 && <ScreenGmailConnect onNext={handleGmail} onBack={goBack} />}
+      {step === 6 && <ScreenTourDashboard onNext={goNext} onBack={goBack} />}
+      {step === 7 && <ScreenTourWhatsApp onNext={goNext} onBack={goBack} />}
+      {step === 8 && <ScreenWhatsAppConnect onNext={handleWhatsApp} onBack={goBack} />}
+      {step === 9 && <ScreenDone onFinish={handleFinish} onBack={goBack} />}
     </>
   );
 }

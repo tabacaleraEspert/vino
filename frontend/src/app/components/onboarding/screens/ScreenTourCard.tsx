@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Frame, Eyebrow, Display, Italic, Body, PrimaryBtn } from "../primitives";
+import { Frame, Eyebrow, Display, Italic, Body, PrimaryBtn, BackBtn } from "../primitives";
 import { lime, ink, cream, subtle } from "../theme";
 
 const movements = [
@@ -9,9 +9,9 @@ const movements = [
   { merchant: "YPF", cat: "Transporte", amount: 28500, icon: "⛽" },
 ];
 
-interface Props { onNext: () => void }
+interface Props { onNext: () => void; onBack?: () => void }
 
-export function ScreenTourCard({ onNext }: Props) {
+export function ScreenTourCard({ onNext, onBack }: Props) {
   const [shown, setShown] = useState(0);
   useEffect(() => {
     const id = setInterval(() => setShown((s) => (s + 1) % (movements.length + 1)), 700);
@@ -20,6 +20,7 @@ export function ScreenTourCard({ onNext }: Props) {
 
   return (
     <Frame>
+      {onBack && <BackBtn onClick={onBack} />}
       <Eyebrow>tour · 2 de 3</Eyebrow>
       <Display>Tu tarjeta se <Italic>carga sola</Italic>.</Display>
       <div style={{ display: "flex", justifyContent: "center", margin: "18px 0 14px", perspective: 800 }}>
@@ -85,7 +86,7 @@ export function ScreenTourCard({ onNext }: Props) {
             <li>Tener activadas las <strong>notificaciones por email</strong> de tu banco (Santander, BBVA, Macro, etc.)</li>
           </ol>
           <div style={{ fontSize: 11, color: "rgba(10,10,10,0.55)", marginTop: 6 }}>
-            Fina lee solo los mails de tu banco para registrar gastos. No accedemos a ningun otro email.
+            Fina lee solo los mails de tu banco para registrar gastos. No accedemos a ningún otro email.
           </div>
         </div>
       </div>

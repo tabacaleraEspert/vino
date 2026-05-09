@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Frame, Eyebrow, Display, Italic, Body, PrimaryBtn } from "../primitives";
+import { Frame, Eyebrow, Display, Italic, Body, PrimaryBtn, BackBtn } from "../primitives";
 import { lime, ink, accent, muted, subtle } from "../theme";
 
 const TIERS = [
@@ -8,57 +8,59 @@ const TIERS = [
     label: "Necesidades",
     color: lime,
     fg: ink,
-    tagline: "Lo esencial. Lo que NO podes no pagar.",
+    tagline: "Lo esencial. Lo que NO podés no pagar.",
     examples: [
       { i: "🏠", n: "Vivienda" },
       { i: "🍴", n: "Comida" },
       { i: "💡", n: "Servicios" },
       { i: "🚗", n: "Transporte" },
       { i: "💊", n: "Salud" },
-      { i: "🎓", n: "Educacion" },
+      { i: "🎓", n: "Educación" },
     ],
-    hint: "Si superas el 50%, tus gastos fijos estan altos. Mira alquiler, deudas y servicios.",
+    hint: "Si superás el 50%, tus gastos fijos están altos. Mirá alquiler, deudas y servicios.",
   },
   {
     pct: 30,
     label: "Estilo de vida",
     color: "#FF7A45",
     fg: "#fff",
-    tagline: "Lo que disfrutas. Mejoras tu vida, pero podrias recortar.",
+    tagline: "Lo que disfrutás. Mejorás tu vida, pero podrías recortar.",
     examples: [
       { i: "🎬", n: "Ocio" },
       { i: "👕", n: "Compras" },
       { i: "📺", n: "Streaming" },
       { i: "🎮", n: "Hobbies" },
     ],
-    hint: "Aca es donde la mayoria se descuida. Si pasas del 30%, ya sabes donde recortar.",
+    hint: "Acá es donde la mayoría se descuida. Si pasás del 30%, ya sabés dónde recortar.",
   },
   {
     pct: 20,
     label: "Tu futuro",
     color: accent,
     fg: "#fff",
-    tagline: "Lo que sobra despues de tus gastos. Se calcula solo.",
+    tagline: "Lo que sobra después de tus gastos. Se calcula solo.",
     examples: [
       { i: "💰", n: "Ahorro" },
       { i: "📈", n: "Inversion" },
       { i: "🆘", n: "Emergencia" },
     ],
-    hint: "Empeza por un fondo de emergencia (3 a 6 meses de gastos). Despues inverti.",
+    hint: "Empezá por un fondo de emergencia (3 a 6 meses de gastos). Después invertí.",
   },
 ];
 
 interface Props {
   onNext: () => void;
+  onBack?: () => void;
 }
 
-export function ScreenBudgetTheory({ onNext }: Props) {
+export function ScreenBudgetTheory({ onNext, onBack }: Props) {
   const [step, setStep] = useState(0);
 
   // Step 0: intro
   if (step === 0) {
     return (
       <Frame>
+        {onBack && <BackBtn onClick={onBack} />}
         <Eyebrow>paso 2 · la regla</Eyebrow>
         <Display>
           Antes de seguir,
@@ -133,13 +135,13 @@ export function ScreenBudgetTheory({ onNext }: Props) {
           </div>
           <div style={{ marginTop: 22, opacity: 0, animation: "fadeUp .5s ease 1.5s forwards" }}>
             <Body>
-              La <strong style={{ color: ink }}>regla 50/30/20</strong> es la teoria de presupuesto mas usada del mundo.
+              La <strong style={{ color: ink }}>regla 50/30/20</strong> es la teoría de presupuesto más usada del mundo.
               <br />
-              Divide tu plata en tres usos. Te la ensenamos en 30 segundos.
+              Divide tu plata en tres usos. Te la enseñamos en 30 segundos.
             </Body>
           </div>
         </div>
-        <PrimaryBtn onClick={() => setStep(1)}>Empezar leccion →</PrimaryBtn>
+        <PrimaryBtn onClick={() => setStep(1)}>Empezar lección →</PrimaryBtn>
       </Frame>
     );
   }
@@ -148,6 +150,7 @@ export function ScreenBudgetTheory({ onNext }: Props) {
   const t = TIERS[step - 1];
   return (
     <Frame>
+      {onBack && <BackBtn onClick={onBack} />}
       <div style={{ display: "flex", gap: 4, marginBottom: 18 }}>
         {[0, 1, 2].map((i) => (
           <div key={i} style={{ flex: 1, height: 3, borderRadius: 2, background: i < step ? ink : subtle }} />
@@ -292,7 +295,7 @@ export function ScreenBudgetTheory({ onNext }: Props) {
             fontFamily: "-apple-system, system-ui, sans-serif",
           }}
         >
-          {step === 3 ? "Elegir categorias →" : "Siguiente →"}
+          {step === 3 ? "Elegir categorías →" : "Siguiente →"}
         </button>
       </div>
     </Frame>

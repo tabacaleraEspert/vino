@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Frame, Eyebrow, Display, Italic, Body, PrimaryBtn } from "../primitives";
+import { Frame, Eyebrow, Display, Italic, Body, PrimaryBtn, BackBtn } from "../primitives";
 import { lime, ink, accent, muted, subtle } from "../theme";
 
 const TIERS = [
@@ -10,10 +10,11 @@ const TIERS = [
 
 interface Props {
   onNext: (income: number) => void;
+  onBack?: () => void;
   isLoading?: boolean;
 }
 
-export function ScreenBudget({ onNext, isLoading = false }: Props) {
+export function ScreenBudget({ onNext, onBack, isLoading = false }: Props) {
   const [income, setIncome] = useState(1500000);
   const [animIncome, setAnimIncome] = useState(income);
   const [edited, setEdited] = useState(false);
@@ -36,12 +37,13 @@ export function ScreenBudget({ onNext, isLoading = false }: Props) {
 
   return (
     <Frame>
+      {onBack && <BackBtn onClick={onBack} />}
       <Eyebrow>paso 4 · tu presupuesto</Eyebrow>
       <Display>
         Tu plata, <Italic>repartida</Italic>.
       </Display>
       <div style={{ marginTop: 8 }}>
-        <Body>Edita el monto y ve como se divide.</Body>
+        <Body>Editá el monto y ve cómo se divide.</Body>
       </div>
       <div style={{ flex: 1, overflowY: "auto", marginTop: 14, marginRight: -8, paddingRight: 8 }}>
         <div style={{ background: "#fff", borderRadius: 18, padding: "16px 16px 14px", border: `1px solid ${subtle}`, marginBottom: 12 }}>
@@ -79,12 +81,12 @@ export function ScreenBudget({ onNext, isLoading = false }: Props) {
               }}
             />
           </div>
-          <div style={{ fontSize: 10, color: muted, marginTop: 6 }}>Tu ingreso o el monto que queres presupuestar este mes.</div>
+          <div style={{ fontSize: 10, color: muted, marginTop: 6 }}>Tu ingreso o el monto que querés presupuestar este mes.</div>
         </div>
 
         {/* Recommendation note */}
         <div style={{ fontSize: 12, color: muted, lineHeight: 1.5, marginBottom: 10, padding: "0 2px" }}>
-          Recomendamos <strong style={{ color: ink }}>50 / 30 / 20</strong>, pero podes ajustarlo
+          Recomendamos <strong style={{ color: ink }}>50 / 30 / 20</strong>, pero podés ajustarlo
           moviendo las barritas. Siempre tiene que sumar 100%.
         </div>
 
@@ -99,7 +101,7 @@ export function ScreenBudget({ onNext, isLoading = false }: Props) {
               textTransform: "uppercase" as const,
             }}
           >
-            Asi te queda
+            Así te queda
           </div>
 
           {/* Draggable bar */}

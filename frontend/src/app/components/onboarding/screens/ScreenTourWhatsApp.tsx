@@ -1,19 +1,19 @@
 import { useState, useEffect } from "react";
-import { Frame, Eyebrow, Display, Italic, PrimaryBtn } from "../primitives";
+import { Frame, Eyebrow, Display, Italic, PrimaryBtn, BackBtn } from "../primitives";
 import { lime } from "../theme";
 
 const sequence = [
-  { side: "out" as const, text: "gaste 5500 en cafe" },
+  { side: "out" as const, text: "gasté 5500 en café" },
   { side: "typing" as const },
   { side: "in" as const, kind: "card" as const },
-  { side: "out" as const, text: "cuanto en comida este mes?" },
+  { side: "out" as const, text: "cuánto en comida este mes?" },
   { side: "typing" as const },
   { side: "in" as const, kind: "summary" as const },
 ];
 
-interface Props { onNext: () => void }
+interface Props { onNext: () => void; onBack?: () => void }
 
-export function ScreenTourWhatsApp({ onNext }: Props) {
+export function ScreenTourWhatsApp({ onNext, onBack }: Props) {
   const [step, setStep] = useState(0);
   useEffect(() => {
     const delays = [400, 600, 700, 900, 600, 700];
@@ -25,6 +25,7 @@ export function ScreenTourWhatsApp({ onNext }: Props) {
 
   return (
     <Frame>
+      {onBack && <BackBtn onClick={onBack} />}
       <Eyebrow>tour · 3 de 3</Eyebrow>
       <Display>Carga y consulta<br />por <Italic>WhatsApp</Italic>.</Display>
       <div style={{
@@ -36,7 +37,7 @@ export function ScreenTourWhatsApp({ onNext }: Props) {
           <div style={{ width: 26, height: 26, borderRadius: 13, background: "#25D366", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 12 }}>V</div>
           <div style={{ flex: 1, color: "#fff" }}>
             <div style={{ fontSize: 12, fontWeight: 700 }}>Fina Bot</div>
-            <div style={{ fontSize: 9, color: "#25D366" }}>● en linea</div>
+            <div style={{ fontSize: 9, color: "#25D366" }}>● en línea</div>
           </div>
         </div>
         <div style={{ flex: 1, padding: 10, overflowY: "auto" }}>

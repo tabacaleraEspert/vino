@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { useGoogleLogin } from "@react-oauth/google";
-import { Frame, Eyebrow, Display, Italic, Body, PrimaryBtn } from "../primitives";
+import { Frame, Eyebrow, Display, Italic, Body, PrimaryBtn, BackBtn } from "../primitives";
 import { lime, ink, muted, subtle } from "../theme";
 
 interface Props {
   onNext: (authCode: string | null) => void;
+  onBack?: () => void;
 }
 
-export function ScreenGmailConnect({ onNext }: Props) {
+export function ScreenGmailConnect({ onNext, onBack }: Props) {
   const [status, setStatus] = useState<"idle" | "connecting" | "connected" | "error">("idle");
 
   const googleLogin = useGoogleLogin({
@@ -29,14 +30,15 @@ export function ScreenGmailConnect({ onNext }: Props) {
 
   return (
     <Frame>
+      {onBack && <BackBtn onClick={onBack} />}
       <Eyebrow>paso 4 de 9</Eyebrow>
       <Display>
         Conecta tu <Italic>email</Italic>.
       </Display>
       <div style={{ marginTop: 12, marginBottom: 18 }}>
         <Body>
-          Leemos tus notificaciones bancarias y registramos gastos automaticamente.
-          Solo leemos emails de bancos, nada mas.
+          Leemos tus notificaciones bancarias y registramos gastos automáticamente.
+          Solo leemos emails de bancos, nada más.
         </Body>
       </div>
 
@@ -59,7 +61,7 @@ export function ScreenGmailConnect({ onNext }: Props) {
             marginBottom: 10,
           }}
         >
-          asi funciona
+          así funciona
         </div>
 
         {/* Step 1 */}
@@ -112,7 +114,7 @@ export function ScreenGmailConnect({ onNext }: Props) {
           </div>
           <div>
             <div style={{ fontSize: 12, fontWeight: 700, color: "#fff" }}>
-              Lo detectamos automaticamente
+              Lo detectamos automáticamente
             </div>
             <div style={{ fontSize: 10, color: "rgba(255,255,255,0.5)", marginTop: 2 }}>
               Extraemos monto, comercio y fecha
@@ -202,7 +204,7 @@ export function ScreenGmailConnect({ onNext }: Props) {
           }}
         >
           <span style={{ fontSize: 18 }}>✓</span>
-          Gmail conectado!
+          ¡Gmail conectado!
         </div>
       )}
 
@@ -218,7 +220,7 @@ export function ScreenGmailConnect({ onNext }: Props) {
             fontWeight: 600,
           }}
         >
-          No se pudo conectar. Intenta de nuevo.
+          No se pudo conectar. Intentá de nuevo.
         </div>
       )}
 

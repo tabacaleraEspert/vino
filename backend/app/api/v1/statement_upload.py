@@ -15,6 +15,7 @@ from app.repositories.categoria_repo import list_categorias, list_subcategorias
 from app.repositories.movimiento_repo import create_movimiento, get_movimiento_by_origen
 from app.repositories.regla_repo import resolve_regla
 from app.services.statement_parser import make_origen_id, parse_statement
+from app.utils.normalize import normalize_text
 from app.utils.parse_utils import parse_date_flex
 
 logger = logging.getLogger(__name__)
@@ -172,6 +173,9 @@ async def confirm_statement(
                 id_categoria=cat_id,
                 id_subcategoria=sub_id,
                 comercio_id=None,
+                comercio_raw=tx.descripcion or None,
+                comercio_norm=normalize_text(tx.descripcion) if tx.descripcion else None,
+                regla_comercio_id=regla["id"] if regla else None,
                 categoria_manual=bool(tx.categoria_id),
                 origen=payload.origen_label,
                 origen_id=origen_id,

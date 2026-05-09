@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
-import { Frame, Eyebrow, Italic, PrimaryBtn } from "../primitives";
+import { Frame, Eyebrow, Italic, PrimaryBtn, BackBtn } from "../primitives";
 import { lime, ink, accent, muted, subtle } from "../theme";
 
 const HL_LABELS = [
-  { label: "BALANCE DEL MES", text: "Lo que gastaste y cuanto del presupuesto te queda." },
-  { label: "GASTOS POR CATEGORIA", text: "Donde se va tu plata, ordenado de mayor a menor." },
-  { label: "TRANSACCIONES RECIENTES", text: "Las ultimas compras, auto-categorizadas." },
-  { label: "INSIGHTS RAPIDOS", text: "El gasto mas alto y cuantos movimientos hubo." },
+  { label: "BALANCE DEL MES", text: "Lo que gastaste y cuánto del presupuesto te queda." },
+  { label: "GASTOS POR CATEGORÍA", text: "Dónde se va tu plata, ordenado de mayor a menor." },
+  { label: "TRANSACCIONES RECIENTES", text: "Las últimas compras, auto-categorizadas." },
+  { label: "INSIGHTS RÁPIDOS", text: "El gasto más alto y cuántos movimientos hubo." },
 ];
 
 const cats = [
@@ -24,9 +24,9 @@ const txs = [
   { i: "🎬", t: "Netflix", d: "20 oct", a: 6990 },
 ];
 
-interface Props { onNext: () => void }
+interface Props { onNext: () => void; onBack?: () => void }
 
-export function ScreenTourDashboard({ onNext }: Props) {
+export function ScreenTourDashboard({ onNext, onBack }: Props) {
   const [highlight, setHighlight] = useState(0);
   const [balance, setBalance] = useState(0);
 
@@ -54,6 +54,7 @@ export function ScreenTourDashboard({ onNext }: Props) {
 
   return (
     <Frame>
+      {onBack && <BackBtn onClick={onBack} />}
       <Eyebrow>tour · 1 de 3</Eyebrow>
       <div style={{ fontFamily: '"Times New Roman", Georgia, serif', fontSize: 22, lineHeight: 1.05, fontWeight: 400, letterSpacing: -0.6 }}>
         Tu <Italic>inicio</Italic>, todo en una pantalla.
@@ -78,7 +79,7 @@ export function ScreenTourDashboard({ onNext }: Props) {
         {/* Categories */}
         <div style={{ marginTop: 8, ...ring(1) }}>
           <div style={{ background: "#fff", borderRadius: 12, padding: "10px 12px", boxShadow: "0 1px 2px rgba(0,0,0,0.04)" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 8 }}>Gastos por Categoria</div>
+            <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 8 }}>Gastos por Categoría</div>
             {cats.slice(0, 4).map((c, i) => (
               <div key={c.n} style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 6, opacity: 0, animation: `dRow .4s cubic-bezier(.2,.7,.2,1) ${0.7 + i * 0.08}s forwards` }}>
                 <span style={{ fontSize: 13 }}>{c.i}</span>

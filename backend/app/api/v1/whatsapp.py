@@ -1,4 +1,5 @@
 """WhatsApp endpoints — intake, purchase advice, and more."""
+import hashlib
 import logging
 from typing import Any, Dict
 
@@ -228,6 +229,7 @@ async def register_expense(
     from app.repositories.regla_repo import resolve_regla, create_regla
     from app.repositories.medio_pago_repo import resolve_medio_pago
     from app.services.merchant_identifier import identify_merchant
+    from app.utils.normalize import normalize_text
 
     message = payload.message.strip()
     if not message:
@@ -273,9 +275,6 @@ async def register_expense(
         }
 
     moneda = extracted.get("moneda", "ARS") or "ARS"
-    # Heuristic: amounts under 200 are almost certainly USD in Argentina
-    if moneda == "ARS" and monto < 200:
-        moneda = "USD"
     comercio_raw = extracted.get("comercio", "") or ""
     descripcion = extracted.get("descripcion", "") or comercio_raw or "Gasto WhatsApp"
     tipo = extracted.get("tipo", "Gasto") or "Gasto"
@@ -369,6 +368,20 @@ async def register_expense(
         except Exception:
             pass
 
+    # Generate origen_id for deduplication (hash of user + amount + date + description)
+    dedup_key = f"{payload.user_id}:{monto}:{fecha}:{descripcion}"
+    wpp_origen_id = hashlib.sha256(dedup_key.encode()).hexdigest()[:16]
+
+    # Check for duplicate before creating
+    from app.repositories.movimiento_repo import get_movimiento_by_origen
+    existing = await get_movimiento_by_origen(db, payload.user_id, "Wpp", wpp_origen_id)
+    if existing:
+        return {
+            "status": "duplicate",
+            "reply": "Ese gasto ya fue registrado.",
+            "movimiento_id": existing.get("id") or existing.get("Id"),
+        }
+
     # Step 5: Handle cuotas
     cuota_actual = extracted.get("cuota_actual")
     cuota_total = extracted.get("cuota_total")
@@ -401,9 +414,12 @@ async def register_expense(
                     id_categoria=id_categoria,
                     id_subcategoria=id_subcategoria,
                     comercio_id=comercio_id_val,
+                    comercio_raw=comercio_raw or None,
+                    comercio_norm=normalize_text(comercio_raw) if comercio_raw else None,
+                    regla_comercio_id=regla_match["id"] if regla_match else None,
                     categoria_manual=False,
                     origen="Wpp",
-                    origen_id=None,
+                    origen_id=wpp_origen_id,
                     id_credito_debito=id_credito_debito,
                     id_medio_pago_final=id_medio_pago_final,
                     cuota_actual=i + 1,
@@ -440,9 +456,12 @@ async def register_expense(
                 id_categoria=id_categoria,
                 id_subcategoria=id_subcategoria,
                 comercio_id=str(regla_match["id"]) if regla_match else None,
+                comercio_raw=comercio_raw or None,
+                comercio_norm=normalize_text(comercio_raw) if comercio_raw else None,
+                regla_comercio_id=regla_match["id"] if regla_match else None,
                 categoria_manual=False,
                 origen="Wpp",
-                origen_id=None,
+                origen_id=wpp_origen_id,
                 id_credito_debito=id_credito_debito,
                 id_medio_pago_final=id_medio_pago_final,
                 **cuota_kw,
@@ -704,12 +723,16 @@ async def register_from_ticket_photo(
 
     # Create movement
     try:
+        from app.utils.normalize import normalize_text as _normalize
         created = await create_movimiento(
             db, id_usuario=user_id, fecha=fecha, tipo="Gasto",
             moneda=moneda, monto=Decimal(str(round(monto, 2))),
             medio_carga="Ticket", descripcion=descripcion,
             id_categoria=id_categoria, id_subcategoria=id_subcategoria,
-            comercio_id=None, categoria_manual=False,
+            comercio_id=None,
+            comercio_raw=comercio or None,
+            comercio_norm=_normalize(comercio) if comercio else None,
+            categoria_manual=False,
             origen="Ticket", origen_id=None,
             id_credito_debito=None, id_medio_pago_final=None,
         )

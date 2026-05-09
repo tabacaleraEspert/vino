@@ -35,7 +35,10 @@ class Movimiento(Base):
     Id_SubCategoria: Mapped[int | None] = mapped_column(Integer, ForeignKey("SubCategoria.Id"))
     Origen: Mapped[str | None] = mapped_column(String(50))
     Origen_Id: Mapped[str | None] = mapped_column(String(120))
+    ComercioRaw: Mapped[str | None] = mapped_column(String(300))
+    ComercioNorm: Mapped[str | None] = mapped_column(String(300))
     ComercioId: Mapped[str | None] = mapped_column(String(120))
+    ReglaComercioId: Mapped[int | None] = mapped_column(Integer)
     CategoriaManual: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="0")
 
     # Cuotas

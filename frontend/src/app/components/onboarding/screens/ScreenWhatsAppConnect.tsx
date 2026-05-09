@@ -1,14 +1,15 @@
 import { useState, useRef, useEffect } from "react";
-import { Frame, Eyebrow, Display, Italic, Body, PrimaryBtn } from "../primitives";
+import { Frame, Eyebrow, Display, Italic, Body, PrimaryBtn, BackBtn } from "../primitives";
 import { lime, ink, muted, subtle } from "../theme";
 import { OtpInput } from "../../OtpInput";
 import { apiFetch } from "../../../../lib/api";
 
 interface Props {
   onNext: (phoneNumber: string | null) => void;
+  onBack?: () => void;
 }
 
-export function ScreenWhatsAppConnect({ onNext }: Props) {
+export function ScreenWhatsAppConnect({ onNext, onBack }: Props) {
   const [digits, setDigits] = useState("");
   const [touched, setTouched] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -59,7 +60,7 @@ export function ScreenWhatsAppConnect({ onNext }: Props) {
       setOtp("");
       setResendCooldown(60);
     } catch (e: any) {
-      setError(e?.message || "No se pudo enviar el codigo");
+      setError(e?.message || "No se pudo enviar el código");
     }
     setSending(false);
   };
@@ -86,7 +87,7 @@ export function ScreenWhatsAppConnect({ onNext }: Props) {
       });
       onNext(fullPhone);
     } catch (e: any) {
-      setError(e?.message || "Codigo incorrecto o expirado");
+      setError(e?.message || "Código incorrecto o expirado");
       setOtp("");
     }
     setVerifying(false);
@@ -104,11 +105,11 @@ export function ScreenWhatsAppConnect({ onNext }: Props) {
       <Frame>
         <Eyebrow>paso 8 de 9</Eyebrow>
         <Display>
-          Verifica tu <Italic>numero</Italic>.
+          Verifica tu <Italic>número</Italic>.
         </Display>
         <div style={{ marginTop: 12, marginBottom: 24 }}>
           <Body>
-            Enviamos un codigo de 6 digitos a{" "}
+            Enviamos un código de 6 dígitos a{" "}
             <strong>{fullPhone}</strong> por WhatsApp.
           </Body>
         </div>
@@ -144,7 +145,7 @@ export function ScreenWhatsAppConnect({ onNext }: Props) {
                 fontFamily: "-apple-system, system-ui, sans-serif",
               }}
             >
-              {sending ? "Enviando..." : resendCooldown > 0 ? `Reenviar (${resendCooldown}s)` : "Reenviar codigo"}
+              {sending ? "Enviando..." : resendCooldown > 0 ? `Reenviar (${resendCooldown}s)` : "Reenviar código"}
             </button>
             <button
               onClick={() => { setStep("phone"); setError(""); setOtp(""); }}
@@ -159,7 +160,7 @@ export function ScreenWhatsAppConnect({ onNext }: Props) {
                 fontFamily: "-apple-system, system-ui, sans-serif",
               }}
             >
-              Cambiar numero
+              Cambiar número
             </button>
           </div>
         </div>
@@ -169,13 +170,14 @@ export function ScreenWhatsAppConnect({ onNext }: Props) {
 
   return (
     <Frame>
+      {onBack && <BackBtn onClick={onBack} />}
       <Eyebrow>paso 8 de 9</Eyebrow>
       <Display>
         Conecta tu <Italic>WhatsApp</Italic>.
       </Display>
       <div style={{ marginTop: 12, marginBottom: 18 }}>
         <Body>
-          Mandanos tus gastos por chat y los registramos automaticamente. Sin apps nuevas, sin formularios.
+          Mandanos tus gastos por chat y los registramos automáticamente. Sin apps nuevas, sin formularios.
         </Body>
       </div>
 
@@ -200,7 +202,7 @@ export function ScreenWhatsAppConnect({ onNext }: Props) {
             marginBottom: 8,
           }}
         >
-          asi se ve
+          así se ve
         </div>
         <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 6 }}>
           <div
@@ -214,7 +216,7 @@ export function ScreenWhatsAppConnect({ onNext }: Props) {
               maxWidth: "75%",
             }}
           >
-            gaste 4500 en cafe
+            gasté 4500 en café
           </div>
         </div>
         <div style={{ display: "flex", justifyContent: "flex-start" }}>
@@ -252,7 +254,7 @@ export function ScreenWhatsAppConnect({ onNext }: Props) {
         }}
       >
         <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1, color: muted, textTransform: "uppercase" as const }}>
-          Tu numero de WhatsApp
+          Tu número de WhatsApp
         </div>
         <div
           style={{
@@ -293,7 +295,7 @@ export function ScreenWhatsAppConnect({ onNext }: Props) {
           />
         </div>
         <div style={{ fontSize: 10, color: showError ? "#DC2626" : muted, marginTop: 6, fontWeight: showError ? 700 : 400 }}>
-          {showError ? "Ingresa un numero valido (10 u 11 digitos)" : "Inclui el 9 si tu numero es de celular argentino"}
+          {showError ? "Ingresá un número válido (10 u 11 dígitos)" : "Incluí el 9 si tu número es de celular argentino"}
         </div>
       </div>
 
@@ -301,7 +303,7 @@ export function ScreenWhatsAppConnect({ onNext }: Props) {
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         <PrimaryBtn onClick={handleSubmit} disabled={!isValid || sending}>
-          {sending ? "Enviando codigo..." : "Conectar WhatsApp →"}
+          {sending ? "Enviando código..." : "Conectar WhatsApp →"}
         </PrimaryBtn>
         <button
           onClick={() => onNext(null)}

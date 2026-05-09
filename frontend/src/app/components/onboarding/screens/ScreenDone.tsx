@@ -1,15 +1,17 @@
-import { Frame, Eyebrow, Display, Italic, Body, PrimaryBtn, useDelay } from "../primitives";
+import { Frame, Eyebrow, Display, Italic, Body, PrimaryBtn, BackBtn, useDelay } from "../primitives";
 import { lime, accent } from "../theme";
 
 interface Props {
   onFinish: () => void;
+  onBack?: () => void;
 }
 
-export function ScreenDone({ onFinish }: Props) {
+export function ScreenDone({ onFinish, onBack }: Props) {
   const s = useDelay(200);
 
   return (
     <Frame>
+      {onBack && <BackBtn onClick={onBack} />}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", position: "relative" }}>
         {[...Array(14)].map((_, i) => (
           <div
@@ -30,10 +32,10 @@ export function ScreenDone({ onFinish }: Props) {
         ))}
         <Eyebrow>todo listo</Eyebrow>
         <Display>
-          Estas <Italic>listo</Italic>.
+          Estás <Italic>listo</Italic>.
         </Display>
         <div style={{ marginTop: 14 }}>
-          <Body>Tu cuenta esta configurada. Empeza a registrar gastos y mira como se ordena tu plata.</Body>
+          <Body>Tu cuenta está configurada. Empezá a registrar gastos y mirá cómo se ordena tu plata.</Body>
         </div>
       </div>
       <PrimaryBtn onClick={onFinish}>Entrar a la app →</PrimaryBtn>

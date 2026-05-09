@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Frame, Eyebrow, Display, Italic, PrimaryBtn, Body } from "../primitives";
+import { Frame, Eyebrow, Display, Italic, PrimaryBtn, Body, BackBtn } from "../primitives";
 import { lime, ink, subtle, muted, cream } from "../theme";
 import { apiFetch } from "../../../../lib/api";
 
@@ -22,7 +22,7 @@ type Bucket = "necesidades" | "estilo_vida" | "futuro";
 const BUCKET_LABELS: Record<Bucket, { title: string; sub: string; pct: string }> = {
   necesidades: { title: "Necesidades", sub: "Lo esencial para vivir", pct: "50%" },
   estilo_vida: { title: "Estilo de vida", sub: "Lo que te hace disfrutar", pct: "30%" },
-  futuro: { title: "Tu futuro", sub: "Se calcula automaticamente", pct: "20%" },
+  futuro: { title: "Tu futuro", sub: "Se calcula automáticamente", pct: "20%" },
 };
 
 const BUCKETS: Bucket[] = ["necesidades", "estilo_vida"];
@@ -31,13 +31,13 @@ const BUCKETS: Bucket[] = ["necesidades", "estilo_vida"];
 function defaultCats(): Cat[] {
   return [
     { icon: "🏠", name: "Vivienda", color: "#ec4899", bucket: "necesidades", enabled: true, subs: s(["Alquiler", "Expensas", "Hipoteca", "Mantenimiento"]) },
-    { icon: "🍴", name: "Comida", color: "#14b8a6", bucket: "necesidades", enabled: true, subs: s(["Super", "Almacen", "Verduleria", "Carniceria", "Delivery"]) },
+    { icon: "🍴", name: "Comida", color: "#14b8a6", bucket: "necesidades", enabled: true, subs: s(["Súper", "Almacén", "Verdulería", "Carnicería", "Delivery"]) },
     { icon: "🚗", name: "Transporte", color: "#f97316", bucket: "necesidades", enabled: true, subs: s(["Nafta", "SUBE", "Uber", "Estacionamiento", "Peajes"]) },
     { icon: "💡", name: "Servicios", color: "#eab308", bucket: "necesidades", enabled: true, subs: s(["Luz", "Gas", "Agua", "Internet", "Celular"]) },
     { icon: "💊", name: "Salud", color: "#06b6d4", bucket: "necesidades", enabled: true, subs: s(["Prepaga", "Farmacia", "Consultas", "Gimnasio"]) },
-    { icon: "🎓", name: "Educacion", color: "#8b5cf6", bucket: "necesidades", enabled: true, subs: s(["Cuotas", "Cursos", "Libros"]) },
-    { icon: "🎬", name: "Ocio", color: "#d946ef", bucket: "estilo_vida", enabled: true, subs: s(["Restaurantes", "Bar", "Cafe", "Eventos", "Cine", "Streaming", "Viajes", "Hobbies"]) },
-    { icon: "👕", name: "Compras", color: "#57534e", bucket: "estilo_vida", enabled: true, subs: s(["Ropa", "Calzado", "Hogar", "Tecnologia"]) },
+    { icon: "🎓", name: "Educación", color: "#8b5cf6", bucket: "necesidades", enabled: true, subs: s(["Cuotas", "Cursos", "Libros"]) },
+    { icon: "🎬", name: "Ocio", color: "#d946ef", bucket: "estilo_vida", enabled: true, subs: s(["Restaurantes", "Bar", "Café", "Eventos", "Cine", "Streaming", "Viajes", "Hobbies"]) },
+    { icon: "👕", name: "Compras", color: "#57534e", bucket: "estilo_vida", enabled: true, subs: s(["Ropa", "Calzado", "Hogar", "Tecnología"]) },
   ];
 }
 function s(names: string[]): SubCat[] {
@@ -51,9 +51,10 @@ const COLORS = ["#ef4444", "#f97316", "#eab308", "#14b8a6", "#3b82f6", "#8b5cf6"
 /* ─── Component ─── */
 interface Props {
   onNext: () => void;
+  onBack?: () => void;
 }
 
-export function ScreenCategories({ onNext }: Props) {
+export function ScreenCategories({ onNext, onBack }: Props) {
   const [cats, setCats] = useState<Cat[]>(defaultCats);
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
   const [adding, setAdding] = useState<Bucket | null>(null);
@@ -122,11 +123,13 @@ export function ScreenCategories({ onNext }: Props) {
         method: "POST",
         body: JSON.stringify({ categorias: selected }),
       });
+      onNext();
     } catch (e) {
       console.error("Save categories failed:", e);
+      alert("No se pudieron guardar las categorías. Intentá de nuevo.");
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
-    onNext();
   };
 
   const enabledCount = cats.filter((c) => c.enabled).length;
@@ -134,14 +137,15 @@ export function ScreenCategories({ onNext }: Props) {
 
   return (
     <Frame>
-      <Eyebrow>paso 2 · tus categorias</Eyebrow>
+      {onBack && <BackBtn onClick={onBack} />}
+      <Eyebrow>paso 2 · tus categorías</Eyebrow>
       <Display>
-        <Italic>Personalizá</Italic> tus<br />categorias.
+        <Italic>Personalizá</Italic> tus<br />categorías.
       </Display>
       <Body>
         <span style={{ marginTop: 6, display: "block" }}>
-          Te recomendamos estas {enabledCount} categorias y {subCount} subcategorias.
-          Podes activar, desactivar o agregar las que quieras.
+          Te recomendamos estas {enabledCount} categorías y {subCount} subcategorías.
+          Podés activar, desactivar o agregar las que quieras.
         </span>
       </Body>
 
@@ -355,7 +359,7 @@ export function ScreenCategories({ onNext }: Props) {
                         value={newName}
                         onChange={(e) => setNewName(e.target.value)}
                         onKeyDown={(e) => e.key === "Enter" && addCategory()}
-                        placeholder="Nombre de la categoria"
+                        placeholder="Nombre de la categoría"
                         style={{
                           flex: 1,
                           fontSize: 13,
@@ -415,7 +419,7 @@ export function ScreenCategories({ onNext }: Props) {
                       color: muted,
                     }}
                   >
-                    + Agregar categoria
+                    + Agregar categoría
                   </button>
                 )}
               </div>
@@ -451,8 +455,8 @@ export function ScreenCategories({ onNext }: Props) {
               lineHeight: 1.5,
             }}
           >
-            💡 Tu ahorro se calcula automaticamente: es lo que sobra despues de tus gastos.
-            No necesitas una categoria para eso. Mas adelante vamos a tener un modulo
+            💡 Tu ahorro se calcula automáticamente: es lo que sobra después de tus gastos.
+            No necesitás una categoría para eso. Más adelante vamos a tener un módulo
             de inversiones para que puedas trackear tu plata.
           </div>
         </div>
@@ -460,7 +464,7 @@ export function ScreenCategories({ onNext }: Props) {
 
       <div style={{ marginTop: 8 }}>
         <PrimaryBtn onClick={handleContinue} disabled={saving || enabledCount === 0}>
-          {saving ? "Guardando..." : `Continuar con ${enabledCount} categorias →`}
+          {saving ? "Guardando..." : `Continuar con ${enabledCount} categorías →`}
         </PrimaryBtn>
       </div>
     </Frame>

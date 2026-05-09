@@ -213,7 +213,11 @@ async def verify_and_link_wpp(
         return None
     if user.WppOtpPhone != phone:
         return None
-    if datetime.now(UTC) > user.WppOtpExpiresAt.replace(tzinfo=UTC):
+    # Timezone-safe expiration check
+    expires = user.WppOtpExpiresAt
+    if expires.tzinfo is None:
+        expires = expires.replace(tzinfo=UTC)
+    if datetime.now(UTC) > expires:
         return None
 
     # Check uniqueness

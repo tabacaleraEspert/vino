@@ -45,7 +45,7 @@ async def get_categoria(
     c = result.scalar_one_or_none()
     if not c:
         return None
-    return {"id": c.Id, "nombre": c.Nombre, "icon": c.Icon, "color": c.Color}
+    return {"id": c.Id, "nombre": c.Nombre, "icon": c.Icon, "color": c.Color, "bucket": c.Bucket or ""}
 
 
 async def create_categoria(

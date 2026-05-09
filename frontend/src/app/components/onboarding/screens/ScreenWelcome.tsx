@@ -41,7 +41,7 @@ export function ScreenWelcome({ onNext, name = "amig@" }: Props) {
         >
           <Body>
             Configuremos tu cuenta en menos de{" "}
-            <strong style={{ color: ink }}>2 minutos</strong>. Despues, vas a ver donde se va tu
+            <strong style={{ color: ink }}>2 minutos</strong>. Después, vas a ver dónde se va tu
             plata cada mes.
           </Body>
         </div>

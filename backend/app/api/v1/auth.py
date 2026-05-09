@@ -423,8 +423,10 @@ async def whatsapp_send_code(
     from datetime import datetime, timedelta, UTC
 
     phone = _normalize_wpp(payload.whatsapp)
-    if len(phone) < 10:
-        raise HTTPException(status_code=400, detail="Numero de WhatsApp invalido")
+    # Validate Argentina phone format: +54 + 10-11 digits
+    digits_only = phone.lstrip("+")
+    if len(digits_only) < 12 or not digits_only.isdigit():
+        raise HTTPException(status_code=400, detail="Número de WhatsApp inválido. Debe tener formato +54XXXXXXXXXX")
 
     code = f"{secrets.randbelow(1000000):06d}"
     expires_at = datetime.now(UTC) + timedelta(minutes=5)

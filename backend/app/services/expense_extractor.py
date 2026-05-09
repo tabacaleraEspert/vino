@@ -33,7 +33,11 @@ Tu tarea es LEER el mensaje y extraer los datos del gasto. Entendés slang argen
 
 Reglas:
 - monto: número entero, SIEMPRE convertir slang. Sin $ ni puntos.
-- moneda: "ARS" por defecto. "USD" si dice dólares/dolar.
+- moneda: detectar la moneda según lo que dice el usuario:
+  - "ARS" por defecto si no menciona moneda explícitamente.
+  - "USD" SOLO si el usuario dice explícitamente "dólares", "dólar", "dolares", "dolar", "USD", "usd", "us$", "U$S".
+  - NO inferir la moneda por el monto. Un gasto de $50 sin mención de moneda es ARS.
+  - Si el mensaje es ambiguo y no menciona moneda → usar "ARS".
 - comercio: nombre del lugar. Si no dice nombre de local → ""
 - descripcion: resumen corto y claro del gasto (ej: "Alfajor en kiosco", "Almuerzo", "Nafta YPF")
 - tipo: "Gasto" siempre, salvo que diga ingreso/cobré/me pagaron

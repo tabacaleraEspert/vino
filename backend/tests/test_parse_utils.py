@@ -152,6 +152,25 @@ class TestParseMoney:
     def test_should_return_zero_for_non_numeric_string(self):
         assert parse_money("abc") == 0.0
 
+    # Argentine format: dot = thousands separator
+    def test_should_parse_dot_as_thousands_separator(self):
+        assert parse_money("$5.000") == 5000.0
+
+    def test_should_parse_multiple_dots_as_thousands(self):
+        assert parse_money("$1.500.000") == 1500000.0
+
+    def test_should_parse_argentine_format_with_decimals(self):
+        assert parse_money("$50.000,50") == 50000.50
+
+    def test_should_parse_dot_thousands_plain(self):
+        assert parse_money("5.000") == 5000.0
+
+    def test_should_preserve_real_decimal(self):
+        assert parse_money("48146.50") == 48146.50
+
+    def test_should_parse_comma_as_decimal_two_digits(self):
+        assert parse_money("48,50") == 48.50
+
 
 # ---------------------------------------------------------------------------
 # parse_periodo_mes

@@ -150,6 +150,35 @@ export function PrimaryBtn({
   );
 }
 
+export function BackBtn({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        position: "absolute",
+        top: 20,
+        left: 16,
+        background: "transparent",
+        border: "none",
+        color: muted,
+        fontSize: 15,
+        fontWeight: 600,
+        cursor: "pointer",
+        padding: "8px 12px",
+        fontFamily: "-apple-system, system-ui, sans-serif",
+        minHeight: 44,
+        minWidth: 44,
+        display: "flex",
+        alignItems: "center",
+        gap: 4,
+        zIndex: 10,
+      }}
+    >
+      ← Volver
+    </button>
+  );
+}
+
 // ─── Keyframes (injected once) ────────────────────────────
 
 export function OnboardingStyles() {

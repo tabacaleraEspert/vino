@@ -87,18 +87,52 @@ def parse_date_ddmmyyyy(value: any) -> Optional[date]:
 
 def parse_money(value: any) -> float:
     """
-    Parsea monto desde string. Soporta:
-    - "48,146" -> 48146 (coma como separador de miles)
-    - "48146.50" -> 48146.50 (punto decimal)
-    - "$ 48.146" -> 48146
-    Regla estable: quitar $, espacios, comas; mantener dígitos, punto y guión.
+    Parsea monto desde string. Formato argentino y estándar:
+    - "$5.000"      -> 5000   (punto = separador de miles)
+    - "$1.500.000"  -> 1500000
+    - "$50.000,50"  -> 50000.50  (coma = decimal)
+    - "48,146"      -> 48146  (coma como separador de miles sin decimal)
+    - "48146.50"    -> 48146.50  (punto decimal sin miles)
+    - "5000"        -> 5000
     """
     if value is None:
         return 0.0
-    s = str(value).strip().replace("$", "").replace(" ", "").replace(",", "")
+    s = str(value).strip()
     if not s:
         return 0.0
-    s = re.sub(r"[^0-9.\-]", "", s)
+    # Remove currency symbols and spaces
+    s = s.replace("$", "").replace(" ", "")
+    s = re.sub(r"[^0-9.,\-]", "", s)
+    if not s:
+        return 0.0
+
+    has_dot = "." in s
+    has_comma = "," in s
+
+    if has_dot and has_comma:
+        # Argentine format: "50.000,50" → dots are thousands, comma is decimal
+        s = s.replace(".", "").replace(",", ".")
+    elif has_dot:
+        # Check if dot is thousands separator: "5.000", "1.500.000"
+        # Dots are thousands if: multiple dots, or exactly 3 digits after last dot
+        parts = s.split(".")
+        last_part = parts[-1]
+        if len(parts) > 2 or (len(parts) == 2 and len(last_part) == 3):
+            # Thousands separator: "5.000" → 5000, "1.500.000" → 1500000
+            s = s.replace(".", "")
+        # else: decimal point "48146.50" stays as-is
+    elif has_comma:
+        # Comma with no dot: "48,146" → thousands separator
+        # But "48,50" (2 digits after comma) → decimal
+        parts = s.split(",")
+        last_part = parts[-1]
+        if len(last_part) == 2 and len(parts) == 2:
+            # Decimal: "48,50" → 48.50
+            s = s.replace(",", ".")
+        else:
+            # Thousands: "48,146" → 48146
+            s = s.replace(",", "")
+
     try:
         return float(s) if s else 0.0
     except ValueError:
