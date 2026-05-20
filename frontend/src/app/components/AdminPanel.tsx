@@ -23,6 +23,7 @@ import {
 } from "recharts";
 import { useNavigate } from "react-router";
 import { PipelineLog } from "./admin/PipelineLog";
+import { UsersPanel } from "./admin/UsersPanel";
 
 interface AdminDashboardResponse {
   system: { status: string; timestamp: string };
@@ -60,7 +61,7 @@ interface AdminDashboardResponse {
   }>;
 }
 
-type Tab = "dashboard" | "pipeline";
+type Tab = "dashboard" | "pipeline" | "users";
 
 export function AdminPanel() {
   const { token } = useAuth();
@@ -154,6 +155,17 @@ export function AdminPanel() {
           Pipeline
         </button>
         <button
+          onClick={() => setTab("users")}
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-colors ${
+            tab === "users"
+              ? "bg-white text-gray-900 shadow-sm"
+              : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          <Users className="w-3.5 h-3.5" />
+          Usuarios
+        </button>
+        <button
           onClick={() => { setTab("dashboard"); if (!data) fetchData(); }}
           className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-colors ${
             tab === "dashboard"
@@ -168,6 +180,9 @@ export function AdminPanel() {
 
       {/* Pipeline Tab */}
       {tab === "pipeline" && <PipelineLog />}
+
+      {/* Users Tab */}
+      {tab === "users" && <UsersPanel />}
 
       {/* Dashboard Tab */}
       {tab === "dashboard" && (
