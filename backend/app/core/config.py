@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     TWILIO_WHATSAPP_FROM: str = ""  # whatsapp:+1234567890
     TWILIO_OTP_CONTENT_SID: str = ""  # Content Template SID for OTP (e.g. HXXXXXXXXXXX)
     TWILIO_REMINDER_CONTENT_SID: str = ""  # Content Template SID for inactivity reminder
+    ADMIN_USER_IDS: list[int] = [8, 11]  # Davor, Nacho — can access admin pipeline log
     CORS_ORIGINS: list[str] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
