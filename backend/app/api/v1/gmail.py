@@ -210,3 +210,47 @@ async def gmail_debug(
         output.append(user_info)
 
     return {"debug": output}
+
+
+@router.post("/debug-extract")
+async def gmail_debug_extract(
+    _: None = Depends(require_master_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Debug: pick the first bank-matching email for user 8 (Davor) and run extraction."""
+    import asyncio as _asyncio
+    from app.core.encryption import decrypt_token
+    from app.services.gmail_poller import _build_gmail_service, _list_messages, _extract_email_parts
+    from app.services.bank_email_filters import build_gmail_query, matches_bank_filter
+    from app.services.email_expense_extractor import extract_expense_from_email
+
+    stmt = select(User).where(User.id == 8)
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+    if not user or not user.GmailRefreshToken:
+        return {"error": "User 8 not found or no Gmail token"}
+
+    refresh_token = decrypt_token(user.GmailRefreshToken)
+    service = await _asyncio.to_thread(_build_gmail_service, refresh_token)
+    query = build_gmail_query(days_back=3)
+    messages = await _asyncio.to_thread(_list_messages, service, query, 20)
+
+    for msg_ref in messages:
+        msg = await _asyncio.to_thread(
+            lambda mid=msg_ref["id"]: service.users().messages().get(
+                userId="me", id=mid, format="full"
+            ).execute()
+        )
+        sender, subject, body = _extract_email_parts(msg)
+        if matches_bank_filter(sender, subject):
+            # Found a bank email — run extraction
+            extracted = await extract_expense_from_email(subject, sender, body)
+            return {
+                "msg_id": msg_ref["id"],
+                "sender": sender[:80],
+                "subject": subject,
+                "body_preview": body[:500],
+                "extraction": extracted,
+            }
+
+    return {"error": "No bank emails found"}

@@ -200,6 +200,10 @@ async def poll_user_gmail(
                 # Extract expense data with GPT
                 extracted = await extract_expense_from_email(subject, sender, body)
                 if not extracted.get("datos_completos"):
+                    logger.warning(
+                        "Gmail poll user %d: extraction incomplete for msg %s subject=%s — %s",
+                        user_id, msg_id, subject[:60], extracted.get("dato_faltante", "unknown"),
+                    )
                     last_successfully_processed_id = msg_id
                     continue
 
