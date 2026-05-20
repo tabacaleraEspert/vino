@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router';
+import { useNavigate, useLocation, Outlet } from 'react-router';
 import { TopBar, BottomBar, ConfirmDialog } from './fina/shared';
 import { HomeEditorial } from './fina/HomeEditorial';
 import { GastosScreen } from './fina/GastosScreen';
@@ -12,6 +12,10 @@ import { NewExpenseSheet, CategoryEditSheet, Drawer, NotificationsPanel } from '
 export function RootLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Child routes (e.g. /admin, /settings) render via Outlet instead of tabs
+  const isChildRoute = location.pathname !== '/';
 
   const [tab, setTab] = useState<string>('home');
   const [drawer, setDrawer] = useState(false);
@@ -77,10 +81,16 @@ export function RootLayout() {
 
   // Screens
   const screens: Record<string, React.ReactNode> = {
-    home: <HomeEditorial onOpenTx={openEdit} />,
-    gastos: <GastosScreen onEdit={openEdit} onDelete={setDeletingTx} />,
+    home: <HomeEditorial onTab={setTab} />,
+    gastos: <GastosScreen onTab={setTab} onEditTx={openEdit} onDeleteTx={(tx: any) => setDeletingTx(tx)} />,
     chat: <ChatScreen />,
-    cats: <CatsScreen onEdit={(cat: any) => { setEditingCat(cat); setCatSheetOpen(true); }} />,
+    cats: (
+      <CatsScreen
+        onEditCat={(cat: any) => { setEditingCat(cat); setCatSheetOpen(true); }}
+        onCreateCat={() => { setEditingCat(null); setCatSheetOpen(true); }}
+        onEditBudget={() => {}}
+      />
+    ),
     reglas: <ReglasScreen />,
   };
 
@@ -101,11 +111,11 @@ export function RootLayout() {
         balance={tab === 'gastos' ? undefined : undefined}
       />
 
-      <div style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden' }}>
-        {screens[tab]}
+      <div style={{ flex: 1, minHeight: 0, position: 'relative', overflowY: 'auto', overflowX: 'hidden' }}>
+        {isChildRoute ? <Outlet /> : screens[tab]}
       </div>
 
-      <BottomBar tab={tab} onTab={setTab} />
+      {!isChildRoute && <BottomBar tab={tab} onTab={setTab} />}
 
       {/* Overlays */}
       <Drawer
