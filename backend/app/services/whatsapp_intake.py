@@ -96,7 +96,7 @@ Clasificá el mensaje de WhatsApp en UNA de estas 4 categorías.
 Respondé SOLO con JSON: {"tipo": "DATA|QUERY|SUGERENCIAS|OTHER"}
 
 DATA — El usuario quiere REGISTRAR un gasto o ingreso.
-Está contando algo que ya pasó o está pasando: compró, pagó, gastó, cobró.
+Está contando algo que ya pasó o está pasando: compró, pagó, gastó, cobró, recibió plata.
 Ejemplos:
 - "Gasté 5000 en el super"
 - "Almorcé 3500"
@@ -107,6 +107,11 @@ Ejemplos:
 - "Uber hoy 1800"
 - "quiero cargar un gasto"
 - "nafta 15000 con débito"
+- "Cobré 800k de sueldo"
+- "Me pagaron 50k"
+- "Me transfirieron 100k"
+- "Recibí 200 dólares"
+- "Me entró el sueldo, 1 palo"
 Clave: menciona un monto + contexto de gasto/ingreso = DATA.
 
 QUERY — El usuario PREGUNTA sobre sus finanzas.

@@ -49,6 +49,7 @@ export function Transactions() {
     return d.getMonth() === selectedMonth.month && d.getFullYear() === selectedMonth.year;
   });
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedTipo, setSelectedTipo] = useState<"all" | "Gasto" | "Ingreso">("all");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   
@@ -108,6 +109,10 @@ export function Transactions() {
     const matchesCurrency =
       selectedCurrency === "all" || t.currency === selectedCurrency;
 
+    // Filtro de tipo (Gasto/Ingreso)
+    const matchesTipo =
+      selectedTipo === "all" || t.tipo === selectedTipo;
+
     return (
       matchesSearch &&
       matchesCategory &&
@@ -117,7 +122,8 @@ export function Transactions() {
       matchesDateTo &&
       matchesAmountMin &&
       matchesAmountMax &&
-      matchesCurrency
+      matchesCurrency &&
+      matchesTipo
     );
   });
 
@@ -138,6 +144,7 @@ export function Transactions() {
 
   const clearAllFilters = () => {
     setSearchTerm("");
+    setSelectedTipo("all");
     setSelectedCategory("all");
     setSelectedMerchant("all");
     setSelectedSubcategory("all");
@@ -162,6 +169,27 @@ export function Transactions() {
   return (
     <div className="p-4 space-y-4">
       <MonthSelector />
+      {/* Tipo filter tabs */}
+      <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+        {(["all", "Gasto", "Ingreso"] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => setSelectedTipo(t)}
+            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
+              selectedTipo === t
+                ? t === "Ingreso"
+                  ? "bg-green-500 text-white shadow-sm"
+                  : t === "Gasto"
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "bg-white text-gray-900 shadow-sm"
+                : "text-gray-500"
+            }`}
+          >
+            {t === "all" ? "Todos" : t === "Gasto" ? "Gastos" : "Ingresos"}
+          </button>
+        ))}
+      </div>
+
       {/* Búsqueda */}
       <div className="bg-white rounded-xl p-3 shadow-sm">
         <div className="flex items-center gap-2 mb-3">
@@ -357,8 +385,8 @@ export function Transactions() {
                         </div>
                         <div className="flex items-center gap-1">
                           <div className="text-right">
-                            <p className="text-sm font-semibold text-red-600">
-                              -${Math.abs(transaction.amount).toLocaleString("es-MX")}
+                            <p className={`text-sm font-semibold ${transaction.tipo === "Ingreso" ? "text-green-600" : "text-red-600"}`}>
+                              {transaction.tipo === "Ingreso" ? "+" : "-"}${Math.abs(transaction.amount).toLocaleString("es-MX")}
                             </p>
                             {transaction.cuotaTotal && transaction.cuotaTotal > 1 && (
                               <span className="text-[10px] font-medium text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full">

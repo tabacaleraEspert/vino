@@ -88,6 +88,69 @@ async def gastos_por_categoria(
     ]
 
 
+async def sum_ingresos_mes(
+    session: AsyncSession,
+    id_usuario: int,
+    from_date: date,
+    to_date: date,
+    moneda: str = "ARS",
+) -> float:
+    """Sum all income for a period. Single SQL query."""
+    stmt = select(func.coalesce(func.sum(Movimiento.Monto), 0)).where(and_(
+        Movimiento.Id_usuario == id_usuario,
+        Movimiento.Fecha >= from_date,
+        Movimiento.Fecha <= to_date,
+        Movimiento.TipoMovimiento == "Ingreso",
+        _moneda_filter(moneda),
+    ))
+    result = await session.execute(stmt)
+    return float(result.scalar_one())
+
+
+async def ingresos_por_categoria(
+    session: AsyncSession,
+    id_usuario: int,
+    from_date: date,
+    to_date: date,
+    moneda: str = "ARS",
+    top: int = 10,
+) -> list[dict[str, Any]]:
+    """Group income by category for a period."""
+    stmt = (
+        select(
+            Movimiento.Id_Categoria,
+            func.coalesce(Categoria.Nombre, "Sin categoría").label("cat_nombre"),
+            func.sum(Movimiento.Monto).label("total"),
+            func.count().label("count"),
+        )
+        .outerjoin(Categoria, and_(
+            Categoria.Id == Movimiento.Id_Categoria,
+            Categoria.Id_usuario == Movimiento.Id_usuario,
+        ))
+        .where(and_(
+            Movimiento.Id_usuario == id_usuario,
+            Movimiento.Fecha >= from_date,
+            Movimiento.Fecha <= to_date,
+            Movimiento.TipoMovimiento == "Ingreso",
+            _moneda_filter(moneda),
+        ))
+        .group_by(Movimiento.Id_Categoria, Categoria.Nombre)
+        .order_by(func.sum(Movimiento.Monto).desc())
+        .limit(top)
+    )
+    result = await session.execute(stmt)
+    rows = result.all()
+    return [
+        {
+            "categoria_id": row.Id_Categoria,
+            "categoria": row.cat_nombre or "Sin categoría",
+            "total": float(row.total),
+            "count": row.count,
+        }
+        for row in rows
+    ]
+
+
 async def mayor_gasto_mes(
     session: AsyncSession,
     id_usuario: int,

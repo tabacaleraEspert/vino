@@ -192,10 +192,12 @@ async def poll_user_gmail(
                 sender, subject, body = _extract_email_parts(msg)
 
                 # Double-check against bank filters
-                matched = matches_bank_filter(sender, subject)
+                filter_result = matches_bank_filter(sender, subject)
+                matched = bool(filter_result)
+                filter_tipo_hint = filter_result[1] if isinstance(filter_result, tuple) else None
                 log_event("email_found", user_id=user_id, gmail=gmail,
                           msg_id=msg_id, sender=sender[:80], subject=subject[:120],
-                          matched_filter=matched)
+                          matched_filter=matched, tipo_hint=filter_tipo_hint)
 
                 if not matched:
                     logger.debug("Gmail poll user %d: skipped non-bank email from=%s subject=%s", user_id, sender[:60], subject[:80])
@@ -318,22 +320,35 @@ async def _notify_whatsapp(ingest_result: dict, payload: dict) -> None:
         categoria = regla.get("categoria", "Otros")
         subcategoria = regla.get("subcategoria", "")
 
-        emoji = _CATEGORY_EMOJI.get(categoria.lower(), "💸")
+        tipo = payload.get("tipo", "Gasto")
         monto_fmt = f"${monto:,.0f}".replace(",", ".")
 
-        msg = f"{emoji} *{monto_fmt}*"
-        if moneda != "ARS":
-            msg += f" {moneda}"
-        if comercio_raw:
-            msg += f" en *{comercio_raw}*"
-        elif descripcion:
-            msg += f" — {descripcion}"
-
-        msg += f"\n📂 {categoria}"
-        if subcategoria and subcategoria != "Gastos no categorizados":
-            msg += f" / {subcategoria}"
-
-        msg += "\n✅ Registrado (Gmail)"
+        if tipo == "Ingreso":
+            emoji = "💰"
+            msg = f"{emoji} *{monto_fmt}*"
+            if moneda != "ARS":
+                msg += f" {moneda}"
+            if comercio_raw:
+                msg += f" de *{comercio_raw}*"
+            elif descripcion:
+                msg += f" — {descripcion}"
+            msg += f"\n📂 {categoria}"
+            if subcategoria and subcategoria != "Ingresos no categorizados":
+                msg += f" / {subcategoria}"
+            msg += "\n✅ Ingreso registrado (Gmail)"
+        else:
+            emoji = _CATEGORY_EMOJI.get(categoria.lower(), "💸")
+            msg = f"{emoji} *{monto_fmt}*"
+            if moneda != "ARS":
+                msg += f" {moneda}"
+            if comercio_raw:
+                msg += f" en *{comercio_raw}*"
+            elif descripcion:
+                msg += f" — {descripcion}"
+            msg += f"\n📂 {categoria}"
+            if subcategoria and subcategoria != "Gastos no categorizados":
+                msg += f" / {subcategoria}"
+            msg += "\n✅ Registrado (Gmail)"
 
         mov_id = movimiento.get("id") or movimiento.get("Id")
         if mov_id:

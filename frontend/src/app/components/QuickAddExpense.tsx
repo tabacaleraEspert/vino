@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import { X, ChevronRight, Zap, Check, Search } from "lucide-react";
+import { X, ChevronRight, Zap, Check, Search, ArrowDownLeft, ArrowUpRight } from "lucide-react";
 import { useData } from "../context/DataContext";
+import { useCatalog } from "../context/CatalogContext";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -15,7 +16,9 @@ const TODAY = () => {
 };
 
 export function QuickAddExpense({ open, onClose }: Props) {
-  const { categories, merchants, refresh } = useData();
+  const { merchants, refresh } = useData();
+  const { expenseCategories, incomeCategories } = useCatalog();
+  const [tipo, setTipo] = useState<"Gasto" | "Ingreso">("Gasto");
   const [amount, setAmount] = useState("0");
   const [moneda, setMoneda] = useState<"ARS" | "USD">("ARS");
   const [selectedCatId, setSelectedCatId] = useState<string | null>(null);
@@ -30,9 +33,13 @@ export function QuickAddExpense({ open, onClose }: Props) {
   const [saving, setSaving] = useState(false);
   const descRef = useRef<HTMLInputElement>(null);
 
+  const categories = tipo === "Ingreso" ? incomeCategories : expenseCategories;
+  const accentColor = tipo === "Ingreso" ? "#22c55e" : "#D8FF3C";
+
   // Reset on open
   useEffect(() => {
     if (open) {
+      setTipo("Gasto");
       setAmount("0");
       setMoneda("ARS");
       setSelectedCatId(null);
@@ -95,7 +102,7 @@ export function QuickAddExpense({ open, onClose }: Props) {
       const payload: Record<string, unknown> = {
         fecha,
         monto: numericAmount,
-        tipo: "Gasto",
+        tipo,
         moneda,
         MedioCarga: "Manual",
       };
@@ -107,7 +114,7 @@ export function QuickAddExpense({ open, onClose }: Props) {
 
       await api.movimientos.create(payload);
       setStep("done");
-      toast.success("Gasto registrado");
+      toast.success(tipo === "Ingreso" ? "Ingreso registrado" : "Gasto registrado");
       await refresh();
       setTimeout(() => onClose(), 800);
     } catch (e: any) {
@@ -159,10 +166,32 @@ export function QuickAddExpense({ open, onClose }: Props) {
         {/* Header */}
         <div className="flex items-center justify-between px-5 pb-3">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-[#D8FF3C] flex items-center justify-center">
-              <Zap className="w-4 h-4 text-black" strokeWidth={3} />
+            <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: accentColor }}>
+              {tipo === "Ingreso" ? <ArrowDownLeft className="w-4 h-4 text-black" strokeWidth={3} /> : <Zap className="w-4 h-4 text-black" strokeWidth={3} />}
             </div>
-            <span className="text-sm font-bold tracking-wide text-white/60">NUEVO GASTO</span>
+            {/* Tipo toggle */}
+            <div className="flex rounded-lg overflow-hidden border border-white/10">
+              <button
+                onClick={() => { setTipo("Gasto"); setSelectedCatId(null); setSelectedSubId(null); }}
+                className="px-3 py-1 text-xs font-bold transition-all"
+                style={{
+                  background: tipo === "Gasto" ? "#D8FF3C" : "transparent",
+                  color: tipo === "Gasto" ? "#0a0a0f" : "rgba(255,255,255,0.5)",
+                }}
+              >
+                GASTO
+              </button>
+              <button
+                onClick={() => { setTipo("Ingreso"); setSelectedCatId(null); setSelectedSubId(null); }}
+                className="px-3 py-1 text-xs font-bold transition-all"
+                style={{
+                  background: tipo === "Ingreso" ? "#22c55e" : "transparent",
+                  color: tipo === "Ingreso" ? "#0a0a0f" : "rgba(255,255,255,0.5)",
+                }}
+              >
+                INGRESO
+              </button>
+            </div>
           </div>
           <button onClick={onClose} className="p-2 rounded-full hover:bg-white/10 transition-colors">
             <X className="w-5 h-5 text-white/60" />
@@ -250,7 +279,7 @@ export function QuickAddExpense({ open, onClose }: Props) {
               disabled={numericAmount <= 0}
               className="w-full mt-3 py-4 rounded-2xl text-base font-bold transition-all active:scale-[0.98] disabled:opacity-30"
               style={{
-                background: numericAmount > 0 ? "#D8FF3C" : "rgba(255,255,255,0.08)",
+                background: numericAmount > 0 ? accentColor : "rgba(255,255,255,0.08)",
                 color: numericAmount > 0 ? "#0a0a0f" : "rgba(255,255,255,0.3)",
               }}
             >
@@ -320,8 +349,8 @@ export function QuickAddExpense({ open, onClose }: Props) {
               </div>
             )}
 
-            {/* Cuotas */}
-            <div>
+            {/* Cuotas (only for expenses) */}
+            {tipo === "Gasto" && <div>
               <p className="text-xs font-bold text-white/40 uppercase tracking-wider mb-2">Cuotas</p>
               <div className="flex flex-wrap gap-1.5">
                 {[1, 3, 6, 9, 12, 18, 24].map((n) => (
@@ -343,7 +372,7 @@ export function QuickAddExpense({ open, onClose }: Props) {
                   {cuotas}x ${(numericAmount / cuotas).toLocaleString("es-AR", { maximumFractionDigits: 0 })} = ${numericAmount.toLocaleString("es-AR", { maximumFractionDigits: 0 })} total
                 </p>
               )}
-            </div>
+            </div>}
 
             {/* Comercio (optional) */}
             <div>
@@ -429,9 +458,9 @@ export function QuickAddExpense({ open, onClose }: Props) {
                 onClick={handleSave}
                 disabled={saving}
                 className="flex-1 py-4 rounded-2xl text-base font-bold transition-all active:scale-[0.98]"
-                style={{ background: "#D8FF3C", color: "#0a0a0f" }}
+                style={{ background: accentColor, color: "#0a0a0f" }}
               >
-                Guardar gasto
+                {tipo === "Ingreso" ? "Guardar ingreso" : "Guardar gasto"}
               </button>
             </div>
           </div>
@@ -440,7 +469,7 @@ export function QuickAddExpense({ open, onClose }: Props) {
         {/* Step: Saving animation */}
         {step === "saving" && (
           <div className="flex flex-col items-center justify-center py-16">
-            <div className="w-12 h-12 border-3 border-white/20 border-t-[#D8FF3C] rounded-full animate-spin" />
+            <div className="w-12 h-12 border-3 border-white/20 rounded-full animate-spin" style={{ borderTopColor: accentColor }} />
             <p className="text-sm text-white/50 mt-4 font-medium">Guardando...</p>
           </div>
         )}
@@ -448,12 +477,12 @@ export function QuickAddExpense({ open, onClose }: Props) {
         {/* Step: Done */}
         {step === "done" && (
           <div className="flex flex-col items-center justify-center py-16">
-            <div className="w-16 h-16 rounded-full bg-[#D8FF3C] flex items-center justify-center animate-bounce-in">
+            <div className="w-16 h-16 rounded-full flex items-center justify-center animate-bounce-in" style={{ background: accentColor }}>
               <Check className="w-8 h-8 text-black" strokeWidth={3} />
             </div>
             <p className="text-lg font-bold mt-4">Listo</p>
             <p className="text-sm text-white/50 mt-1">
-              ${displayAmount} registrado
+              ${displayAmount} {tipo === "Ingreso" ? "ingreso" : "gasto"} registrado
             </p>
           </div>
         )}

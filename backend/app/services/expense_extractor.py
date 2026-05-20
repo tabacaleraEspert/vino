@@ -40,7 +40,7 @@ Reglas:
   - Si el mensaje es ambiguo y no menciona moneda → usar "ARS".
 - comercio: nombre del lugar. Si no dice nombre de local → ""
 - descripcion: resumen corto y claro del gasto (ej: "Alfajor en kiosco", "Almuerzo", "Nafta YPF")
-- tipo: "Gasto" siempre, salvo que diga ingreso/cobré/me pagaron
+- tipo: "Gasto" por defecto. "Ingreso" si dice cobré, me pagaron, recibí, me depositaron, me transfirieron, sueldo, me entró, ingreso
 - medio_de_pago: "Efectivo" por defecto. Si dice tarjeta/débito/crédito/transferencia, extraer.
 - fecha: "hoy" → hoy, "ayer" → ayer, si no dice → null
 - categoria_sugerida: basándote en el gasto, sugerí la categoría más probable de esta lista:
@@ -83,7 +83,7 @@ Respondé SOLO JSON:
 }}
 
 Si falta el monto → datos_completos = false, dato_faltante = "monto"
-Si no es un gasto → datos_completos = false, dato_faltante = "no_es_gasto"
+Si no es un gasto ni un ingreso → datos_completos = false, dato_faltante = "no_es_gasto"
 """
 
 

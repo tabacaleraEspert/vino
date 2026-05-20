@@ -10,7 +10,7 @@ export function Dashboard() {
   const { categories, budgets, refresh, refreshTrigger } = useData();
   const { selectedMonth } = useMonth();
   const { token } = useAuth();
-  const [summary, setSummary] = useState<{ gasto_mes: number; presupuesto_mes: number } | null>(null);
+  const [summary, setSummary] = useState<{ gasto_mes: number; ingreso_mes: number; balance_mes: number; presupuesto_mes: number } | null>(null);
   const [breakdown, setBreakdown] = useState<{
     gastos_por_categoria: Array<{ categoria: string; total: number; pct: number }>;
     transacciones_recientes: Array<{ id: string; fecha: string; titulo: string; descripcion: string; monto: number; categoria: string }>;
@@ -30,7 +30,7 @@ export function Dashboard() {
         api.views.homeSummary({ period, moneda: "ARS" }),
         api.views.homeBreakdown({ period, currency: "ARS", top_categories: 6, recent_limit: 5 }),
       ]);
-      setSummary({ gasto_mes: summaryRes.gasto_mes, presupuesto_mes: summaryRes.presupuesto_mes });
+      setSummary({ gasto_mes: summaryRes.gasto_mes, ingreso_mes: summaryRes.ingreso_mes ?? 0, balance_mes: summaryRes.balance_mes ?? 0, presupuesto_mes: summaryRes.presupuesto_mes });
       setBreakdown({
         gastos_por_categoria: breakdownRes.gastos_por_categoria,
         transacciones_recientes: breakdownRes.transacciones_recientes,
@@ -55,6 +55,8 @@ export function Dashboard() {
   }, [token, period, refreshTrigger, fetchDashboard]);
 
   const monthSpent = summary?.gasto_mes ?? 0;
+  const monthIncome = summary?.ingreso_mes ?? 0;
+  const monthBalance = summary?.balance_mes ?? 0;
   const totalBudget = summary?.presupuesto_mes ?? 0;
   const percentageUsed = totalBudget > 0 ? (monthSpent / totalBudget) * 100 : 0;
 
@@ -105,19 +107,26 @@ export function Dashboard() {
           </div>
         ) : (
           <>
-        <p className="text-sm opacity-90 mb-1">Balance del mes</p>
-        <p className="text-3xl font-bold mb-4">
+        <p className="text-sm opacity-90 mb-1">Gastos del mes</p>
+        <p className="text-3xl font-bold mb-2">
           ${monthSpent.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
         </p>
-        <div className="flex items-center justify-between text-sm">
+        <div className="flex items-center justify-between text-sm mb-2">
           <div>
+            <p className="opacity-75">Ingresos</p>
+            <p className="font-semibold">${monthIncome.toLocaleString("es-MX")}</p>
+          </div>
+          <div className="text-center">
+            <p className="opacity-75">Balance</p>
+            <p className={`font-semibold ${monthBalance >= 0 ? "" : "text-red-200"}`}>${monthBalance.toLocaleString("es-MX")}</p>
+          </div>
+          <div className="text-right">
             <p className="opacity-75">Presupuesto</p>
             <p className="font-semibold">${totalBudget.toLocaleString("es-MX")}</p>
           </div>
-          <div className="text-right">
-            <p className="opacity-75">Usado</p>
-            <p className="font-semibold">{percentageUsed.toFixed(1)}%</p>
-          </div>
+        </div>
+        <div className="flex items-center justify-end text-xs mb-1">
+          <span className="opacity-75">{percentageUsed.toFixed(1)}% usado</span>
         </div>
         <div className="mt-3 bg-white/20 rounded-full h-2 overflow-hidden">
           <div

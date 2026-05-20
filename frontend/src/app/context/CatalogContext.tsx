@@ -7,6 +7,7 @@ import {
   useContext,
   useState,
   useCallback,
+  useMemo,
   ReactNode,
 } from "react";
 import { useAuth } from "./AuthContext";
@@ -21,6 +22,8 @@ import { invalidateCatalog } from "../../lib/dataLayer";
 
 interface CatalogContextType {
   categories: Category[];
+  expenseCategories: Category[];
+  incomeCategories: Category[];
   setRawCatalog: (cats: CategoriaRaw[], subs: SubcategoriaRaw[]) => void;
   addCategory: (category: Omit<Category, "id">) => Promise<void>;
   updateCategory: (id: string, category: Partial<Category>) => Promise<void>;
@@ -40,6 +43,9 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const expenseCategories = useMemo(() => categories.filter((c) => c.tipo !== "Ingreso"), [categories]);
+  const incomeCategories = useMemo(() => categories.filter((c) => c.tipo === "Ingreso"), [categories]);
 
   const setRawCatalog = useCallback((cats: CategoriaRaw[], subs: SubcategoriaRaw[]) => {
     setCategories(mapCatalogToCategories(cats, subs));
@@ -112,6 +118,8 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     <CatalogContext.Provider
       value={{
         categories,
+        expenseCategories,
+        incomeCategories,
         setRawCatalog,
         addCategory,
         updateCategory,

@@ -9,6 +9,7 @@ export interface Category {
   icon: string;
   color: string;
   bucket?: string;
+  tipo?: "Gasto" | "Ingreso";
   subcategories?: Subcategory[];
 }
 
@@ -45,6 +46,8 @@ export interface MerchantRule {
 export interface Transaction {
   id: string;
   amount: number;
+  tipo: "Gasto" | "Ingreso";
+  currency: string;
   description: string;
   descripcion?: string;
   date: string;
@@ -62,6 +65,7 @@ export interface CategoriaRaw {
   nombre: string;
   icon?: string;
   color?: string;
+  tipo?: string;
 }
 
 export interface SubcategoriaRaw {
@@ -85,6 +89,8 @@ export interface HomeSummaryResponse {
   user_id: string | null;
   moneda: string;
   gasto_mes: number;
+  ingreso_mes: number;
+  balance_mes: number;
   presupuesto_mes: number;
 }
 
@@ -172,6 +178,7 @@ export const api = {
           icon: data.icon || "📁",
           color: data.color || "#6b7280",
           bucket: data.bucket || "necesidades",
+          tipo: data.tipo || "Gasto",
           subcategories: (data.subcategories ?? []).map((s) => ({ name: s.name })),
         }),
       }),
@@ -535,6 +542,7 @@ export function mapCatalogToCategories(
       icon: resolveIcon(cat.icon, cat.nombre),
       color: cat.color || "#6b7280",
       bucket: cat.bucket || "",
+      tipo: (cat.tipo as "Gasto" | "Ingreso") || "Gasto",
       subcategories: subcats.map((s) => ({
         id: getSubId(s),
         name: getSubNombre(s),
@@ -739,6 +747,8 @@ export function mapMovimientoItemToTransaction(
   return {
     id: item.id,
     amount,
+    tipo: item.tipo,
+    currency: (item.moneda || "ARS").trim().toUpperCase() || "ARS",
     description: item.comercio || item.descripcion || "Sin descripción",
     descripcion: item.descripcion?.trim() || undefined,
     date: item.fecha,

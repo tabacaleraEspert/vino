@@ -82,6 +82,7 @@ async def create_regla(
     id_categoria: int | None = None,
     prioridad: int = 100,
     confianza: str = "MANUAL",
+    tipo_movimiento: str = "Gasto",
 ) -> dict[str, Any]:
     # Resolve categoria from subcategoria if not provided
     if id_categoria is None and id_subcategoria is not None:
@@ -104,6 +105,7 @@ async def create_regla(
         Id_SubCategoria=id_subcategoria,
         Prioridad=prioridad,
         Confianza=confianza,
+        TipoMovimiento=tipo_movimiento,
     )
     session.add(regla)
     await session.flush()
@@ -176,11 +178,20 @@ async def resolve_regla(
     session: AsyncSession,
     id_usuario: int,
     comercio_name: str,
+    tipo: str | None = None,
 ) -> dict[str, Any] | None:
-    """Find best matching rule for a merchant name."""
+    """Find best matching rule for a merchant name. Optionally filter by tipo."""
     patron_norm = normalize_text(comercio_name)
     if not patron_norm:
         return None
+
+    conditions = [
+        ReglaComercio.Id_usuario == id_usuario,
+        ReglaComercio.Activa == True,
+        ReglaComercio.PatronNorm == patron_norm,
+    ]
+    if tipo:
+        conditions.append(ReglaComercio.TipoMovimiento == tipo)
 
     stmt = (
         select(
@@ -196,17 +207,18 @@ async def resolve_regla(
             SubCategoria.Id == ReglaComercio.Id_SubCategoria,
             SubCategoria.Id_usuario == ReglaComercio.Id_usuario,
         ))
-        .where(and_(
-            ReglaComercio.Id_usuario == id_usuario,
-            ReglaComercio.Activa == True,
-            ReglaComercio.PatronNorm == patron_norm,
-        ))
+        .where(and_(*conditions))
         .order_by(ReglaComercio.Prioridad.asc())
         .limit(1)
     )
 
     result = await session.execute(stmt)
     row = result.first()
+
+    # Fallback: if tipo-specific search found nothing, try without tipo filter
+    if not row and tipo:
+        return await resolve_regla(session, id_usuario, comercio_name, tipo=None)
+
     if not row:
         return None
 
@@ -226,5 +238,6 @@ def _regla_to_dict(regla: ReglaComercio, cat_nombre: str, sub_nombre: str) -> di
         "prioridad": regla.Prioridad,
         "activa": regla.Activa,
         "confianza": regla.Confianza,
+        "tipo_movimiento": regla.TipoMovimiento or "Gasto",
         "timestamp": regla.ActualizadoEn.isoformat() if regla.ActualizadoEn else "",
     }
