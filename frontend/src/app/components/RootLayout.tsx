@@ -7,7 +7,7 @@ import { GastosScreen } from './fina/GastosScreen';
 import { CatsScreen } from './fina/CatsScreen';
 import { ReglasScreen } from './fina/ReglasScreen';
 import { ChatScreen } from './fina/ChatScreen';
-import { NewExpenseSheet, CategoryEditSheet, Drawer, NotificationsPanel } from './fina/Sheets';
+import { NewExpenseSheet, CategoryEditSheet, Drawer, NotificationsPanel, PlansSheet, StoriesViewer } from './fina/Sheets';
 
 export function RootLayout() {
   const { user, logout } = useAuth();
@@ -21,6 +21,8 @@ export function RootLayout() {
   const [deletingTx, setDeletingTx] = useState<any>(null);
   const [catSheetOpen, setCatSheetOpen] = useState(false);
   const [editingCat, setEditingCat] = useState<any>(null);
+  const [plansOpen, setPlansOpen] = useState(false);
+  const [storiesOpen, setStoriesOpen] = useState(false);
 
   // Theme
   const [theme, setTheme] = useState<string>(() => {
@@ -101,7 +103,7 @@ export function RootLayout() {
         balance={tab === 'gastos' ? undefined : undefined}
       />
 
-      <div style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden' }}>
+      <div style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'auto' }}>
         {screens[tab]}
       </div>
 
@@ -114,7 +116,11 @@ export function RootLayout() {
         theme={theme}
         onTheme={setTheme}
         onLogout={handleLogout}
+        onOpenPlans={() => setPlansOpen(true)}
+        onOpenStories={() => setStoriesOpen(true)}
       />
+      <PlansSheet open={plansOpen} onClose={() => setPlansOpen(false)} />
+      <StoriesViewer open={storiesOpen} onClose={() => setStoriesOpen(false)} onNav={(t) => setTab(t)} />
       <NotificationsPanel open={notifOpen} onClose={() => setNotifOpen(false)} />
       <NewExpenseSheet open={expenseOpen} onClose={closeSheet} initial={editingTx} onDelete={setDeletingTx} />
       <CategoryEditSheet open={catSheetOpen} onClose={closeCatSheet} initial={editingCat} />
