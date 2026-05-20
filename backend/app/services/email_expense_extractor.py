@@ -115,5 +115,5 @@ async def extract_expense_from_email(
         logger.info("email_extract result: %s", {k: v for k, v in data.items() if k != "body"})
         return data
     except Exception as e:
-        logger.error("email_extract failed: %s", e)
-        return {"datos_completos": False, "dato_faltante": "extraction_error"}
+        logger.error("email_extract failed: %s", e, exc_info=True)
+        return {"datos_completos": False, "dato_faltante": "extraction_error", "error_detail": str(e)}
