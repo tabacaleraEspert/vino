@@ -47,6 +47,8 @@ export function EditTransactionModal({
     }
   }, [show, transaction]);
 
+  const transactionTipo = transaction?.tipo ?? "Gasto";
+  const filteredCategories = categories.filter((c) => !c.tipo || c.tipo === transactionTipo);
   const selectedCategory = categories.find((c) => c.id === categoryId);
   const availableSubcategories = selectedCategory?.subcategories || [];
 
@@ -227,7 +229,7 @@ export function EditTransactionModal({
                 className="flex-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
               >
                 <option value="">Selecciona categoría</option>
-                {categories.map((cat) => (
+                {filteredCategories.map((cat) => (
                   <option key={cat.id} value={cat.id}>
                     {cat.icon} {cat.name}
                   </option>

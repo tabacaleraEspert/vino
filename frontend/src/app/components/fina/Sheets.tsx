@@ -77,10 +77,11 @@ interface NewExpenseSheetProps {
 
 export function NewExpenseSheet({ open, onClose, initial, onDelete }: NewExpenseSheetProps) {
   const { updateTransaction } = useData();
-  const { categories } = useCatalog();
+  const { categories, expenseCategories, incomeCategories } = useCatalog();
 
   const isEditing = !!initial;
 
+  const [tipo, setTipo] = useState<'Gasto' | 'Ingreso'>('Gasto');
   const [amount, setAmount] = useState(initial?.amount?.toString() ?? '');
   const [currency, setCurrency] = useState<'ARS' | 'USD'>('ARS');
   const [date, setDate] = useState(initial?.date ?? new Date().toISOString().slice(0, 10));
@@ -91,6 +92,9 @@ export function NewExpenseSheet({ open, onClose, initial, onDelete }: NewExpense
   const [note, setNote] = useState(initial?.description ?? '');
   const [saving, setSaving] = useState(false);
 
+  const filteredCategories = tipo === 'Ingreso' ? incomeCategories : expenseCategories;
+  const accentColor = tipo === 'Ingreso' ? '#22c55e' : LIME;
+
   useEffect(() => {
     if (initial) {
       setAmount(initial.amount?.toString() ?? '');
@@ -99,6 +103,7 @@ export function NewExpenseSheet({ open, onClose, initial, onDelete }: NewExpense
       setSubcategoryId(initial.subcategoryId ?? '');
       setNote(initial.description ?? '');
     } else {
+      setTipo('Gasto');
       setAmount('');
       setDate(new Date().toISOString().slice(0, 10));
       setCategoryId('');
@@ -143,10 +148,10 @@ export function NewExpenseSheet({ open, onClose, initial, onDelete }: NewExpense
         await api.movimientos.create({
           fecha: fechaFormatted,
           monto: parseAmount(),
-          tipo_movimiento: 'Gasto',
-          descripcion: note || merchant || 'Gasto manual',
-          id_categoria: parseInt(categoryId) || 6,
-          id_subcategoria: parseInt(subcategoryId) || 42,
+          tipo_movimiento: tipo,
+          descripcion: note || merchant || (tipo === 'Ingreso' ? 'Ingreso manual' : 'Gasto manual'),
+          id_categoria: parseInt(categoryId) || undefined,
+          id_subcategoria: parseInt(subcategoryId) || undefined,
           moneda: currency,
         });
       }
@@ -172,14 +177,40 @@ export function NewExpenseSheet({ open, onClose, initial, onDelete }: NewExpense
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{
                 width: 32, height: 32, borderRadius: '50%',
-                background: LIME, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: accentColor, display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: 16, color: '#14130F', fontWeight: 700,
               }}>
                 {isEditing ? '✎' : '+'}
               </div>
-              <span style={{ fontFamily: SANS, fontSize: 13, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-                {isEditing ? 'EDITAR GASTO' : 'NUEVO GASTO'}
-              </span>
+              {isEditing ? (
+                <span style={{ fontFamily: SANS, fontSize: 13, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                  EDITAR {tipo === 'Ingreso' ? 'INGRESO' : 'GASTO'}
+                </span>
+              ) : (
+                <div style={{ display: 'flex', borderRadius: 8, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.15)' }}>
+                  {(['Gasto', 'Ingreso'] as const).map(t => (
+                    <button
+                      key={t}
+                      onClick={() => { setTipo(t); setCategoryId(''); setSubcategoryId(''); }}
+                      style={{
+                        padding: '4px 12px',
+                        border: 'none',
+                        fontSize: 11,
+                        fontWeight: 700,
+                        fontFamily: SANS,
+                        letterSpacing: '0.05em',
+                        textTransform: 'uppercase',
+                        background: tipo === t ? (t === 'Ingreso' ? '#22c55e' : LIME) : 'transparent',
+                        color: tipo === t ? '#14130F' : 'rgba(255,255,255,0.5)',
+                        cursor: 'pointer',
+                        transition: 'all 200ms',
+                      }}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             <CloseBtn onClick={onClose} />
           </div>
@@ -236,7 +267,7 @@ export function NewExpenseSheet({ open, onClose, initial, onDelete }: NewExpense
 
           {/* Category picker */}
           <div style={{ marginTop: 20, overflowX: 'auto', whiteSpace: 'nowrap', paddingBottom: 8 }}>
-            {categories.map(cat => (
+            {filteredCategories.map(cat => (
               <button
                 key={cat.id}
                 onClick={() => { setCategoryId(cat.id); setSubcategoryId(''); }}
@@ -248,7 +279,7 @@ export function NewExpenseSheet({ open, onClose, initial, onDelete }: NewExpense
                   border: 'none',
                   fontSize: 12,
                   fontWeight: 500,
-                  background: categoryId === cat.id ? LIME : 'rgba(255,255,255,0.08)',
+                  background: categoryId === cat.id ? accentColor : 'rgba(255,255,255,0.08)',
                   color: categoryId === cat.id ? '#14130F' : 'var(--paper-stable)',
                 }}
               >
@@ -387,14 +418,14 @@ export function NewExpenseSheet({ open, onClose, initial, onDelete }: NewExpense
                 padding: '14px',
                 borderRadius: 12,
                 border: 'none',
-                background: LIME,
+                background: accentColor,
                 color: '#14130F',
                 fontWeight: 700,
                 fontSize: 14,
                 opacity: saving || !amount ? 0.5 : 1,
               }}
             >
-              {saving ? '...' : isEditing ? 'Guardar cambios' : 'Registrar gasto'}
+              {saving ? '...' : isEditing ? 'Guardar cambios' : tipo === 'Ingreso' ? 'Registrar ingreso' : 'Registrar gasto'}
             </button>
           </div>
         </div>

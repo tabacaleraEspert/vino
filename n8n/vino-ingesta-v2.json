@@ -53,7 +53,7 @@
         "pollTimes": { "item": [{ "mode": "everyMinute" }] },
         "simple": false,
         "filters": {
-          "q": "((subject:\"Pagaste\" AND from:mensajesyavisos@mails.santander.com.ar) OR (subject:\"Pagaste\" AND from:davor.vindis99@gmail.com) OR (subject:\"Aviso de transferencia\" AND from:mensajesyavisos@mails.santander.com.ar) OR (subject:\"Aviso de transferencia\" AND from:davor.vindis99@gmail.com))"
+          "q": "((subject:\"Pagaste\" AND from:mensajesyavisos@mails.santander.com.ar) OR (subject:\"Pagaste\" AND from:davor.vindis99@gmail.com) OR (subject:\"Aviso de transferencia\" AND from:mensajesyavisos@mails.santander.com.ar) OR (subject:\"Aviso de transferencia\" AND from:davor.vindis99@gmail.com) OR (subject:\"Transferencia recibida\" AND from:mensajesyavisos@mails.santander.com.ar) OR (subject:\"Te transfirieron\" AND from:mensajesyavisos@mails.santander.com.ar))"
         },
         "options": {}
       },
@@ -71,7 +71,7 @@
         "pollTimes": { "item": [{ "mode": "everyMinute" }] },
         "simple": false,
         "filters": {
-          "q": "(|(subject:\"Aviso de compra\" AND from:info@notificaciones.bancomacro.com.ar) OR (subject:\"Pagaste\" AND from:davor.vindis99@gmail.com) OR (subject:\"Aviso de transferencia\" AND from:mensajesyavisos@mails.santander.com.ar) OR (subject:\"Aviso de transferencia\" AND from:davor.vindis99@gmail.com))"
+          "q": "(|(subject:\"Aviso de compra\" AND from:info@notificaciones.bancomacro.com.ar) OR (subject:\"Pagaste\" AND from:davor.vindis99@gmail.com) OR (subject:\"Aviso de transferencia\" AND from:mensajesyavisos@mails.santander.com.ar) OR (subject:\"Aviso de transferencia\" AND from:davor.vindis99@gmail.com) OR (subject:\"Transferencia recibida\" AND from:info@notificaciones.bancomacro.com.ar) OR (subject:\"Te transfirieron\" AND from:info@notificaciones.bancomacro.com.ar) OR (subject:\"Transferencia recibida\" AND from:mensajesyavisos@mails.santander.com.ar))"
         },
         "options": {}
       },
@@ -89,7 +89,7 @@
         "pollTimes": { "item": [{ "mode": "everyMinute" }] },
         "simple": false,
         "filters": {
-          "q": "((subject:\"Nueva compra\" AND from:avisos-bbva-ar@bbva.com) OR (subject:\"Nueva compra\" AND from:ignamedico@gmail.com) OR (subject:\"Compra aprobada\" AND from:avisos-bbva-ar@bbva.com) OR (subject:\"Compra aprobada\" AND from:ignamedico@gmail.com) OR (subject:\"Realizaste una transferencia\" AND from:avisos-bbva-ar@bbva.com) OR (subject:\"Realizaste una transferencia\" AND from:ignamedico@gmail.com) OR (subject:\"Pago aprobado en\" AND from:info@mercadopago.com) OR (subject:\"Pago aprobado en\" AND from:ignamedico@gmail.com) OR (subject:\"Tu transferencia fue enviada\" AND from:info@mercadopago.com) OR (subject:\"Tu transferencia fue enviada\" AND from:ignamedico@gmail.com))"
+          "q": "((subject:\"Nueva compra\" AND from:avisos-bbva-ar@bbva.com) OR (subject:\"Nueva compra\" AND from:ignamedico@gmail.com) OR (subject:\"Compra aprobada\" AND from:avisos-bbva-ar@bbva.com) OR (subject:\"Compra aprobada\" AND from:ignamedico@gmail.com) OR (subject:\"Realizaste una transferencia\" AND from:avisos-bbva-ar@bbva.com) OR (subject:\"Realizaste una transferencia\" AND from:ignamedico@gmail.com) OR (subject:\"Pago aprobado en\" AND from:info@mercadopago.com) OR (subject:\"Pago aprobado en\" AND from:ignamedico@gmail.com) OR (subject:\"Tu transferencia fue enviada\" AND from:info@mercadopago.com) OR (subject:\"Tu transferencia fue enviada\" AND from:ignamedico@gmail.com) OR (subject:\"Recibiste una transferencia\" AND from:avisos-bbva-ar@bbva.com) OR (subject:\"Te transfirieron\" AND from:avisos-bbva-ar@bbva.com) OR (subject:\"Te enviaron dinero\" AND from:info@mercadopago.com) OR (subject:\"Recibiste un pago\" AND from:info@mercadopago.com) OR (subject:\"Cobro acreditado\" AND from:info@mercadopago.com))"
         },
         "options": {}
       },
@@ -107,7 +107,7 @@
         "pollTimes": { "item": [{ "mode": "everyMinute" }] },
         "simple": false,
         "filters": {
-          "q": "((subject:\"Nueva compra\" AND from:avisos-bbva-ar@bbva.com) OR (subject:\"Nueva compra\" AND from:dolorescelloc@gmail.com) OR (subject:\"Realizaste una transferencia\" AND from:avisos-bbva-ar@bbva.com) OR (subject:\"Realizaste una transferencia\" AND from:dolorescelloc@gmail.com) OR (subject:\"Pago aprobado en\" AND from:info@mercadopago.com) OR (subject:\"Pago aprobado en\" AND from:dolorescelloc@gmail.com) OR (subject:\"Tu transferencia fue enviada\" AND from:info@mercadopago.com) OR (subject:\"Tu transferencia fue enviada\" AND from:ignamedico@gmail.com))"
+          "q": "((subject:\"Nueva compra\" AND from:avisos-bbva-ar@bbva.com) OR (subject:\"Nueva compra\" AND from:dolorescelloc@gmail.com) OR (subject:\"Realizaste una transferencia\" AND from:avisos-bbva-ar@bbva.com) OR (subject:\"Realizaste una transferencia\" AND from:dolorescelloc@gmail.com) OR (subject:\"Pago aprobado en\" AND from:info@mercadopago.com) OR (subject:\"Pago aprobado en\" AND from:dolorescelloc@gmail.com) OR (subject:\"Tu transferencia fue enviada\" AND from:info@mercadopago.com) OR (subject:\"Tu transferencia fue enviada\" AND from:ignamedico@gmail.com) OR (subject:\"Recibiste una transferencia\" AND from:avisos-bbva-ar@bbva.com) OR (subject:\"Te transfirieron\" AND from:avisos-bbva-ar@bbva.com) OR (subject:\"Te enviaron dinero\" AND from:info@mercadopago.com) OR (subject:\"Recibiste un pago\" AND from:info@mercadopago.com) OR (subject:\"Cobro acreditado\" AND from:info@mercadopago.com))"
         },
         "options": {}
       },
@@ -140,7 +140,7 @@
         "text": "=### CONTENIDO DEL EMAIL\n\nSnippet:\n{{ $json.html }}\n{{ $json.text }}\n\nFrom:\n{{ $json.headers.from }}\n\nTo:\n{{ $json.headers.to }}\nSubject:\n{{ $json.headers.subject }}\n\nFecha:\n{{ $json.headers.date }}\n\n### INSTRUCCION\nExtrae los datos del gasto segun el formato requerido.\n",
         "hasOutputParser": true,
         "options": {
-          "systemMessage": "Sos un extractor de datos de gastos personales.\n\nVas a recibir la informacion de emails de aviso de consumo o de resumenes de pago asociados a tarjetas de credito, debito, transferencias u otros medios, enviados por bancos o entidades financieras de Argentina.\n\nTu unica tarea es LEER el contenido del mail y devolver SIEMPRE un unico objeto JSON con EXACTAMENTE estas claves:\n\nfecha, Usuario, Tipo de Movimiento, Medios de pago, monto, Moneda, descripcion, From, Comercio, Asunto del Correo\n\nReglas:\n- monto debe ser number (no string)\n- fecha debe ser string en formato YYYY-MM-DD HH:MM\n- Si solo hay fecha sin hora, usa YYYY-MM-DD 00:00\n- Usuario: email del destinatario (campo To)\n- Tipo de Movimiento: siempre \"gasto\"\n- monto: sin $, sin separadores de miles, decimales con punto\n- Moneda: ARS por defecto si no se especifica\n- descripcion: resumen corto y entendible del gasto\n- Medios de pago: incluir entidad si se identifica\n- From: solo el correo del remitente sin nombre\n- Comercio: nombre del comercio, nunca una entidad bancaria. Si empieza con MERPAGO eliminar esa parte. Si es transferencia, poner el destinatario. Si no se puede inferir: \"No identificado\"\n- Asunto del Correo: copiar textualmente el Subject\n\nDevolver solo JSON valido, sin markdown, sin texto adicional."
+          "systemMessage": "Sos un extractor de datos de gastos personales.\n\nVas a recibir la informacion de emails de aviso de consumo o de resumenes de pago asociados a tarjetas de credito, debito, transferencias u otros medios, enviados por bancos o entidades financieras de Argentina.\n\nTu unica tarea es LEER el contenido del mail y devolver SIEMPRE un unico objeto JSON con EXACTAMENTE estas claves:\n\nfecha, Usuario, Tipo de Movimiento, Medios de pago, monto, Moneda, descripcion, From, Comercio, Asunto del Correo\n\nReglas:\n- monto debe ser number (no string)\n- fecha debe ser string en formato YYYY-MM-DD HH:MM\n- Si solo hay fecha sin hora, usa YYYY-MM-DD 00:00\n- Usuario: email del destinatario (campo To)\n- Tipo de Movimiento: \"gasto\" para compras, pagos, transferencias enviadas. \"ingreso\" para transferencias recibidas, cobros, depositos, acreditaciones a favor\n- monto: sin $, sin separadores de miles, decimales con punto\n- Moneda: ARS por defecto si no se especifica\n- descripcion: resumen corto y entendible del gasto\n- Medios de pago: incluir entidad si se identifica\n- From: solo el correo del remitente sin nombre\n- Comercio: nombre del comercio, nunca una entidad bancaria. Si empieza con MERPAGO eliminar esa parte. Si es transferencia, poner el destinatario. Si no se puede inferir: \"No identificado\"\n- Asunto del Correo: copiar textualmente el Subject\n\nDevolver solo JSON valido, sin markdown, sin texto adicional."
         }
       },
       "type": "@n8n/n8n-nodes-langchain.agent",

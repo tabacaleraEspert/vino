@@ -28,6 +28,7 @@ class ReglaComercio(Base):
     Prioridad: Mapped[int] = mapped_column(Integer, nullable=False, server_default="100")
     Activa: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="1")
     Confianza: Mapped[str] = mapped_column(String(20), nullable=False, server_default="AUTO")
+    TipoMovimiento: Mapped[str] = mapped_column(String(20), nullable=False, server_default="Gasto")  # Gasto | Ingreso
     CreadoEn: Mapped[datetime | None] = mapped_column(DateTime, server_default=func.now())
     ActualizadoEn: Mapped[datetime | None] = mapped_column(DateTime, server_default=func.now())
 

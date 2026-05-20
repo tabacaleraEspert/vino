@@ -254,3 +254,21 @@ async def gmail_debug_extract(
             }
 
     return {"error": "No bank emails found"}
+
+
+@router.post("/reset-cursor")
+async def gmail_reset_cursor(
+    _: None = Depends(require_master_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Reset GmailLastMessageId for all users so next poll reprocesses recent emails."""
+    stmt = select(User).where(User.GmailRefreshToken.isnot(None))
+    result = await db.execute(stmt)
+    users = result.scalars().all()
+    reset = []
+    for user in users:
+        old_id = user.GmailLastMessageId
+        user.GmailLastMessageId = None
+        reset.append({"user_id": user.id, "old_message_id": old_id})
+    await db.flush()
+    return {"reset": reset}

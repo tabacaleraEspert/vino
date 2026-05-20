@@ -13,10 +13,14 @@ from app.models.subcategoria import SubCategoria
 async def list_categorias(
     session: AsyncSession,
     id_usuario: int,
+    tipo: str | None = None,
 ) -> list[dict[str, Any]]:
+    conditions = [Categoria.Id_usuario == id_usuario]
+    if tipo is not None:
+        conditions.append(Categoria.Tipo == tipo)
     stmt = (
         select(Categoria)
-        .where(Categoria.Id_usuario == id_usuario)
+        .where(and_(*conditions))
         .order_by(Categoria.Nombre)
     )
     result = await session.execute(stmt)
@@ -27,6 +31,7 @@ async def list_categorias(
             "icon": c.Icon or "📁",
             "color": c.Color or "#6b7280",
             "bucket": c.Bucket or "",
+            "tipo": c.Tipo or "Gasto",
         }
         for c in result.scalars().all()
     ]
@@ -45,7 +50,7 @@ async def get_categoria(
     c = result.scalar_one_or_none()
     if not c:
         return None
-    return {"id": c.Id, "nombre": c.Nombre, "icon": c.Icon, "color": c.Color, "bucket": c.Bucket or ""}
+    return {"id": c.Id, "nombre": c.Nombre, "icon": c.Icon, "color": c.Color, "bucket": c.Bucket or "", "tipo": c.Tipo or "Gasto"}
 
 
 async def create_categoria(
@@ -55,11 +60,12 @@ async def create_categoria(
     icon: str = "📁",
     color: str = "#6b7280",
     bucket: str = "necesidades",
+    tipo: str = "Gasto",
 ) -> dict[str, Any]:
-    cat = Categoria(Id_usuario=id_usuario, Nombre=nombre, Icon=icon, Color=color, Bucket=bucket)
+    cat = Categoria(Id_usuario=id_usuario, Nombre=nombre, Icon=icon, Color=color, Bucket=bucket, Tipo=tipo)
     session.add(cat)
     await session.flush()
-    return {"id": cat.Id, "nombre": cat.Nombre, "icon": cat.Icon, "color": cat.Color, "bucket": cat.Bucket}
+    return {"id": cat.Id, "nombre": cat.Nombre, "icon": cat.Icon, "color": cat.Color, "bucket": cat.Bucket, "tipo": cat.Tipo}
 
 
 async def update_categoria(
@@ -70,6 +76,7 @@ async def update_categoria(
     icon: str | None = None,
     color: str | None = None,
     bucket: str | None = None,
+    tipo: str | None = None,
 ) -> dict[str, Any] | None:
     stmt = select(Categoria).where(and_(
         Categoria.Id_usuario == id_usuario,
@@ -87,8 +94,10 @@ async def update_categoria(
         cat.Color = color
     if bucket is not None:
         cat.Bucket = bucket
+    if tipo is not None:
+        cat.Tipo = tipo
     await session.flush()
-    return {"id": cat.Id, "nombre": cat.Nombre, "icon": cat.Icon, "color": cat.Color, "bucket": cat.Bucket}
+    return {"id": cat.Id, "nombre": cat.Nombre, "icon": cat.Icon, "color": cat.Color, "bucket": cat.Bucket, "tipo": cat.Tipo}
 
 
 async def delete_categoria(

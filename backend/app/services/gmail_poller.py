@@ -21,6 +21,7 @@ from app.core.encryption import decrypt_token
 from app.models.user import User
 from app.services.bank_email_filters import matches_bank_filter, build_gmail_query
 from app.services.email_expense_extractor import extract_expense_from_email
+from app.services.pipeline_log import log_event
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +144,7 @@ async def poll_user_gmail(
         service = await asyncio.to_thread(_build_gmail_service, refresh_token)
     except Exception as e:
         logger.error("Failed to build Gmail service for user %d: %s", user_id, e, exc_info=True)
+        log_event("gmail_error", user_id=user_id, gmail=gmail, error=str(e), step="build_service")
         return {"user_id": user_id, "error": str(e)}
 
     # Build query — last 3 days of bank emails (resilient to downtime, dedup prevents duplicates)
@@ -153,6 +155,8 @@ async def poll_user_gmail(
     except Exception as e:
         logger.error("Gmail list failed for user %d: %s", user_id, e, exc_info=True)
         return {"user_id": user_id, "error": str(e)}
+
+    log_event("gmail_query", user_id=user_id, gmail=gmail, query=query, messages_found=len(messages) if messages else 0)
 
     if not messages:
         logger.info("Gmail poll user %d: no messages found for query: %s", user_id, query)
@@ -188,7 +192,14 @@ async def poll_user_gmail(
                 sender, subject, body = _extract_email_parts(msg)
 
                 # Double-check against bank filters
-                if not matches_bank_filter(sender, subject):
+                filter_result = matches_bank_filter(sender, subject)
+                matched = bool(filter_result)
+                filter_tipo_hint = filter_result[1] if isinstance(filter_result, tuple) else None
+                log_event("email_found", user_id=user_id, gmail=gmail,
+                          msg_id=msg_id, sender=sender[:80], subject=subject[:120],
+                          matched_filter=matched, tipo_hint=filter_tipo_hint)
+
+                if not matched:
                     logger.debug("Gmail poll user %d: skipped non-bank email from=%s subject=%s", user_id, sender[:60], subject[:80])
                     last_successfully_processed_id = msg_id
                     continue
@@ -199,6 +210,9 @@ async def poll_user_gmail(
 
                 # Extract expense data with GPT
                 extracted = await extract_expense_from_email(subject, sender, body)
+                log_event("extraction_result", user_id=user_id, gmail=gmail,
+                          msg_id=msg_id, subject=subject[:120], extraction=extracted)
+
                 if not extracted.get("datos_completos"):
                     logger.warning(
                         "Gmail poll user %d: extraction incomplete for msg %s subject=%s — %s",
@@ -225,6 +239,15 @@ async def poll_user_gmail(
 
                 result = await process_ingest(db, ingest_payload)
                 status = result.get("status", "")
+                regla = result.get("regla", {})
+                log_event("ingest_result", user_id=user_id, gmail=gmail,
+                          msg_id=msg_id, status=status,
+                          monto=ingest_payload.get("monto"),
+                          comercio=ingest_payload.get("comercio_raw", ""),
+                          categoria=regla.get("categoria", ""),
+                          subcategoria=regla.get("subcategoria", ""),
+                          movimiento_id=result.get("movimiento", {}).get("id") or result.get("movimiento", {}).get("Id"))
+
                 if status == "creado":
                     stats["created"] += 1
                     # Send WhatsApp notification for new movement
@@ -237,6 +260,8 @@ async def poll_user_gmail(
 
         except Exception as e:
             logger.error("Error processing Gmail message %s for user %d: %s", msg_id, user_id, e, exc_info=True)
+            log_event("pipeline_error", user_id=user_id, gmail=gmail,
+                      msg_id=msg_id, error=str(e))
             stats["errors"] += 1
             # Savepoint was rolled back automatically — session is still usable
 
@@ -250,6 +275,9 @@ async def poll_user_gmail(
             user.GmailLastMessageId = last_successfully_processed_id
         await db.flush()
 
+    log_event("poll_summary", user_id=user_id, gmail=gmail,
+              processed=stats["processed"], created=stats["created"],
+              duplicated=stats["duplicated"], errors=stats["errors"])
     logger.info(
         "Gmail poll for user %d: processed=%d created=%d dup=%d errors=%d",
         user_id, stats["processed"], stats["created"], stats["duplicated"], stats["errors"],
@@ -292,31 +320,50 @@ async def _notify_whatsapp(ingest_result: dict, payload: dict) -> None:
         categoria = regla.get("categoria", "Otros")
         subcategoria = regla.get("subcategoria", "")
 
-        emoji = _CATEGORY_EMOJI.get(categoria.lower(), "💸")
+        tipo = payload.get("tipo", "Gasto")
         monto_fmt = f"${monto:,.0f}".replace(",", ".")
 
-        msg = f"{emoji} *{monto_fmt}*"
-        if moneda != "ARS":
-            msg += f" {moneda}"
-        if comercio_raw:
-            msg += f" en *{comercio_raw}*"
-        elif descripcion:
-            msg += f" — {descripcion}"
-
-        msg += f"\n📂 {categoria}"
-        if subcategoria and subcategoria != "Gastos no categorizados":
-            msg += f" / {subcategoria}"
-
-        msg += "\n✅ Registrado (Gmail)"
+        if tipo == "Ingreso":
+            emoji = "💰"
+            msg = f"{emoji} *{monto_fmt}*"
+            if moneda != "ARS":
+                msg += f" {moneda}"
+            if comercio_raw:
+                msg += f" de *{comercio_raw}*"
+            elif descripcion:
+                msg += f" — {descripcion}"
+            msg += f"\n📂 {categoria}"
+            if subcategoria and subcategoria != "Ingresos no categorizados":
+                msg += f" / {subcategoria}"
+            msg += "\n✅ Ingreso registrado (Gmail)"
+        else:
+            emoji = _CATEGORY_EMOJI.get(categoria.lower(), "💸")
+            msg = f"{emoji} *{monto_fmt}*"
+            if moneda != "ARS":
+                msg += f" {moneda}"
+            if comercio_raw:
+                msg += f" en *{comercio_raw}*"
+            elif descripcion:
+                msg += f" — {descripcion}"
+            msg += f"\n📂 {categoria}"
+            if subcategoria and subcategoria != "Gastos no categorizados":
+                msg += f" / {subcategoria}"
+            msg += "\n✅ Registrado (Gmail)"
 
         mov_id = movimiento.get("id") or movimiento.get("Id")
         if mov_id:
             msg += f"\n\n_Mal categorizado? Respondé:_\n_CAMBIAR {mov_id} + categoría_"
 
-        await send_whatsapp(wpp_to, msg)
+        sent = await send_whatsapp(wpp_to, msg)
+        log_event("whatsapp_sent", user_id=usuario.get("id"),
+                  to=wpp_to, success=bool(sent),
+                  comercio=comercio_raw, monto=monto)
     except Exception as e:
         # Non-blocking — don't fail the poll if notification fails
         logger.warning("WhatsApp notification failed: %s", e)
+        log_event("whatsapp_sent", user_id=usuario.get("id"),
+                  to=wpp_to if 'wpp_to' in dir() else "",
+                  success=False, error=str(e))
 
 
 # ---------------------------------------------------------------------------

@@ -26,6 +26,11 @@ function daysInMonth(month: number, year: number): number {
   return new Date(year, month + 1, 0).getDate();
 }
 
+function currencySymbol(cur: string): string {
+  if (cur === 'USD') return 'U$S';
+  return '$';
+}
+
 function greeting(): string {
   const h = new Date().getHours();
   if (h < 12) return 'Buen día';
@@ -51,6 +56,7 @@ function SimpleTxRow({
   date,
   source,
   amount,
+  sym = '$',
 }: {
   emoji: string;
   color: string;
@@ -59,6 +65,7 @@ function SimpleTxRow({
   date: string;
   source?: string;
   amount: number;
+  sym?: string;
 }) {
   return (
     <div
@@ -144,7 +151,7 @@ function SimpleTxRow({
           flexShrink: 0,
         }}
       >
-        {amount < 0 ? `-$${fmt(Math.abs(amount))}` : `+$${fmt(amount)}`}
+        {amount < 0 ? `-${sym}${fmt(Math.abs(amount))}` : `+${sym}${fmt(amount)}`}
       </div>
     </div>
   );
@@ -190,12 +197,24 @@ export function HomeEditorial({ onTab }: { onTab: (tab: string) => void }) {
   const { user } = useAuth();
   const { categories, transactions, budgets, isLoading } = useData();
   const { selectedMonth, setSelectedMonth, isCurrentMonth } = useMonth();
+  const [selectedCurrency, setSelectedCurrency] = useState('ARS');
+
+  /* ── available currencies ────────────────────────── */
+
+  const availableCurrencies = useMemo(() => {
+    const txs = transactions ?? [];
+    const currencies = new Set(txs.map((t) => t.currency || 'ARS'));
+    // Always include ARS
+    currencies.add('ARS');
+    return Array.from(currencies).sort();
+  }, [transactions]);
 
   /* ── computed data ───────────────────────────────── */
 
   const { gastado, presupuesto, disponible, ingresos, usedPct, dayPct, pace, dailySafe, daysLeft } =
     useMemo(() => {
-      const txs = transactions ?? [];
+      const allTxs = transactions ?? [];
+      const txs = allTxs.filter((t) => (t.currency || 'ARS') === selectedCurrency);
       const bds = budgets ?? [];
 
       const gastado = txs
@@ -223,7 +242,7 @@ export function HomeEditorial({ onTab }: { onTab: (tab: string) => void }) {
       const dailySafe = daysLeft > 0 ? disponible / daysLeft : 0;
 
       return { gastado, presupuesto, disponible, ingresos, usedPct, dayPct, pace, dailySafe, daysLeft };
-    }, [transactions, budgets, selectedMonth]);
+    }, [transactions, budgets, selectedMonth, selectedCurrency]);
 
   /* ── date strings ────────────────────────────────── */
 
@@ -275,9 +294,10 @@ export function HomeEditorial({ onTab }: { onTab: (tab: string) => void }) {
 
   const recentTxs = useMemo(() => {
     return [...(transactions ?? [])]
+      .filter((t) => (t.currency || 'ARS') === selectedCurrency)
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .slice(0, 4);
-  }, [transactions]);
+  }, [transactions, selectedCurrency]);
 
   /* ── pill style ──────────────────────────────────── */
 
@@ -323,6 +343,38 @@ export function HomeEditorial({ onTab }: { onTab: (tab: string) => void }) {
         margin: '0 auto',
       }}
     >
+      {/* ── Currency Tabs ─────────────────────────── */}
+      {availableCurrencies.length > 1 && (
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'center',
+            gap: 6,
+            marginBottom: 16,
+          }}
+        >
+          {availableCurrencies.map((cur) => (
+            <button
+              key={cur}
+              onClick={() => setSelectedCurrency(cur)}
+              style={{
+                padding: '6px 18px',
+                borderRadius: 20,
+                border: selectedCurrency === cur ? 'none' : '1px solid var(--border, rgba(255,255,255,0.12))',
+                background: selectedCurrency === cur ? 'var(--lime, #a3e635)' : 'transparent',
+                color: selectedCurrency === cur ? '#000' : 'var(--fg-muted, #888)',
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 200ms',
+              }}
+            >
+              {cur === 'USD' ? '🇺🇸 USD' : cur === 'ARS' ? '🇦🇷 ARS' : cur}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* ── Month Switcher ────────────────────────── */}
       <div
         style={{
@@ -437,7 +489,7 @@ export function HomeEditorial({ onTab }: { onTab: (tab: string) => void }) {
             fontWeight: 700,
           }}
         >
-          ${fmt(Math.round(dailySafe))}
+          {currencySymbol(selectedCurrency)}{fmt(Math.round(dailySafe))}
         </span>{' '}
         sin pasarte del ritmo
       </p>
@@ -459,7 +511,7 @@ export function HomeEditorial({ onTab }: { onTab: (tab: string) => void }) {
           <div style={{ fontSize: 12, color: 'var(--fg-muted, #888)', marginBottom: 4 }}>
             Disponible este mes
           </div>
-          <div style={{ fontSize: 26, fontWeight: 700 }}>${fmtK(disponible)}</div>
+          <div style={{ fontSize: 26, fontWeight: 700 }}>{currencySymbol(selectedCurrency)}{fmtK(disponible)}</div>
           <div style={{ fontSize: 12, color: paceColor, marginTop: 2 }}>{paceLabel}</div>
         </div>
       </div>
@@ -490,7 +542,7 @@ export function HomeEditorial({ onTab }: { onTab: (tab: string) => void }) {
               {item.label}
             </div>
             <div style={{ fontSize: 16, fontWeight: 600, color: item.color }}>
-              ${fmtK(item.value)}
+              {currencySymbol(selectedCurrency)}{fmtK(item.value)}
             </div>
           </div>
         ))}
@@ -580,6 +632,7 @@ export function HomeEditorial({ onTab }: { onTab: (tab: string) => void }) {
               categoryName={cat?.name ?? 'Sin categoría'}
               date={dateStr}
               amount={tx.amount}
+              sym={currencySymbol(selectedCurrency)}
             />
           );
         })}

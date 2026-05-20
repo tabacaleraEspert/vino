@@ -24,27 +24,55 @@ from app.utils.parse_utils import parse_date_flex, parse_money
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-async def _get_default_category(db, id_usuario: int) -> tuple[int | None, int | None]:
-    """Get the user's 'Otros' category + first subcategory as default."""
+async def _get_default_category(db, id_usuario: int, tipo: str = "Gasto") -> tuple[int | None, int | None]:
+    """Get the user's default category + subcategory for the given tipo."""
     from sqlalchemy import select, and_
     from app.models.categoria import Categoria
     from app.models.subcategoria import SubCategoria
-    stmt = select(Categoria).where(and_(
-        Categoria.Id_usuario == id_usuario,
-        Categoria.Nombre.in_(["Otros", "otros"]),
-    ))
-    result = await db.execute(stmt)
-    cat = result.scalar_one_or_none()
-    if not cat:
-        return None, None
-    # Get first subcategory
-    stmt2 = select(SubCategoria.Id).where(and_(
-        SubCategoria.Id_usuario == id_usuario,
-        SubCategoria.Id_Categoria == cat.Id,
-    )).limit(1)
-    result2 = await db.execute(stmt2)
-    sub_id = result2.scalar_one_or_none()
-    return cat.Id, sub_id
+
+    if tipo == "Ingreso":
+        # Look for "Ingresos" category with tipo="Ingreso"
+        stmt = select(Categoria).where(and_(
+            Categoria.Id_usuario == id_usuario,
+            Categoria.Tipo == "Ingreso",
+        )).limit(1)
+        result = await db.execute(stmt)
+        cat = result.scalar_one_or_none()
+        if not cat:
+            return None, None
+        # Prefer "Ingresos no categorizados" subcategory
+        stmt2 = select(SubCategoria.Id).where(and_(
+            SubCategoria.Id_usuario == id_usuario,
+            SubCategoria.Id_Categoria == cat.Id,
+            SubCategoria.Nombre_SubCategoria.in_(["Ingresos no categorizados"]),
+        )).limit(1)
+        result2 = await db.execute(stmt2)
+        sub_id = result2.scalar_one_or_none()
+        if not sub_id:
+            # Fallback: first subcategory
+            stmt3 = select(SubCategoria.Id).where(and_(
+                SubCategoria.Id_usuario == id_usuario,
+                SubCategoria.Id_Categoria == cat.Id,
+            )).limit(1)
+            result3 = await db.execute(stmt3)
+            sub_id = result3.scalar_one_or_none()
+        return cat.Id, sub_id
+    else:
+        stmt = select(Categoria).where(and_(
+            Categoria.Id_usuario == id_usuario,
+            Categoria.Nombre.in_(["Otros", "otros"]),
+        ))
+        result = await db.execute(stmt)
+        cat = result.scalar_one_or_none()
+        if not cat:
+            return None, None
+        stmt2 = select(SubCategoria.Id).where(and_(
+            SubCategoria.Id_usuario == id_usuario,
+            SubCategoria.Id_Categoria == cat.Id,
+        )).limit(1)
+        result2 = await db.execute(stmt2)
+        sub_id = result2.scalar_one_or_none()
+        return cat.Id, sub_id
 
 
 @router.post("")
@@ -158,7 +186,7 @@ async def process_ingest(db: AsyncSession, payload: Dict[str, Any]) -> Dict[str,
     comercio_norm = normalize_text(comercio_raw) if comercio_raw else ""
 
     if comercio_raw:
-        regla_match = await resolve_regla(db, id_usuario, comercio_raw)
+        regla_match = await resolve_regla(db, id_usuario, comercio_raw, tipo=tipo)
 
         if regla_match:
             id_categoria = regla_match["categoria_id"]
@@ -169,7 +197,7 @@ async def process_ingest(db: AsyncSession, payload: Dict[str, Any]) -> Dict[str,
             ai_sub_id = None
             ai_confianza = "baja"
             try:
-                cats = await list_categorias(db, id_usuario)
+                cats = await list_categorias(db, id_usuario, tipo=tipo)
                 subs = await list_subcategorias(db, id_usuario)
                 sub_by_cat: dict[int, list] = {}
                 for s in subs:
@@ -189,7 +217,7 @@ async def process_ingest(db: AsyncSession, payload: Dict[str, Any]) -> Dict[str,
                 id_categoria = ai_cat_id
                 id_subcategoria = ai_sub_id
             else:
-                id_categoria, id_subcategoria = await _get_default_category(db, id_usuario)
+                id_categoria, id_subcategoria = await _get_default_category(db, id_usuario, tipo)
 
             try:
                 regla_match = await create_regla(
@@ -199,6 +227,7 @@ async def process_ingest(db: AsyncSession, payload: Dict[str, Any]) -> Dict[str,
                     id_categoria=id_categoria,
                     id_subcategoria=id_subcategoria,
                     confianza=f"AI_{ai_confianza}" if ai_cat_id else "AUTO",
+                    tipo_movimiento=tipo,
                 )
                 regla_creada = True
             except Exception as e:

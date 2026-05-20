@@ -63,6 +63,20 @@ def verify_password(plain: str, hashed: str) -> bool:
         return False
 
 
+def require_admin(creds: HTTPAuthorizationCredentials = Depends(bearer)) -> int:
+    """FastAPI dependency: requires JWT user in ADMIN_USER_IDS list."""
+    if not creds:
+        raise HTTPException(status_code=401, detail="Falta Authorization Bearer")
+    payload = decode_token(creds.credentials)
+    sub = payload.get("sub")
+    if not sub:
+        raise HTTPException(status_code=401, detail="Token sin identificador de usuario")
+    user_id = int(sub)
+    if user_id not in settings.ADMIN_USER_IDS:
+        raise HTTPException(status_code=403, detail="Acceso denegado — no sos admin")
+    return user_id
+
+
 def require_master_key(
     x_master_key: Optional[str] = Header(default=None, alias="X-Master-Key"),
 ) -> None:

@@ -27,7 +27,7 @@ async def list_movimientos(
     period: Optional[str] = Query(default=None, description="YYYY-MM, ej: 2026-02"),
     from_date: Optional[date] = Query(default=None, alias="from"),
     to_date: Optional[date] = Query(default=None, alias="to"),
-    tipo: str = Query(default="Gasto"),
+    tipo: Optional[str] = Query(default=None, description="Gasto, Ingreso, o vacío para todos"),
     categoria_id: Optional[str] = None,
     subcategoria_id: Optional[str] = None,
     comercio: Optional[str] = None,
@@ -50,8 +50,9 @@ async def list_movimientos(
         except ValueError:
             pass
 
-    tipo_norm = (tipo or "Gasto").strip()
-    tipo_norm = "Ingreso" if tipo_norm.lower() == "ingreso" else "Gasto"
+    tipo_norm = None
+    if tipo and tipo.strip():
+        tipo_norm = "Ingreso" if tipo.strip().lower() == "ingreso" else "Gasto"
 
     cat_id = int(categoria_id) if categoria_id and str(categoria_id).isdigit() else None
     sub_id = int(subcategoria_id) if subcategoria_id and str(subcategoria_id).isdigit() else None
