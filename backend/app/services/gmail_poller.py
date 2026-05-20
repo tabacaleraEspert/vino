@@ -273,7 +273,9 @@ async def poll_user_gmail(
             user.GmailLastMessageId = last_successfully_processed_id
         await db.flush()
 
-    log_event("poll_summary", user_id=user_id, gmail=gmail, **stats)
+    log_event("poll_summary", user_id=user_id, gmail=gmail,
+              processed=stats["processed"], created=stats["created"],
+              duplicated=stats["duplicated"], errors=stats["errors"])
     logger.info(
         "Gmail poll for user %d: processed=%d created=%d dup=%d errors=%d",
         user_id, stats["processed"], stats["created"], stats["duplicated"], stats["errors"],
