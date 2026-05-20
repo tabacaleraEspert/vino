@@ -161,3 +161,52 @@ async def trigger_gmail_poll(
     from app.services.gmail_poller import poll_all_users
     results = await poll_all_users(db)
     return {"results": results}
+
+
+@router.post("/debug")
+async def gmail_debug(
+    _: None = Depends(require_master_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Debug endpoint — list what emails Gmail API returns for each user."""
+    import asyncio as _asyncio
+    from app.core.encryption import decrypt_token
+    from app.services.gmail_poller import _build_gmail_service, _list_messages, _extract_email_parts
+    from app.services.bank_email_filters import build_gmail_query, matches_bank_filter
+
+    stmt = select(User).where(User.GmailRefreshToken.isnot(None))
+    result = await db.execute(stmt)
+    users = result.scalars().all()
+
+    output = []
+    for user in users:
+        user_info = {"user_id": user.id, "gmail": user.gmail, "last_message_id": user.GmailLastMessageId}
+        try:
+            refresh_token = decrypt_token(user.GmailRefreshToken)
+            service = await _asyncio.to_thread(_build_gmail_service, refresh_token)
+            query = build_gmail_query(days_back=3)
+            user_info["query"] = query
+            messages = await _asyncio.to_thread(_list_messages, service, query, 10)
+            user_info["messages_found"] = len(messages)
+
+            email_details = []
+            for msg_ref in messages[:5]:  # Only first 5
+                msg = await _asyncio.to_thread(
+                    lambda mid=msg_ref["id"]: service.users().messages().get(
+                        userId="me", id=mid, format="full"
+                    ).execute()
+                )
+                sender, subject, body = _extract_email_parts(msg)
+                matches = matches_bank_filter(sender, subject)
+                email_details.append({
+                    "id": msg_ref["id"],
+                    "sender": sender[:80],
+                    "subject": subject[:100],
+                    "matches_filter": matches,
+                })
+            user_info["emails"] = email_details
+        except Exception as e:
+            user_info["error"] = str(e)
+        output.append(user_info)
+
+    return {"debug": output}

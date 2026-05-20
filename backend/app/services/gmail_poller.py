@@ -155,7 +155,10 @@ async def poll_user_gmail(
         return {"user_id": user_id, "error": str(e)}
 
     if not messages:
+        logger.info("Gmail poll user %d: no messages found for query: %s", user_id, query)
         return {"user_id": user_id, "processed": 0, "created": 0, "duplicated": 0, "errors": 0}
+
+    logger.info("Gmail poll user %d: found %d messages", user_id, len(messages))
 
     stats = {"user_id": user_id, "processed": 0, "created": 0, "duplicated": 0, "errors": 0}
 
@@ -186,8 +189,11 @@ async def poll_user_gmail(
 
                 # Double-check against bank filters
                 if not matches_bank_filter(sender, subject):
+                    logger.debug("Gmail poll user %d: skipped non-bank email from=%s subject=%s", user_id, sender[:60], subject[:80])
                     last_successfully_processed_id = msg_id
                     continue
+
+                logger.info("Gmail poll user %d: matched bank email from=%s subject=%s", user_id, sender[:60], subject[:80])
 
                 stats["processed"] += 1
 
