@@ -46,6 +46,7 @@ export function Merchants() {
   };
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isDeletingEmpty, setIsDeletingEmpty] = useState(false);
+  const [confirmDeleteEmpty, setConfirmDeleteEmpty] = useState(false);
 
   // Expensive computation: stats per merchant. Only recalculates when merchants/transactions change.
   const merchantStats = useMemo(() => {
@@ -149,7 +150,12 @@ export function Merchants() {
               disabled={isDeletingEmpty}
               onClick={async () => {
                 const empty = merchantStats.filter((m) => m.transactionCount === 0);
-                if (!confirm(`Borrar ${empty.length} comercios sin transacciones?`)) return;
+                if (!confirmDeleteEmpty) {
+                  setConfirmDeleteEmpty(true);
+                  setTimeout(() => setConfirmDeleteEmpty(false), 4000);
+                  return;
+                }
+                setConfirmDeleteEmpty(false);
                 setIsDeletingEmpty(true);
                 let deleted = 0;
                 for (const m of empty) {
@@ -160,7 +166,7 @@ export function Merchants() {
               }}
             >
               <Trash2 className="w-4 h-4" />
-              {isDeletingEmpty ? "Borrando..." : "Limpiar vacíos"}
+              {isDeletingEmpty ? "Borrando..." : confirmDeleteEmpty ? "Toca para confirmar" : "Limpiar vacíos"}
             </button>
           )}
           <button

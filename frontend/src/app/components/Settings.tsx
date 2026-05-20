@@ -1,9 +1,17 @@
-import { useState, useEffect } from "react";
-import { useGoogleLogin } from "@react-oauth/google";
+import { useState, useEffect, lazy, Suspense } from "react";
+import { Capacitor } from "@capacitor/core";
 import { useAuth } from "../context/AuthContext";
 import { apiFetch } from "../../lib/api";
 import { Mail, MessageCircle, User, LogOut, CheckCircle, Loader2, Shield } from "lucide-react";
 import { OtpInput } from "./OtpInput";
+
+const isNative = Capacitor.isNativePlatform();
+
+// Lazy-load the Gmail connect button — only loaded on web, avoids importing
+// @react-oauth/google on native where GoogleOAuthProvider is not available
+const GmailConnectButtonWeb = isNative
+  ? null
+  : lazy(() => import("./GmailConnectButton"));
 
 interface GmailStatus {
   connected: boolean;
@@ -18,6 +26,7 @@ export function Settings() {
   const [gmailStatus, setGmailStatus] = useState<GmailStatus | null>(null);
   const [saving, setSaving] = useState(false);
   const [gmailLoading, setGmailLoading] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [message, setMessage] = useState("");
 
   // OTP state
@@ -100,8 +109,14 @@ export function Settings() {
     sendCode();
   };
 
+  const [confirmDisconnectWpp, setConfirmDisconnectWpp] = useState(false);
   const disconnectWhatsapp = async () => {
-    if (!confirm("Desconectar WhatsApp? No vas a poder registrar gastos ni consultar por mensaje.")) return;
+    if (!confirmDisconnectWpp) {
+      setConfirmDisconnectWpp(true);
+      setTimeout(() => setConfirmDisconnectWpp(false), 4000);
+      return;
+    }
+    setConfirmDisconnectWpp(false);
     setSaving(true);
     try {
       await apiFetch("/auth/profile", {
@@ -124,34 +139,16 @@ export function Settings() {
     setOtpError("");
   };
 
-  // Gmail connect
-  const googleLogin = useGoogleLogin({
-    flow: "auth-code",
-    scope: "https://www.googleapis.com/auth/gmail.readonly",
-    onSuccess: async (response) => {
-      setGmailLoading(true);
-      try {
-        await apiFetch("/gmail/connect", {
-          method: "POST",
-          body: JSON.stringify({ code: response.code }),
-        });
-        const status = await apiFetch<GmailStatus>("/gmail/status");
-        setGmailStatus(status);
-        setMessage("Gmail conectado");
-        setTimeout(() => setMessage(""), 3000);
-      } catch (e) {
-        setMessage("Error al conectar Gmail");
-      }
-      setGmailLoading(false);
-    },
-    onError: () => {
-      setMessage("Error al conectar con Google");
-    },
-  });
 
   // Gmail disconnect
+  const [confirmDisconnectGmail, setConfirmDisconnectGmail] = useState(false);
   const disconnectGmail = async () => {
-    if (!confirm("Desconectar Gmail? No se detectaran mas gastos automaticamente.")) return;
+    if (!confirmDisconnectGmail) {
+      setConfirmDisconnectGmail(true);
+      setTimeout(() => setConfirmDisconnectGmail(false), 4000);
+      return;
+    }
+    setConfirmDisconnectGmail(false);
     setGmailLoading(true);
     try {
       await apiFetch("/gmail/connect", { method: "DELETE" });
@@ -240,27 +237,27 @@ export function Settings() {
               disabled={gmailLoading}
               className="text-sm text-red-600 hover:text-red-700 font-medium disabled:opacity-50"
             >
-              {gmailLoading ? "Desconectando..." : "Desconectar Gmail"}
+              {gmailLoading ? "Desconectando..." : confirmDisconnectGmail ? "Toca de nuevo para confirmar" : "Desconectar Gmail"}
             </button>
           </div>
+        ) : isNative || !GmailConnectButtonWeb ? (
+          <p className="text-sm text-gray-400 italic">
+            Conecta Gmail desde la version web de la app.
+          </p>
         ) : (
-          <button
-            onClick={() => googleLogin()}
-            disabled={gmailLoading}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
-          >
-            {gmailLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <svg width="16" height="16" viewBox="0 0 48 48">
-                <path fill="#4285f4" d="M45.12 24.5c0-1.56-.14-3.06-.4-4.5H24v8.51h11.84c-.51 2.75-2.06 5.08-4.39 6.64v5.52h7.11c4.16-3.83 6.56-9.47 6.56-16.17z" />
-                <path fill="#34a853" d="M24 46c5.94 0 10.92-1.97 14.56-5.33l-7.11-5.52c-1.97 1.32-4.49 2.1-7.45 2.1-5.73 0-10.58-3.87-12.31-9.07H4.34v5.7C7.96 41.07 15.4 46 24 46z" />
-                <path fill="#fbbc04" d="M11.69 28.18c-.44-1.32-.69-2.73-.69-4.18s.25-2.86.69-4.18v-5.7H4.34A21.99 21.99 0 002 24c0 3.55.85 6.91 2.34 9.88l7.35-5.7z" />
-                <path fill="#ea4335" d="M24 10.75c3.23 0 6.13 1.11 8.41 3.29l6.31-6.31C34.91 4.18 29.93 2 24 2 15.4 2 7.96 6.93 4.34 14.12l7.35 5.7c1.73-5.2 6.58-9.07 12.31-9.07z" />
-              </svg>
-            )}
-            Conectar Gmail
-          </button>
+          <Suspense fallback={<Loader2 className="w-4 h-4 animate-spin mx-auto" />}>
+            <GmailConnectButtonWeb
+              onConnected={(status) => {
+                setGmailStatus(status);
+                setMessage("Gmail conectado");
+                setTimeout(() => setMessage(""), 3000);
+              }}
+              onError={(msg) => {
+                setMessage(msg);
+                setTimeout(() => setMessage(""), 3000);
+              }}
+            />
+          </Suspense>
         )}
 
         <div className="flex flex-wrap gap-1.5 pt-1">
@@ -314,7 +311,7 @@ export function Settings() {
                   disabled={saving}
                   className="text-sm text-red-600 hover:text-red-700 font-medium disabled:opacity-50"
                 >
-                  Desconectar
+                  {confirmDisconnectWpp ? "Toca para confirmar" : "Desconectar"}
                 </button>
               </div>
             )}
@@ -356,7 +353,7 @@ export function Settings() {
         )}
       </div>
 
-      {/* Security */}
+      {/* Account */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
         <div className="flex items-center gap-2 mb-1">
           <Shield className="w-4 h-4 text-gray-600" />
@@ -369,6 +366,31 @@ export function Settings() {
           <LogOut className="w-4 h-4" />
           Cerrar sesion
         </button>
+        <hr className="border-gray-100" />
+        <button
+          onClick={async () => {
+            if (!showDeleteConfirm) {
+              setShowDeleteConfirm(true);
+              return;
+            }
+            try {
+              await apiFetch("/auth/account", { method: "DELETE" });
+              logout();
+            } catch {
+              setMessage("Error al eliminar la cuenta");
+              setTimeout(() => setMessage(""), 3000);
+              setShowDeleteConfirm(false);
+            }
+          }}
+          className="text-sm text-gray-400 hover:text-red-600 font-medium transition-colors"
+        >
+          {showDeleteConfirm ? "Toca de nuevo para confirmar" : "Eliminar cuenta y datos"}
+        </button>
+        {showDeleteConfirm && (
+          <p className="text-xs text-red-500">
+            Se eliminaran todos tus movimientos, categorias y datos. Esta accion no se puede deshacer.
+          </p>
+        )}
       </div>
 
       <p className="text-center text-xs text-gray-400 pt-2">

@@ -1,0 +1,150 @@
+/* Fina — design tokens (paper crudo default + dark toggle) */
+
+/* ───────────────────────────────────────────────────────────
+   LIGHT MODE — paper crudo (default)
+   ─────────────────────────────────────────────────────────── */
+:root, [data-theme="light"] {
+  --bg:           #F4F2EC;
+  --bg-2:         #EAE7DF;
+  --surface:      #FBFAF6;
+  --surface-2:    #F0EEE6;
+  --surface-3:    #E5E2D8;
+  --hairline:     #DCD8CC;
+  --hairline-2:   #C6C0B0;
+
+  --fg:           #14130F;
+  --fg-2:         #3D3A33;
+  --fg-3:         #7A7468;
+  --fg-4:         #ADA797;
+
+  --lime:         #D5F03A;
+  --lime-bright:  #E2FA4D;
+  --lime-deep:    #97A91A;
+  --lime-shade:   #6E7C12;
+  --lime-tint:    #EDF1B9;
+  --lime-tint-2:  #DBE596;
+
+  --accent-bg:    #14130F;
+  --accent-bg-2:  #1F1D17;
+  --accent-fg:    #EFE9D4;
+  --accent-fg-2:  #C9C3AE;
+  --accent-fg-3:  #8C8674;
+
+  --neg:          #E66A3F;
+  --neg-deep:     #B33D14;
+  --pos:          #7AA438;
+  --warn:         #D9A82A;
+
+  --pill-lime-bg:  #E6EDA8;
+  --pill-lime-fg:  #6E7C12;
+  --pill-lime-bd:  #B8C950;
+  --pill-warn-bg:  #F4E5B5;
+  --pill-warn-fg:  #7E5A0E;
+  --pill-warn-bd:  #E2CB81;
+  --pill-neg-bg:   #F6CFBE;
+  --pill-neg-fg:   #8E2F12;
+  --pill-neg-bd:   #E5AC93;
+  --pill-pos-bg:   #DCE9BA;
+  --pill-pos-fg:   #3F5F1F;
+  --pill-pos-bd:   #B8CD86;
+
+  --ios-dark: 0;
+}
+
+/* ───────────────────────────────────────────────────────────
+   DARK MODE — industrial carbon
+   ─────────────────────────────────────────────────────────── */
+[data-theme="dark"] {
+  --bg:           #0E0D0B;
+  --bg-2:         #16140F;
+  --surface:      #1B1915;
+  --surface-2:    #232118;
+  --surface-3:    #2C291F;
+  --hairline:     #2E2A1E;
+  --hairline-2:   #3A3527;
+
+  --fg:           #F2EEE0;
+  --fg-2:         #C9C3AE;
+  --fg-3:         #8C8674;
+  --fg-4:         #5B564A;
+
+  --lime:         #D5F03A;
+  --lime-bright:  #E2FA4D;
+  --lime-deep:    #9DB422;
+  --lime-shade:   #6B7A18;
+  --lime-tint:    #1F2410;
+  --lime-tint-2:  #2A3318;
+
+  --accent-bg:    #EFE9D4;
+  --accent-bg-2:  #E6DFC4;
+  --accent-fg:    #14130F;
+  --accent-fg-2:  #3B3830;
+  --accent-fg-3:  #7C7561;
+
+  --neg:          #FF7A55;
+  --neg-deep:     #CC4A22;
+  --pos:          #A8E055;
+  --warn:         #F2C449;
+
+  --pill-lime-bg:  #2A3318;
+  --pill-lime-fg:  #E2FA4D;
+  --pill-lime-bd:  #4A5824;
+  --pill-warn-bg:  #3A2F0F;
+  --pill-warn-fg:  #F2C449;
+  --pill-warn-bd:  #5A4920;
+  --pill-neg-bg:   #3A1C12;
+  --pill-neg-fg:   #FF7A55;
+  --pill-neg-bd:   #5A2D1F;
+  --pill-pos-bg:   #1F2E14;
+  --pill-pos-fg:   #A8E055;
+  --pill-pos-bd:   #33471F;
+
+  --ios-dark: 1;
+}
+
+/* type */
+:root {
+  --serif: 'Instrument Serif', 'Times New Roman', serif;
+  --sans:  'Geist', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --mono:  'Geist Mono', 'SF Mono', ui-monospace, monospace;
+
+  --r-sm: 6px;
+  --r-md: 12px;
+  --r-lg: 18px;
+  --r-xl: 24px;
+
+  --ink-stable:    #14130F;
+  --paper-stable:  #EFE9D4;
+}
+
+/* base overrides for Fina */
+body {
+  font-family: var(--sans);
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button { font-family: inherit; cursor: pointer; }
+input, textarea { font-family: inherit; color: inherit; }
+
+.fina-scroll::-webkit-scrollbar { width: 0; height: 0; }
+.fina-scroll { scrollbar-width: none; }
+
+.fina-screen {
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+}
+
+.mono { font-family: var(--mono); font-feature-settings: "ss01", "tnum"; letter-spacing: -0.01em; }
+.serif { font-family: var(--serif); }
+.eyebrow {
+  font-size: 10.5px; font-weight: 500;
+  letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--fg-3);
+}
+.divider { height: 1px; background: var(--hairline); }
+
+@keyframes finablink { 0%, 50% { opacity: 1 } 50.01%, 100% { opacity: 0 } }

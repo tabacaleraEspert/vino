@@ -33,7 +33,7 @@ async def _gmail_poll_loop():
                 if total_created > 0:
                     logger.info("Gmail poll: created %d movements", total_created)
         except Exception as e:
-            logger.error("Gmail poll loop error: %s", e)
+            logger.error("Gmail poll loop error: %s", e, exc_info=True)
         await asyncio.sleep(GMAIL_POLL_INTERVAL_SEC)
 
 

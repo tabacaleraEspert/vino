@@ -481,3 +481,55 @@ async def whatsapp_verify_code(
 
     await db.commit()
     return {"message": "WhatsApp verificado", "whatsapp_vinculado": True}
+
+
+# ---------------------------------------------------------------------------
+# Account deletion (Apple App Store requirement)
+# ---------------------------------------------------------------------------
+
+@router.delete("/account")
+async def delete_account(
+    id_usuario: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Delete the authenticated user's account and all associated data.
+
+    Required by Apple App Store guidelines — apps with accounts must
+    provide a way to delete them.
+    """
+    from sqlalchemy import delete, select
+    from app.models.user import User
+    from app.models.movimiento_orm import Movimiento
+    from app.models.categoria import Categoria
+    from app.models.subcategoria import SubCategoria
+    from app.models.regla_comercio import ReglaComercio
+    from app.models.presupuesto import Presupuesto
+
+    # Verify user exists
+    stmt = select(User).where(User.id == id_usuario)
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    # Delete in order (child tables first to avoid FK violations)
+    from app.models.deuda import Deuda
+    from app.models.billetera import Billetera
+    from app.models.job_recategorizacion import JobRecategorizacion
+
+    await db.execute(delete(Deuda).where(Deuda.Id_usuario == id_usuario))
+    await db.execute(delete(Movimiento).where(Movimiento.Id_usuario == id_usuario))
+    await db.execute(delete(ReglaComercio).where(ReglaComercio.Id_usuario == id_usuario))
+    await db.execute(delete(Presupuesto).where(Presupuesto.Id_usuario == id_usuario))
+    await db.execute(delete(JobRecategorizacion).where(JobRecategorizacion.Id_usuario == id_usuario))
+    await db.execute(delete(Billetera).where(Billetera.Id_usuario == id_usuario))
+    await db.execute(delete(SubCategoria).where(SubCategoria.Id_usuario == id_usuario))
+    await db.execute(delete(Categoria).where(Categoria.Id_usuario == id_usuario))
+
+    # Delete the user
+    await db.execute(delete(User).where(User.id == id_usuario))
+    await db.commit()
+
+    logger.info("Account deleted: user_id=%d", id_usuario)
+    return {"message": "Cuenta eliminada"}

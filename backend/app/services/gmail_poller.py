@@ -142,91 +142,102 @@ async def poll_user_gmail(
     try:
         service = await asyncio.to_thread(_build_gmail_service, refresh_token)
     except Exception as e:
-        logger.error("Failed to build Gmail service for user %d: %s", user_id, e)
+        logger.error("Failed to build Gmail service for user %d: %s", user_id, e, exc_info=True)
         return {"user_id": user_id, "error": str(e)}
 
-    # Build query — last 1 day of bank emails
-    query = build_gmail_query(days_back=1)
-    if last_message_id:
-        # Gmail doesn't support "after message ID" directly,
-        # but we track it for dedup on our side
-        pass
+    # Build query — last 3 days of bank emails (resilient to downtime, dedup prevents duplicates)
+    query = build_gmail_query(days_back=3)
 
     try:
-        messages = await asyncio.to_thread(_list_messages, service, query, 20)
+        messages = await asyncio.to_thread(_list_messages, service, query, 30)
     except Exception as e:
-        logger.error("Gmail list failed for user %d: %s", user_id, e)
+        logger.error("Gmail list failed for user %d: %s", user_id, e, exc_info=True)
         return {"user_id": user_id, "error": str(e)}
 
     if not messages:
         return {"user_id": user_id, "processed": 0, "created": 0, "duplicated": 0, "errors": 0}
 
     stats = {"user_id": user_id, "processed": 0, "created": 0, "duplicated": 0, "errors": 0}
-    newest_msg_id = messages[0]["id"]
+
+    # Collect all message IDs from this batch for set-based dedup
+    # Gmail IDs are NOT sequential — lexicographic comparison doesn't work
+    seen_ids: set[str] = set()
+    if last_message_id:
+        seen_ids.add(last_message_id)
+
+    last_successfully_processed_id: str | None = None
 
     # Process oldest first for consistent tracking
+    from app.api.v1.ingest import process_ingest
+
     for msg_ref in reversed(messages):
         msg_id = msg_ref["id"]
 
-        # Skip already-processed messages
-        if last_message_id and msg_id <= last_message_id:
+        # Skip already-processed messages (origin_id dedup in ingest handles the rest)
+        if msg_id in seen_ids:
             continue
+        seen_ids.add(msg_id)
 
         try:
-            msg = await asyncio.to_thread(_get_message, service, msg_id)
-            sender, subject, body = _extract_email_parts(msg)
+            # Use savepoint so a failure doesn't corrupt the session for other messages
+            async with db.begin_nested():
+                msg = await asyncio.to_thread(_get_message, service, msg_id)
+                sender, subject, body = _extract_email_parts(msg)
 
-            # Double-check against bank filters
-            if not matches_bank_filter(sender, subject):
-                continue
+                # Double-check against bank filters
+                if not matches_bank_filter(sender, subject):
+                    last_successfully_processed_id = msg_id
+                    continue
 
-            stats["processed"] += 1
+                stats["processed"] += 1
 
-            # Extract expense data with GPT
-            extracted = await extract_expense_from_email(subject, sender, body)
-            if not extracted.get("datos_completos"):
-                continue
+                # Extract expense data with GPT
+                extracted = await extract_expense_from_email(subject, sender, body)
+                if not extracted.get("datos_completos"):
+                    last_successfully_processed_id = msg_id
+                    continue
 
-            # Build ingest payload (same format as n8n sends)
-            from app.api.v1.ingest import process_ingest
-            ingest_payload = {
-                "usuario_gmail": gmail,
-                "fecha": extracted.get("fecha"),
-                "tipo": extracted.get("tipo", "Gasto"),
-                "monto": extracted.get("monto", 0),
-                "moneda": extracted.get("moneda", "ARS"),
-                "comercio_raw": extracted.get("comercio_raw", ""),
-                "descripcion": extracted.get("descripcion", ""),
-                "medio_pago_raw": extracted.get("medio_de_pago", ""),
-                "from_email": sender,
-                "asunto": subject,
-                "origen": "Gmail",
-                "origen_id": f"gmail_{msg_id}",
-            }
+                # Build ingest payload (same format as n8n sends)
+                ingest_payload = {
+                    "usuario_gmail": gmail,
+                    "fecha": extracted.get("fecha"),
+                    "tipo": extracted.get("tipo", "Gasto"),
+                    "monto": extracted.get("monto", 0),
+                    "moneda": extracted.get("moneda", "ARS"),
+                    "comercio_raw": extracted.get("comercio_raw", ""),
+                    "descripcion": extracted.get("descripcion", ""),
+                    "medio_pago_raw": extracted.get("medio_de_pago", ""),
+                    "from_email": sender,
+                    "asunto": subject,
+                    "origen": "Gmail",
+                    "origen_id": f"gmail_{msg_id}",
+                }
 
-            result = await process_ingest(db, ingest_payload)
-            status = result.get("status", "")
-            if status == "creado":
-                stats["created"] += 1
-            elif "duplicado" in status:
-                stats["duplicated"] += 1
+                result = await process_ingest(db, ingest_payload)
+                status = result.get("status", "")
+                if status == "creado":
+                    stats["created"] += 1
+                    # Send WhatsApp notification for new movement
+                    await _notify_whatsapp(result, ingest_payload)
+                elif "duplicado" in status:
+                    stats["duplicated"] += 1
+
+            # Only mark as processed if the savepoint committed successfully
+            last_successfully_processed_id = msg_id
 
         except Exception as e:
-            logger.error("Error processing Gmail message %s for user %d: %s", msg_id, user_id, e)
+            logger.error("Error processing Gmail message %s for user %d: %s", msg_id, user_id, e, exc_info=True)
             stats["errors"] += 1
-            # Rollback so next message can proceed
-            try:
-                await db.rollback()
-            except Exception:
-                pass
+            # Savepoint was rolled back automatically — session is still usable
 
-    # Update last polled and last message ID
+    # Update last polled timestamp always, but only advance message ID if something succeeded
     stmt = select(User).where(User.id == user_id)
     result = await db.execute(stmt)
     user = result.scalar_one_or_none()
     if user:
         user.GmailLastPolledAt = datetime.now(UTC)
-        user.GmailLastMessageId = newest_msg_id
+        if last_successfully_processed_id:
+            user.GmailLastMessageId = last_successfully_processed_id
         await db.flush()
 
     logger.info(
@@ -234,6 +245,68 @@ async def poll_user_gmail(
         user_id, stats["processed"], stats["created"], stats["duplicated"], stats["errors"],
     )
     return stats
+
+
+# ---------------------------------------------------------------------------
+# WhatsApp notification after Gmail ingest
+# ---------------------------------------------------------------------------
+
+_CATEGORY_EMOJI = {
+    "alimentacion": "🍽️", "alimentos": "🍽️",
+    "transporte": "🚗",
+    "entretenimiento": "🎬",
+    "salud": "💊",
+    "ropa": "👕",
+    "vivienda": "🏠", "servicios": "🏠",
+    "educacion": "📚", "educación": "📚",
+}
+
+
+async def _notify_whatsapp(ingest_result: dict, payload: dict) -> None:
+    """Send WhatsApp confirmation after a Gmail-ingested movement is created."""
+    try:
+        from app.services.twilio_client import send_whatsapp
+
+        usuario = ingest_result.get("usuario", {})
+        wpp_to = usuario.get("wpp_entero", "")
+        if not wpp_to:
+            return
+
+        movimiento = ingest_result.get("movimiento", {})
+        regla = ingest_result.get("regla", {})
+
+        monto = payload.get("monto", 0)
+        moneda = payload.get("moneda", "ARS")
+        comercio_raw = payload.get("comercio_raw", "")
+        descripcion = payload.get("descripcion", "")
+        categoria = regla.get("categoria", "Otros")
+        subcategoria = regla.get("subcategoria", "")
+
+        emoji = _CATEGORY_EMOJI.get(categoria.lower(), "💸")
+        monto_fmt = f"${monto:,.0f}".replace(",", ".")
+
+        msg = f"{emoji} *{monto_fmt}*"
+        if moneda != "ARS":
+            msg += f" {moneda}"
+        if comercio_raw:
+            msg += f" en *{comercio_raw}*"
+        elif descripcion:
+            msg += f" — {descripcion}"
+
+        msg += f"\n📂 {categoria}"
+        if subcategoria and subcategoria != "Gastos no categorizados":
+            msg += f" / {subcategoria}"
+
+        msg += "\n✅ Registrado (Gmail)"
+
+        mov_id = movimiento.get("id") or movimiento.get("Id")
+        if mov_id:
+            msg += f"\n\n_Mal categorizado? Respondé:_\n_CAMBIAR {mov_id} + categoría_"
+
+        await send_whatsapp(wpp_to, msg)
+    except Exception as e:
+        # Non-blocking — don't fail the poll if notification fails
+        logger.warning("WhatsApp notification failed: %s", e)
 
 
 # ---------------------------------------------------------------------------

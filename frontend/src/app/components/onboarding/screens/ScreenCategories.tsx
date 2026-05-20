@@ -64,6 +64,7 @@ export function ScreenCategories({ onNext, onBack }: Props) {
   const [addingSub, setAddingSub] = useState<number | null>(null);
   const [newSubName, setNewSubName] = useState("");
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   const toggleCat = (i: number) => {
     setCats((p) => p.map((c, j) => (j === i ? { ...c, enabled: !c.enabled } : c)));
@@ -126,7 +127,7 @@ export function ScreenCategories({ onNext, onBack }: Props) {
       onNext();
     } catch (e) {
       console.error("Save categories failed:", e);
-      alert("No se pudieron guardar las categorías. Intentá de nuevo.");
+      setSaveError("No se pudieron guardar las categorias. Intenta de nuevo.");
     } finally {
       setSaving(false);
     }
@@ -462,6 +463,11 @@ export function ScreenCategories({ onNext, onBack }: Props) {
         </div>
       </div>
 
+      {saveError && (
+        <div style={{ background: "#FEF2F2", color: "#DC2626", borderRadius: 10, padding: "8px 12px", fontSize: 13, fontWeight: 600, marginTop: 8 }}>
+          {saveError}
+        </div>
+      )}
       <div style={{ marginTop: 8 }}>
         <PrimaryBtn onClick={handleContinue} disabled={saving || enabledCount === 0}>
           {saving ? "Guardando..." : `Continuar con ${enabledCount} categorías →`}
