@@ -7,6 +7,7 @@ from base64 import b64encode
 import httpx
 
 from app.core.config import settings
+from app.services.pipeline_log import log_event
 
 logger = logging.getLogger(__name__)
 
@@ -66,10 +67,17 @@ async def send_whatsapp(
             )
             if resp.status_code in (200, 201):
                 logger.info("WhatsApp sent to %s (template=%s)", to, content_sid or "freeform")
+                log_event("wpp_outgoing", to=to, success=True,
+                          template=content_sid or "freeform",
+                          body_preview=(body or "")[:120])
                 return True
             else:
                 logger.error("Twilio error %d: %s", resp.status_code, resp.text[:200])
+                log_event("wpp_outgoing", to=to, success=False,
+                          template=content_sid or "freeform",
+                          error=resp.text[:200])
                 return False
     except Exception as e:
         logger.error("Failed to send WhatsApp to %s: %s", to, e)
+        log_event("wpp_outgoing", to=to, success=False, error=str(e))
         return False

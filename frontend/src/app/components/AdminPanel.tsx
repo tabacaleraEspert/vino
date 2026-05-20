@@ -12,6 +12,7 @@ import {
   ArrowLeft,
   LayoutDashboard,
   Radio,
+  MessageCircle,
 } from "lucide-react";
 import {
   BarChart,
@@ -24,6 +25,7 @@ import {
 import { useNavigate } from "react-router";
 import { PipelineLog } from "./admin/PipelineLog";
 import { UsersPanel } from "./admin/UsersPanel";
+import { WhatsAppLog } from "./admin/WhatsAppLog";
 
 interface AdminDashboardResponse {
   system: { status: string; timestamp: string };
@@ -61,7 +63,7 @@ interface AdminDashboardResponse {
   }>;
 }
 
-type Tab = "dashboard" | "pipeline" | "users";
+type Tab = "dashboard" | "pipeline" | "whatsapp" | "users";
 
 export function AdminPanel() {
   const { token } = useAuth();
@@ -155,6 +157,17 @@ export function AdminPanel() {
           Pipeline
         </button>
         <button
+          onClick={() => setTab("whatsapp")}
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-colors ${
+            tab === "whatsapp"
+              ? "bg-white text-gray-900 shadow-sm"
+              : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          <MessageCircle className="w-3.5 h-3.5" />
+          WPP
+        </button>
+        <button
           onClick={() => setTab("users")}
           className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-colors ${
             tab === "users"
@@ -180,6 +193,9 @@ export function AdminPanel() {
 
       {/* Pipeline Tab */}
       {tab === "pipeline" && <PipelineLog />}
+
+      {/* WhatsApp Tab */}
+      {tab === "whatsapp" && <WhatsAppLog />}
 
       {/* Users Tab */}
       {tab === "users" && <UsersPanel />}

@@ -18,6 +18,8 @@ from app.services.expense_extractor import extract_expense_from_message
 from app.repositories.movimiento_agg import count_gastos_mes as _count_gastos
 from app.repositories.categoria_repo import list_categorias as _list_cats
 
+from app.services.pipeline_log import log_event
+
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
@@ -70,14 +72,16 @@ async def whatsapp_intake(
         nombre = user.get("Nombre", "")
         onboarding_msg = (
             f"Hola {nombre}! Soy *Vino*, tu asistente de finanzas personales.\n\n"
-            f"Registrá gastos mandándome mensajes como:\n"
+            f"Registrá gastos e ingresos mandándome mensajes como:\n"
             f'_"Almorcé $3.500 en el centro"_\n'
             f'_"Gasté 50k en ropa"_\n'
-            f'_"Uber 2500"_\n\n'
+            f'_"Uber 2500"_\n'
+            f'_"Cobré 800k de sueldo"_\n'
+            f'_"Me transfirieron 50k"_\n\n'
             f"También podés preguntarme:\n"
             f'_"Cuánto gasté este mes?"_\n'
             f'_"Puedo comprarme unas zapatillas de 80k?"_\n\n'
-            f"Empezá registrando tu primer gasto!"
+            f"Empezá registrando tu primer movimiento!"
         )
         return {
             "intent": "ONBOARDING",
@@ -253,12 +257,12 @@ async def register_expense(
         if faltante == "no_es_gasto":
             return {
                 "status": "not_expense",
-                "reply": "No parece ser un gasto. Si querés registrar algo, decime algo como: _Gasté 5000 en el super_",
+                "reply": "No parece ser un gasto ni un ingreso. Si querés registrar algo, decime algo como: _Gasté 5000 en el super_ o _Cobré 800k de sueldo_",
             }
         if faltante == "monto":
             return {
                 "status": "incomplete",
-                "reply": "No pude detectar el monto. Decime cuánto gastaste, ej: _Gasté 5000 en Carrefour_",
+                "reply": "No pude detectar el monto. Decime cuánto fue, ej: _Gasté 5000 en Carrefour_ o _Cobré 50k_",
                 "extracted": extracted,
             }
         return {
@@ -342,10 +346,23 @@ async def register_expense(
 
     # Default if nothing matched
     if not id_categoria:
-        id_categoria = 6
-        id_subcategoria = 42
-        categoria_nombre = "Otros"
-        subcategoria_nombre = "Gastos no categorizados"
+        if tipo == "Ingreso":
+            # Try to find the user's income category dynamically
+            from app.api.v1.ingest import _get_default_category
+            id_categoria, id_subcategoria = await _get_default_category(db, payload.user_id, "Ingreso")
+            categoria_nombre = "Ingresos"
+            subcategoria_nombre = "Ingresos no categorizados"
+            if not id_categoria:
+                # Fallback to hardcoded IDs if dynamic lookup fails
+                id_categoria = 6
+                id_subcategoria = 42
+                categoria_nombre = "Otros"
+                subcategoria_nombre = "Gastos no categorizados"
+        else:
+            id_categoria = 6
+            id_subcategoria = 42
+            categoria_nombre = "Otros"
+            subcategoria_nombre = "Gastos no categorizados"
 
     # Resolve names if we have IDs but no names yet
     if id_categoria and not categoria_nombre:
@@ -378,7 +395,7 @@ async def register_expense(
     if existing:
         return {
             "status": "duplicate",
-            "reply": "Ese gasto ya fue registrado.",
+            "reply": f"Ese {'ingreso' if tipo == 'Ingreso' else 'gasto'} ya fue registrado.",
             "movimiento_id": existing.get("id") or existing.get("Id"),
         }
 
@@ -525,38 +542,62 @@ async def register_expense(
 
     # Step 6: Build WhatsApp confirmation (conversational style)
     monto_fmt = f"${monto:,.0f}".replace(",", ".")
-    emoji = "💸"
-    if categoria_nombre.lower() in ("alimentacion", "alimentos"):
-        emoji = "🍽️"
-    elif categoria_nombre.lower() in ("transporte",):
-        emoji = "🚗"
-    elif categoria_nombre.lower() in ("entretenimiento",):
-        emoji = "🎬"
-    elif categoria_nombre.lower() in ("salud",):
-        emoji = "💊"
-    elif categoria_nombre.lower() in ("ropa",):
-        emoji = "👕"
-    elif categoria_nombre.lower() in ("vivienda", "servicios"):
-        emoji = "🏠"
-    elif categoria_nombre.lower() in ("educacion", "educación"):
-        emoji = "📚"
 
-    reply = f"{emoji} *{monto_fmt}*"
-    if moneda != "ARS":
-        reply += f" {moneda}"
-    if comercio_raw:
-        reply += f" en *{comercio_raw}*"
-    elif descripcion and descripcion != "Gasto WhatsApp":
-        reply += f" — {descripcion}"
+    if tipo == "Ingreso":
+        emoji = "💰"
+        if categoria_nombre.lower() in ("sueldo",):
+            emoji = "💼"
+        elif categoria_nombre.lower() in ("inversiones",):
+            emoji = "📈"
+        elif categoria_nombre.lower() in ("freelance",):
+            emoji = "💻"
 
-    reply += f"\n📂 {categoria_nombre}"
-    if subcategoria_nombre and subcategoria_nombre != "Gastos no categorizados":
-        reply += f" / {subcategoria_nombre}"
+        reply = f"{emoji} *{monto_fmt}*"
+        if moneda != "ARS":
+            reply += f" {moneda}"
+        if comercio_raw:
+            reply += f" de *{comercio_raw}*"
+        elif descripcion and descripcion != "Gasto WhatsApp":
+            reply += f" — {descripcion}"
 
-    if medio_pago_raw and medio_pago_raw.lower() != "efectivo":
-        reply += f"\n💳 {medio_pago_raw}"
+        reply += f"\n📂 {categoria_nombre}"
+        if subcategoria_nombre and subcategoria_nombre != "Ingresos no categorizados":
+            reply += f" / {subcategoria_nombre}"
 
-    reply += "\n✅ Registrado"
+        reply += "\n✅ Ingreso registrado"
+    else:
+        emoji = "💸"
+        if categoria_nombre.lower() in ("alimentacion", "alimentos"):
+            emoji = "🍽️"
+        elif categoria_nombre.lower() in ("transporte",):
+            emoji = "🚗"
+        elif categoria_nombre.lower() in ("entretenimiento",):
+            emoji = "🎬"
+        elif categoria_nombre.lower() in ("salud",):
+            emoji = "💊"
+        elif categoria_nombre.lower() in ("ropa",):
+            emoji = "👕"
+        elif categoria_nombre.lower() in ("vivienda", "servicios"):
+            emoji = "🏠"
+        elif categoria_nombre.lower() in ("educacion", "educación"):
+            emoji = "📚"
+
+        reply = f"{emoji} *{monto_fmt}*"
+        if moneda != "ARS":
+            reply += f" {moneda}"
+        if comercio_raw:
+            reply += f" en *{comercio_raw}*"
+        elif descripcion and descripcion != "Gasto WhatsApp":
+            reply += f" — {descripcion}"
+
+        reply += f"\n📂 {categoria_nombre}"
+        if subcategoria_nombre and subcategoria_nombre != "Gastos no categorizados":
+            reply += f" / {subcategoria_nombre}"
+
+        if medio_pago_raw and medio_pago_raw.lower() != "efectivo":
+            reply += f"\n💳 {medio_pago_raw}"
+
+        reply += "\n✅ Registrado"
 
     # Cuotas info
     if cuota_total and cuota_total > 1:
@@ -593,6 +634,14 @@ async def register_expense(
                 reply += f"\n{sug.mensaje_whatsapp}"
     except Exception as e:
         logger.warning("Smart suggestions failed (non-blocking): %s", e)
+
+    log_event("wpp_expense", user_id=payload.user_id,
+              status="created", monto=monto, moneda=moneda,
+              comercio=comercio_raw, tipo=tipo,
+              categoria=categoria_nombre, subcategoria=subcategoria_nombre,
+              movimiento_id=created.get("id"),
+              cuotas=cuota_total if cuota_total and cuota_total > 1 else None,
+              split=split_participantes if es_split else None)
 
     return {
         "status": "created",
@@ -907,6 +956,12 @@ async def recategorize_expense(
         f"Futuros gastos de este comercio se categorizarán automáticamente."
     )
 
+    log_event("wpp_recategorize", user_id=payload.user_id,
+              movimiento_id=payload.movimiento_id,
+              old_categoria_id=old_cat,
+              new_categoria=matched_cat["nombre"],
+              comercio=comercio)
+
     return {"status": "updated", "reply": reply, "categoria": matched_cat["nombre"]}
 
 
@@ -995,6 +1050,11 @@ async def whatsapp_webhook(
 
     user_id = user["id"]
     user_name = user.get("Nombre", "")
+
+    log_event("wpp_incoming", user_id=user_id, gmail=user.get("gmail"),
+              wpp_from=wpp_from, body=body[:200],
+              has_media=bool(media_url),
+              media_type=str(form.get("MediaContentType0", "")) if media_url else None)
 
     # --- 2. Onboarding check ---
     from datetime import timedelta
@@ -1109,6 +1169,11 @@ async def whatsapp_webhook(
         # --- 5. Classify with AI ---
         intent = await classify_intent(body)
         command_data = {}
+
+    log_event("wpp_intent", user_id=user_id, gmail=user.get("gmail"),
+              intent=str(intent), command_match=bool(cmd),
+              command_data=command_data if cmd else None,
+              body_preview=body[:100])
 
     # --- 5b. Detect presupuesto/categoría queries before routing ---
     body_lower = body.lower()
@@ -1284,6 +1349,9 @@ async def whatsapp_webhook(
     # --- 7. Send reply ---
     if reply:
         await send_whatsapp(wpp_from, reply)
+
+    log_event("wpp_reply", user_id=user_id, gmail=user.get("gmail"),
+              intent=str(intent), reply_preview=reply[:200] if reply else "")
 
     return {"status": "ok", "intent": str(intent)}
 
