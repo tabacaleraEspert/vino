@@ -12,6 +12,7 @@ class User(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
     Nombre: Mapped[str] = mapped_column(String(100), nullable=False)
     Apellido: Mapped[str | None] = mapped_column(String(100))
+    # Apodo: Mapped[str | None] = mapped_column(String(50))  # TODO: run migration 015 first
     WppEntero: Mapped[str | None] = mapped_column(String(50))
     Whatsapp: Mapped[str | None] = mapped_column(String(50))
     gmail: Mapped[str | None] = mapped_column(String(255))

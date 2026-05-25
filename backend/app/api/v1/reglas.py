@@ -155,7 +155,14 @@ async def patch_regla(
     db: AsyncSession = Depends(get_db),
 ):
     patch_patron = payload.get("patron")
-    patch_sub = payload.get("idSubcategoria") or payload.get("subcategoryId")
+    # subcategoryId / idSubcategoria → id_subcategoria
+    patch_sub_raw = payload.get("idSubcategoria") or payload.get("subcategoryId") or None
+    patch_sub = int(patch_sub_raw) if patch_sub_raw else None
+    # categoryId → id_categoria (only used when no subcategory sent)
+    patch_cat_raw = payload.get("categoryId") or None
+    patch_cat = int(patch_cat_raw) if patch_cat_raw and not patch_sub else None
+    # If caller sent categoryId without subcategoryId, clear existing subcategory
+    clear_sub = "categoryId" in payload and not patch_sub_raw
     patch_prioridad = payload.get("prioridad")
     patch_activa = payload.get("activa")
 
@@ -163,22 +170,21 @@ async def patch_regla(
         patron = _merchant_id_to_patron(payload["merchantId"])
         if patron:
             patch_patron = patron
-    if "categoryId" in payload and not patch_sub:
-        patch_sub = payload.get("subcategoryId") or payload.get("categoryId")
 
     updated = await update_regla(
         db, id_usuario, id,
         patron=patch_patron,
-        id_subcategoria=int(patch_sub) if patch_sub else None,
+        id_categoria=patch_cat,
+        id_subcategoria=patch_sub,
+        clear_subcategoria=clear_sub,
         prioridad=patch_prioridad,
         activa=patch_activa,
     )
     if not updated:
         raise HTTPException(status_code=404, detail="Regla no encontrada")
 
-    # Trigger recategorization in background (still uses old sync service)
     recategorization_job_id = None
-    if patch_sub is not None:
+    if patch_sub is not None or patch_cat is not None:
         try:
             from app.services.recategorizacion import enqueue_recategorization_job, process_job
             job = enqueue_recategorization_job(id_usuario, int(updated["id"]), days_back=30)

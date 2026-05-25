@@ -49,11 +49,12 @@ class TestListMovimientos:
             resp = await client.get(f"{BASE}?period=2026-04", headers=auth_headers)
         assert resp.status_code == 200
 
-    async def test_should_default_tipo_to_gasto(self, client, auth_headers):
+    async def test_should_default_tipo_to_none(self, client, auth_headers):
+        """Without tipo param, endpoint passes tipo=None (returns all types)."""
         with patch(f"{MOV_REPO}.repo_list", new_callable=AsyncMock, return_value=([], 0)) as mock_list:
             await client.get(BASE, headers=auth_headers)
         call_kwargs = mock_list.call_args[1]
-        assert call_kwargs.get("tipo") == "Gasto"
+        assert call_kwargs.get("tipo") is None
 
     async def test_should_normalize_ingreso_tipo(self, client, auth_headers):
         with patch(f"{MOV_REPO}.repo_list", new_callable=AsyncMock, return_value=([], 0)) as mock_list:

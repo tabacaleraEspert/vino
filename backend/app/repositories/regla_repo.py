@@ -119,6 +119,7 @@ async def update_regla(
     patron: str | None = None,
     id_categoria: int | None = None,
     id_subcategoria: int | None = None,
+    clear_subcategoria: bool = False,
     prioridad: int | None = None,
     activa: bool | None = None,
 ) -> dict[str, Any] | None:
@@ -134,19 +135,25 @@ async def update_regla(
     if patron is not None:
         regla.Patron = patron.strip()
         regla.PatronNorm = normalize_text(patron)
-    if id_categoria is not None:
-        regla.Id_Categoria = id_categoria
+
     if id_subcategoria is not None:
+        # Subcategory set → auto-resolve category from it
         regla.Id_SubCategoria = id_subcategoria
-        # Auto-resolve categoria from subcategoria
-        if id_categoria is None:
-            sub_stmt = select(SubCategoria).where(and_(
-                SubCategoria.Id_usuario == id_usuario,
-                SubCategoria.Id == id_subcategoria,
-            ))
-            sub = (await session.execute(sub_stmt)).scalar_one_or_none()
-            if sub:
-                regla.Id_Categoria = sub.Id_Categoria
+        sub_stmt = select(SubCategoria).where(and_(
+            SubCategoria.Id_usuario == id_usuario,
+            SubCategoria.Id == id_subcategoria,
+        ))
+        sub = (await session.execute(sub_stmt)).scalar_one_or_none()
+        if sub:
+            regla.Id_Categoria = sub.Id_Categoria
+    elif id_categoria is not None:
+        # Only category provided → set category, keep or clear subcategory
+        regla.Id_Categoria = id_categoria
+        if clear_subcategoria:
+            regla.Id_SubCategoria = None
+    elif clear_subcategoria:
+        regla.Id_SubCategoria = None
+
     if prioridad is not None:
         regla.Prioridad = prioridad
     if activa is not None:

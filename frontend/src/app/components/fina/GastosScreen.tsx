@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useCallback } from 'react';
 import { useData } from '../../context/DataContext';
 import { useCatalog } from '../../context/CatalogContext';
 import { Screen, fmt, fmtK, Pill, Bar, SourceBadge } from './shared';
@@ -61,96 +61,176 @@ function lookupSubcategory(categories: Category[], categoryId: string, subcatego
 /*  TxRow                                                              */
 /* ------------------------------------------------------------------ */
 
+const SWIPE_THRESHOLD = 50;   // px to trigger snap
+const SWIPE_MAX      = 152;  // width of both action buttons combined (76 each)
+const BTN_W          = 76;
+
 export function TxRow({
   t,
-  isLast,
   categories,
   onTap,
+  onDelete,
 }: {
   t: Transaction;
-  isLast?: boolean;
   categories?: Category[];
   onTap?: (t: Transaction) => void;
+  onDelete?: (t: Transaction) => void;
 }) {
   const cats = categories ?? [];
   const cat = lookupCategory(cats, t.categoryId);
   const sub = lookupSubcategory(cats, t.categoryId, t.subcategoryId);
 
+  const [offset, setOffset] = useState(0);
+  const [snapped, setSnapped] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const startX = useRef(0);
+  const dragging = useRef(false);
+
+  const snapBack = useCallback(() => { setOffset(0); setSnapped(false); }, []);
+
+  function onTouchStart(e: React.TouchEvent) {
+    startX.current = e.touches[0].clientX;
+    dragging.current = true;
+  }
+  function onTouchMove(e: React.TouchEvent) {
+    if (!dragging.current) return;
+    const dx = e.touches[0].clientX - startX.current;
+    // only allow swipe left (negative dx)
+    setOffset(Math.max(-SWIPE_MAX, Math.min(0, dx)));
+  }
+  function onTouchEnd() {
+    dragging.current = false;
+    if (offset < -SWIPE_THRESHOLD) {
+      setOffset(-SWIPE_MAX);
+      setSnapped(true);
+    } else {
+      snapBack();
+    }
+  }
+
+  function handleTap() {
+    if (snapped) { snapBack(); return; }
+    onTap?.(t);
+  }
+
+  function handleDelete() {
+    snapBack();
+    setConfirmDelete(true);
+  }
+
+  function handleEdit() {
+    snapBack();
+    onTap?.(t);
+  }
+
   return (
-    <div
-      onClick={() => onTap?.(t)}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 12,
-        padding: '12px 0',
-        borderBottom: isLast ? 'none' : '1px solid var(--border, #f0f0f0)',
-        cursor: onTap ? 'pointer' : 'default',
-      }}
-    >
-      {/* Category emoji tile */}
-      <div
-        style={{
-          width: 36,
-          height: 36,
-          borderRadius: 10,
-          background: cat?.color ? `${cat.color}20` : 'var(--surface-secondary, #f5f5f5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: 18,
-          flexShrink: 0,
-        }}
-      >
-        {cat?.icon ?? '?'}
-      </div>
-
-      {/* Text */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div
-          style={{
-            fontSize: 15,
-            fontWeight: 500,
-            color: 'var(--text-primary, #1a1a1a)',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-          }}
-        >
-          {t.description || 'Sin descripcion'}
-        </div>
-        <div
-          style={{
-            fontSize: 12,
-            color: 'var(--text-tertiary, #999)',
-            marginTop: 2,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-          }}
-        >
-          <span>
-            {cat?.name ?? 'Sin cat.'}
-            {sub ? ` / ${sub.name}` : ''}
+    <>
+      {/* Inline confirm */}
+      {confirmDelete && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px',
+          borderRadius: 14,
+          background: '#fff',
+          border: '1px solid var(--border,#f0f0f0)',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+        }}>
+          <span style={{ fontSize: 13, color: 'var(--text-secondary,#555)', flex: 1 }}>
+            ¿Eliminar <strong>{t.description || 'este movimiento'}</strong>?
           </span>
-          <SourceBadge source={(t as any).medioCarga ?? (t as any).origen ?? ''} />
+          <button onClick={() => setConfirmDelete(false)} style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--border,#ddd)', background: 'transparent', fontSize: 13, cursor: 'pointer', color: 'var(--text-secondary,#666)', whiteSpace: 'nowrap' }}>
+            No
+          </button>
+          <button onClick={() => { setConfirmDelete(false); onDelete?.(t); }} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', background: '#ef4444', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            Eliminar
+          </button>
         </div>
-      </div>
+      )}
 
-      {/* Amount */}
-      <div
-        style={{
-          fontFamily: 'var(--font-mono, "SF Mono", monospace)',
-          fontSize: 15,
-          fontWeight: 600,
-          color: t.amount < 0 ? 'var(--text-primary, #1a1a1a)' : 'var(--color-income, #34C759)',
-          whiteSpace: 'nowrap',
-          textAlign: 'right',
-        }}
-      >
-        {t.amount < 0 ? `-${fmt(Math.abs(t.amount))}` : `+${fmt(t.amount)}`}
-      </div>
-    </div>
+      {!confirmDelete && (
+        <div style={{
+          position: 'relative',
+          overflow: 'hidden',
+          borderRadius: 14,
+          background: '#fff',
+          border: '1px solid var(--border,#f0f0f0)',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+        }}>
+          {/* Action buttons — revealed on the right when swiping left */}
+          <div style={{
+            position: 'absolute', right: 0, top: 0, bottom: 0,
+            width: SWIPE_MAX,
+            display: 'flex',
+          }}>
+            {/* Editar — lime */}
+            <button
+              onClick={handleEdit}
+              style={{
+                width: BTN_W, border: 'none', cursor: 'pointer',
+                background: 'var(--lime, #a3e635)',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3,
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1a2e05" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+              <span style={{ fontSize: 10, fontWeight: 700, color: '#1a2e05' }}>Editar</span>
+            </button>
+
+            {/* Eliminar — rojo */}
+            <button
+              onClick={handleDelete}
+              style={{
+                width: BTN_W, border: 'none', cursor: 'pointer',
+                background: '#ef4444',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3,
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
+                <path d="M10 11v6M14 11v6"/>
+                <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>
+              </svg>
+              <span style={{ fontSize: 10, fontWeight: 700, color: '#fff' }}>Eliminar</span>
+            </button>
+          </div>
+
+          {/* Row */}
+          <div
+            onTouchStart={onTouchStart}
+            onTouchMove={onTouchMove}
+            onTouchEnd={onTouchEnd}
+            onClick={handleTap}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
+              cursor: 'pointer',
+              transform: `translateX(${offset}px)`,
+              transition: dragging.current ? 'none' : 'transform 0.22s ease',
+              background: '#fff',
+              position: 'relative', zIndex: 1,
+              userSelect: 'none', WebkitUserSelect: 'none',
+            }}
+          >
+            <div style={{ width: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>
+              {cat?.icon ?? ''}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-primary,#1a1a1a)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {t.description || 'Sin descripcion'}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-tertiary,#999)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span>{cat?.name ?? 'Sin cat.'}{sub ? ` / ${sub.name}` : ''}</span>
+                <SourceBadge source={(t as any).medioCarga ?? (t as any).origen ?? ''} />
+              </div>
+            </div>
+            <div style={{ fontFamily: 'var(--font-mono,"SF Mono",monospace)', fontSize: 15, fontWeight: 600, color: t.amount < 0 ? 'var(--text-primary,#1a1a1a)' : '#34C759', whiteSpace: 'nowrap', textAlign: 'right' }}>
+              {t.amount < 0 ? `-${fmt(Math.abs(t.amount))}` : `+${fmt(t.amount)}`}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -387,18 +467,17 @@ function CategoryView({
       .sort((a, b) => b.spent - a.spent);
   }, [categories, transactions, budgets]);
 
-  const maxSpent = breakdown.length > 0 ? breakdown[0].spent : 1;
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Stacked bar chart */}
-      <div style={{ borderRadius: 8, overflow: 'hidden', height: 28, display: 'flex' }}>
+      <div style={{ borderRadius: 8, overflow: 'hidden', height: 10, display: 'flex' }}>
         {breakdown.map((c) => (
           <div
             key={c.id}
             style={{
               width: `${c.barPct}%`,
               background: c.color || '#ccc',
+              opacity: 0.75,
               minWidth: c.barPct > 0 ? 3 : 0,
               transition: 'width 0.3s',
             }}
@@ -409,61 +488,81 @@ function CategoryView({
 
       {/* Category list */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {breakdown.map((c) => (
-          <div
-            key={c.id}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              padding: '10px 0',
-              borderBottom: '1px solid var(--border, #f0f0f0)',
-            }}
-          >
+        {breakdown.map((c) => {
+          // Bar = % of assigned budget; fallback to % of total if no budget set
+          const barPct = c.budgetAmt > 0 ? c.pct : c.barPct;
+          const isOver = c.budgetAmt > 0 && c.pct > 100;
+
+          return (
             <div
+              key={c.id}
               style={{
-                width: 32,
-                height: 32,
-                borderRadius: 8,
-                background: c.color ? `${c.color}20` : '#f5f5f5',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 16,
-                flexShrink: 0,
+                gap: 12,
+                padding: '10px 0',
+                borderBottom: '1px solid var(--border, #f0f0f0)',
               }}
             >
-              {c.icon}
-            </div>
+              <div
+                style={{
+                  width: 32,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 20,
+                  flexShrink: 0,
+                }}
+              >
+                {c.icon}
+              </div>
 
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-                <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary, #1a1a1a)' }}>
-                  {c.name}
-                </span>
-                <span
-                  style={{
-                    fontSize: 14,
-                    fontWeight: 600,
-                    fontFamily: 'var(--font-mono, "SF Mono", monospace)',
-                    color: 'var(--text-primary, #1a1a1a)',
-                  }}
-                >
-                  {fmtK(c.spent)}
-                </span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div style={{ flex: 1 }}>
-                  <Bar value={c.spent} max={maxSpent} color={c.color || '#ccc'} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 5 }}>
+                  <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary, #1a1a1a)' }}>
+                    {c.name}
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                    <span
+                      style={{
+                        fontSize: 14,
+                        fontWeight: 600,
+                        fontFamily: 'var(--font-mono, "SF Mono", monospace)',
+                        color: isOver ? '#ef4444' : 'var(--text-primary, #1a1a1a)',
+                      }}
+                    >
+                      {fmtK(c.spent)}
+                    </span>
+                    {c.budgetAmt > 0 && (
+                      <span style={{ fontSize: 11, color: 'var(--text-tertiary, #999)' }}>
+                        / {fmtK(c.budgetAmt)}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <span style={{ fontSize: 11, color: 'var(--text-tertiary, #999)', whiteSpace: 'nowrap' }}>
-                  {c.count} mov{c.count !== 1 ? 's' : ''}
-                  {c.budgetAmt > 0 ? ` · ${c.pct}%` : ''}
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ flex: 1 }}>
+                    <Bar
+                      pct={barPct}
+                      color={c.color || '#ccc'}
+                      fillOpacity={0.65}
+                      overColor="#ef4444"
+                      height={5}
+                    />
+                  </div>
+                  <span style={{ fontSize: 11, color: isOver ? '#ef4444' : 'var(--text-tertiary, #999)', whiteSpace: 'nowrap', minWidth: 36, textAlign: 'right' }}>
+                    {c.budgetAmt > 0 ? `${c.pct}%` : `${c.count} mov${c.count !== 1 ? 's' : ''}`}
+                  </span>
+                </div>
+                {c.budgetAmt === 0 && (
+                  <span style={{ fontSize: 10, color: 'var(--text-tertiary, #aaa)', marginTop: 1, display: 'block' }}>
+                    {c.count} mov{c.count !== 1 ? 's' : ''} · sin presupuesto
+                  </span>
+                )}
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -543,7 +642,7 @@ export function GastosScreen({
 
   return (
     <Screen onTab={onTab}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 20, padding: '0 0 24px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20, padding: '0 16px 24px' }}>
         {/* --- Header --- */}
         <div style={{ textAlign: 'center', padding: '8px 0 0' }}>
           <div
@@ -652,22 +751,14 @@ export function GastosScreen({
                   </span>
                 </div>
                 {/* Transactions card */}
-                <div
-                  style={{
-                    background: 'var(--surface-primary, #fff)',
-                    borderRadius: 14,
-                    padding: '4px 16px',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-                    border: '1px solid var(--border, #f0f0f0)',
-                  }}
-                >
-                  {g.items.map((t, i) => (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {g.items.map((t) => (
                     <TxRow
                       key={t.id}
                       t={t}
-                      isLast={i === g.items.length - 1}
                       categories={categories}
                       onTap={onEditTx}
+                      onDelete={onDeleteTx}
                     />
                   ))}
                 </div>

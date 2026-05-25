@@ -126,7 +126,9 @@ async def get_or_create_google_user(
 async def update_user_profile(
     session: AsyncSession,
     user_id: int,
+    nombre: str | None = None,
     apellido: str | None = None,
+    apodo: str | None = None,
     gmail: str | None = None,
     whatsapp: str | None = None,
     wpp_entero: str | None = None,
@@ -137,8 +139,12 @@ async def update_user_profile(
     if not user:
         return False
 
+    if nombre is not None:
+        user.Nombre = nombre
     if apellido is not None:
         user.Apellido = apellido
+    # if apodo is not None:  # TODO: re-enable after migration 015
+    #     user.Apodo = apodo
     if gmail is not None:
         user.gmail = gmail
     if whatsapp is not None:
@@ -242,6 +248,8 @@ def _user_to_dict(user: User) -> dict[str, Any]:
         "Id": user.id,
         "Nombre": user.Nombre,
         "Apellido": user.Apellido or "",
+        "Apodo": "",  # TODO: re-enable after migration 015 (user.Apodo or "")
+
         "gmail": user.gmail or "",
         "WppEntero": user.WppEntero or "",
         "Whatsapp": user.Whatsapp or "",
