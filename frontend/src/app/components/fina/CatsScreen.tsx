@@ -93,7 +93,7 @@ export function CatsScreen({ onEditCat, onCreateCat, onEditBudget }: CatsScreenP
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, marginBottom: 24 }}>
         <button
           onClick={goLeft}
-          style={{ background: 'none', border: 'none', fontSize: 20, color: 'var(--color-text)', cursor: 'pointer' }}
+          style={{ background: 'none', border: 'none', fontSize: 20, color: 'var(--text-primary,#1a1a1a)', cursor: 'pointer' }}
         >
           ‹
         </button>
@@ -102,7 +102,7 @@ export function CatsScreen({ onEditCat, onCreateCat, onEditBudget }: CatsScreenP
         </span>
         <button
           onClick={goRight}
-          style={{ background: 'none', border: 'none', fontSize: 20, color: 'var(--color-text)', cursor: 'pointer' }}
+          style={{ background: 'none', border: 'none', fontSize: 20, color: 'var(--text-primary,#1a1a1a)', cursor: 'pointer' }}
         >
           ›
         </button>
@@ -113,10 +113,10 @@ export function CatsScreen({ onEditCat, onCreateCat, onEditBudget }: CatsScreenP
         style={{ textAlign: 'center', marginBottom: 28, cursor: 'pointer' }}
         onClick={onEditBudget}
       >
-        <p style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--color-muted)', marginBottom: 4 }}>
+        <p style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--text-tertiary,#999)', marginBottom: 4 }}>
           Presupuesto del mes
         </p>
-        <p style={{ fontFamily: 'var(--font-mono)', fontSize: 32, fontWeight: 700, color: 'var(--color-text)' }}>
+        <p style={{ fontFamily: 'var(--font-mono)', fontSize: 32, fontWeight: 700, color: 'var(--text-primary,#1a1a1a)' }}>
           {fmt(totalBudget)}
         </p>
       </div>
@@ -128,8 +128,8 @@ export function CatsScreen({ onEditCat, onCreateCat, onEditBudget }: CatsScreenP
           return (
             <div key={g.id}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>{g.label}</span>
-                <span style={{ fontSize: 12, color: 'var(--color-muted)' }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary,#1a1a1a)' }}>{g.label}</span>
+                <span style={{ fontSize: 12, color: 'var(--text-tertiary,#999)' }}>
                   Gastado {fmtK(g.spent)} / {fmtK(g.target)}
                 </span>
               </div>
@@ -191,10 +191,10 @@ export function CatsScreen({ onEditCat, onCreateCat, onEditBudget }: CatsScreenP
               </div>
               <Bar pct={groupPct} fillOpacity={0.65} />
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
-                <span style={{ fontSize: 12, color: 'var(--color-muted)' }}>
+                <span style={{ fontSize: 12, color: 'var(--text-tertiary,#999)' }}>
                   {fmt(stats.spent)} gastado
                 </span>
-                <span style={{ fontSize: 12, color: 'var(--color-muted)' }}>
+                <span style={{ fontSize: 12, color: 'var(--text-tertiary,#999)' }}>
                   de {fmt(stats.target)}
                 </span>
               </div>
@@ -213,11 +213,12 @@ export function CatsScreen({ onEditCat, onCreateCat, onEditBudget }: CatsScreenP
                 <div
                   key={cat.id}
                   style={{
-                    background: 'var(--color-surface)',
-                    borderRadius: 12,
+                    background: '#fff',
+                    borderRadius: 14,
                     padding: 14,
                     marginBottom: 8,
-                    border: '1px solid var(--color-border, transparent)',
+                    border: '1px solid var(--border, #f0f0f0)',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
                   }}
                 >
                   {/* Category row */}
@@ -228,16 +229,16 @@ export function CatsScreen({ onEditCat, onCreateCat, onEditBudget }: CatsScreenP
                     <span style={{ fontSize: 22 }}>{cat.icon}</span>
                     <div style={{ flex: 1 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)' }}>{cat.name}</span>
-                        <span style={{ fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--color-text)' }}>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary,#1a1a1a)' }}>{cat.name}</span>
+                        <span style={{ fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--text-primary,#1a1a1a)' }}>
                           {fmt(spent)}
                         </span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 }}>
-                        <span style={{ fontSize: 11, color: 'var(--color-muted)' }}>
+                        <span style={{ fontSize: 11, color: 'var(--text-tertiary,#999)' }}>
                           {subcats.length} subcategoría{subcats.length !== 1 ? 's' : ''}
                         </span>
-                        <span style={{ fontSize: 11, color: 'var(--color-muted)' }}>
+                        <span style={{ fontSize: 11, color: 'var(--text-tertiary,#999)' }}>
                           {isExpanded ? '▾' : '▸'}
                         </span>
                       </div>
@@ -270,7 +271,7 @@ export function CatsScreen({ onEditCat, onCreateCat, onEditBudget }: CatsScreenP
                               flexShrink: 0,
                             }}
                           />
-                          <span style={{ fontSize: 13, color: 'var(--color-text)' }}>{sub.name}</span>
+                          <span style={{ fontSize: 13, color: 'var(--text-secondary,#555)' }}>{sub.name}</span>
                         </div>
                       ))}
 
@@ -284,7 +285,7 @@ export function CatsScreen({ onEditCat, onCreateCat, onEditBudget }: CatsScreenP
                           borderRadius: 8,
                           padding: '6px 12px',
                           fontSize: 12,
-                          color: 'var(--color-text)',
+                          color: 'var(--text-primary,#1a1a1a)',
                           cursor: 'pointer',
                         }}
                       >
