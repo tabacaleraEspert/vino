@@ -67,13 +67,11 @@ const BTN_W          = 76;
 
 export function TxRow({
   t,
-  isLast,
   categories,
   onTap,
   onDelete,
 }: {
   t: Transaction;
-  isLast?: boolean;
   categories?: Category[];
   onTap?: (t: Transaction) => void;
   onDelete?: (t: Transaction) => void;
@@ -130,8 +128,11 @@ export function TxRow({
       {/* Inline confirm */}
       {confirmDelete && (
         <div style={{
-          display: 'flex', alignItems: 'center', gap: 8, padding: '10px 0',
-          borderBottom: isLast ? 'none' : '1px solid var(--border,#f0f0f0)',
+          display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px',
+          borderRadius: 14,
+          background: '#fff',
+          border: '1px solid var(--border,#f0f0f0)',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
         }}>
           <span style={{ fontSize: 13, color: 'var(--text-secondary,#555)', flex: 1 }}>
             ¿Eliminar <strong>{t.description || 'este movimiento'}</strong>?
@@ -148,8 +149,11 @@ export function TxRow({
       {!confirmDelete && (
         <div style={{
           position: 'relative',
-          borderBottom: isLast ? 'none' : '1px solid var(--border,#f0f0f0)',
           overflow: 'hidden',
+          borderRadius: 14,
+          background: '#fff',
+          border: '1px solid var(--border,#f0f0f0)',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
         }}>
           {/* Action buttons — revealed on the right when swiping left */}
           <div style={{
@@ -199,7 +203,7 @@ export function TxRow({
             onTouchEnd={onTouchEnd}
             onClick={handleTap}
             style={{
-              display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0',
+              display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
               cursor: 'pointer',
               transform: `translateX(${offset}px)`,
               transition: dragging.current ? 'none' : 'transform 0.22s ease',
@@ -747,20 +751,11 @@ export function GastosScreen({
                   </span>
                 </div>
                 {/* Transactions card */}
-                <div
-                  style={{
-                    background: 'var(--surface-primary, #fff)',
-                    borderRadius: 14,
-                    padding: '4px 16px',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-                    border: '1px solid var(--border, #f0f0f0)',
-                  }}
-                >
-                  {g.items.map((t, i) => (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {g.items.map((t) => (
                     <TxRow
                       key={t.id}
                       t={t}
-                      isLast={i === g.items.length - 1}
                       categories={categories}
                       onTap={onEditTx}
                       onDelete={onDeleteTx}
