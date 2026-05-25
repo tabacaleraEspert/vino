@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useData } from '../context/DataContext';
 import { useNavigate, useLocation, Outlet } from 'react-router';
 import { TopBar, BottomBar, ConfirmDialog } from './fina/shared';
 import { HomeEditorial } from './fina/HomeEditorial';
@@ -11,6 +12,7 @@ import { NewExpenseSheet, CategoryEditSheet, Drawer, NotificationsPanel, PlansSh
 
 export function RootLayout() {
   const { user, logout } = useAuth();
+  const { refresh } = useData();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -111,6 +113,7 @@ export function RootLayout() {
       <TopBar
         onMenu={() => setDrawer(true)}
         onNotif={() => setNotifOpen(true)}
+        onRefresh={refresh}
         balance={tab === 'gastos' ? undefined : undefined}
       />
 

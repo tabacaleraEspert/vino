@@ -1,4 +1,4 @@
-import React, { type ReactNode, type RefObject } from "react";
+import React, { type ReactNode, type RefObject, useState } from "react";
 
 /* ─────────────────────────────────────────────
    Currency formatting
@@ -139,11 +139,19 @@ export function FinaLogo({ size = 28, mark = false }: FinaLogoProps) {
 interface TopBarProps {
   onMenu?: () => void;
   onNotif?: () => void;
+  onRefresh?: () => Promise<void>;
   balance?: number;
   label?: string;
 }
 
-export function TopBar({ onMenu, onNotif, balance, label = "Disponible" }: TopBarProps) {
+export function TopBar({ onMenu, onNotif, onRefresh, balance, label = "Disponible" }: TopBarProps) {
+  const [spinning, setSpinning] = useState(false);
+
+  async function handleRefresh() {
+    if (!onRefresh || spinning) return;
+    setSpinning(true);
+    try { await onRefresh(); } finally { setSpinning(false); }
+  }
   const btnStyle: React.CSSProperties = {
     width: 40,
     height: 40,
@@ -211,6 +219,18 @@ export function TopBar({ onMenu, onNotif, balance, label = "Disponible" }: TopBa
         </div>
       )}
 
+      {/* Right side: refresh + bell */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {onRefresh && (
+          <button style={btnStyle} onClick={handleRefresh} aria-label="Actualizar" title="Actualizar datos">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+              style={{ transform: spinning ? 'rotate(360deg)' : 'rotate(0deg)', transition: spinning ? 'transform 0.6s linear' : 'none' }}>
+              <path d="M23 4v6h-6" />
+              <path d="M1 20v-6h6" />
+              <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
+            </svg>
+          </button>
+        )}
       {/* Bell */}
       <button style={btnStyle} onClick={onNotif} aria-label="Notifications">
         <span style={{ position: "relative", display: "inline-flex" }}>
@@ -232,6 +252,7 @@ export function TopBar({ onMenu, onNotif, balance, label = "Disponible" }: TopBa
           />
         </span>
       </button>
+      </div>
     </div>
   );
 }
