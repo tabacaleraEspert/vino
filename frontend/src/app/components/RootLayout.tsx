@@ -103,6 +103,7 @@ export function RootLayout() {
       height: '100dvh',
       background: 'var(--bg)',
       position: 'relative',
+      overflow: 'hidden',
       maxWidth: 512,
       margin: '0 auto',
       paddingTop: 'env(safe-area-inset-top, 0px)',

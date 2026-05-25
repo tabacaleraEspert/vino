@@ -780,9 +780,9 @@ function DrawerExpandable({ icon, label, sub, open, onToggle, children }: { icon
   );
 }
 
-function DrawerSubItem({ label, sub }: { label: string; sub?: string }) {
+function DrawerSubItem({ label, sub, onClick }: { label: string; sub?: string; onClick?: () => void }) {
   return (
-    <button style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: '1px solid var(--hairline)', background: 'transparent' }}>
+    <button onClick={onClick} style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: '1px solid var(--hairline)', background: 'transparent' }}>
       <span style={{ width: 5, height: 5, borderRadius: 5, background: 'var(--hairline)', flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--fg)' }}>{label}</div>
@@ -794,6 +794,9 @@ function DrawerSubItem({ label, sub }: { label: string; sub?: string }) {
 }
 
 function SourceCard({ provider, name, desc, connected }: { provider: 'gmail' | 'wpp'; name: string; desc: string; connected: boolean }) {
+  const [confirming, setConfirming] = useState(false);
+  const [wppInfo, setWppInfo] = useState(false);
+
   const icon = provider === 'gmail' ? (
     <div style={{ width: 32, height: 32, borderRadius: 9, background: '#fff', border: '1px solid var(--hairline)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
       <svg width="18" height="13" viewBox="0 0 24 18" fill="none">
@@ -825,10 +828,40 @@ function SourceCard({ provider, name, desc, connected }: { provider: 'gmail' | '
           </div>
           <div style={{ fontSize: 10.5, color: 'var(--fg-3)', marginTop: 2, lineHeight: 1.35 }}>{desc}</div>
         </div>
-        <button style={{ padding: '5px 10px', borderRadius: 100, background: connected ? 'transparent' : LIME, border: connected ? '1px solid var(--hairline)' : 'none', color: connected ? 'var(--fg-3)' : 'var(--ink-stable)', fontSize: 10.5, fontWeight: 700, letterSpacing: 0.06, textTransform: 'uppercase', flexShrink: 0 }}>
+        <button
+          onClick={() => provider === 'gmail' && connected ? setConfirming(true) : provider === 'wpp' && !connected ? setWppInfo(v => !v) : undefined}
+          style={{ padding: '5px 10px', borderRadius: 100, background: connected ? 'transparent' : LIME, border: connected ? '1px solid var(--hairline)' : 'none', color: connected ? 'var(--fg-3)' : 'var(--ink-stable)', fontSize: 10.5, fontWeight: 700, letterSpacing: 0.06, textTransform: 'uppercase', flexShrink: 0 }}>
           {connected ? 'Desconectar' : 'Conectar'}
         </button>
       </div>
+
+      {/* Gmail disconnect confirm */}
+      {confirming && (
+        <div style={{ marginTop: 10, padding: '10px 12px', background: '#FFF3CD', border: '1px solid #FFCA28', borderRadius: 10 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#7A5700', marginBottom: 4 }}>⚠️ ¿Desconectar Gmail?</div>
+          <div style={{ fontSize: 11.5, color: '#7A5700', lineHeight: 1.4, marginBottom: 10 }}>
+            Perdés el relevamiento automático de gastos desde tu correo. Tus gastos existentes no se borran.
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => setConfirming(false)} style={{ flex: 1, padding: '7px', borderRadius: 8, border: '1px solid #FFCA28', background: 'transparent', color: '#7A5700', fontSize: 12, fontWeight: 600 }}>
+              Cancelar
+            </button>
+            <button onClick={() => setConfirming(false)} style={{ flex: 1, padding: '7px', borderRadius: 8, background: '#7A5700', color: '#fff', fontSize: 12, fontWeight: 600 }}>
+              Sí, desconectar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* WhatsApp connect info */}
+      {wppInfo && (
+        <div style={{ marginTop: 10, padding: '10px 12px', background: '#E8F5E9', border: '1px solid #4CAF50', borderRadius: 10 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#1B5E20', marginBottom: 4 }}>📲 Conectar WhatsApp</div>
+          <div style={{ fontSize: 11.5, color: '#2E7D32', lineHeight: 1.4 }}>
+            Mandá una foto del ticket, un audio o un mensaje de texto al número de Fina y lo registramos automáticamente. Disponible en el plan Pro.
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -851,6 +884,8 @@ export function Drawer({ open, onClose, theme = 'light', onTheme, onLogout, onOp
   const { user } = useAuth();
   const [fuentesOpen, setFuentesOpen] = useState(true);
   const [perfilOpen, setPerfilOpen] = useState(false);
+  const [profileSheetOpen, setProfileSheetOpen] = useState(false);
+  const [currencySheetOpen, setCurrencySheetOpen] = useState(false);
 
   if (!open) return null;
 
@@ -925,9 +960,9 @@ export function Drawer({ open, onClose, theme = 'light', onTheme, onLogout, onOp
               open={perfilOpen}
               onToggle={() => setPerfilOpen(o => !o)}
             >
-              <DrawerSubItem label="Datos personales" sub="Nombre, email, teléfono" />
+              <DrawerSubItem label="Datos personales" sub="Nombre, email, apodo" onClick={() => setProfileSheetOpen(true)} />
               <DrawerSubItem label="Notificaciones" sub="Alertas y resúmenes" />
-              <DrawerSubItem label="Idioma y moneda" sub="Español · ARS" />
+              <DrawerSubItem label="Idioma y moneda" sub="Español · ARS" onClick={() => setCurrencySheetOpen(true)} />
               <DrawerSubItem label="Exportar datos" sub="CSV, PDF del mes" />
             </DrawerExpandable>
 
@@ -986,6 +1021,9 @@ export function Drawer({ open, onClose, theme = 'light', onTheme, onLogout, onOp
 
         </div>
       </div>
+
+      <ProfileEditSheet open={profileSheetOpen} onClose={() => setProfileSheetOpen(false)} />
+      <CurrencyLanguageSheet open={currencySheetOpen} onClose={() => setCurrencySheetOpen(false)} />
     </>
   );
 }
@@ -1085,6 +1123,270 @@ export function NotificationsPanel({ open, onClose }: NotificationsPanelProps) {
             Marcar todo como leido
           </button>
         </div>
+      </div>
+    </>
+  );
+}
+
+// ─── Currency & Language Sheet ────────────────────────────────────────────────
+
+const CURRENCIES = [
+  { code: 'ARS', label: 'Peso argentino', flag: '🇦🇷' },
+  { code: 'USD', label: 'Dólar estadounidense', flag: '🇺🇸' },
+  { code: 'BRL', label: 'Real brasileño', flag: '🇧🇷' },
+];
+
+const LANGUAGES = [
+  { code: 'es', label: 'Español', flag: '🇦🇷', available: true },
+  { code: 'pt', label: 'Português', flag: '🇧🇷', available: false },
+];
+
+function CurrencyLanguageSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [currency, setCurrency] = useState(() => localStorage.getItem('fina-currency') || 'ARS');
+
+  function handleSave() {
+    localStorage.setItem('fina-currency', currency);
+    onClose();
+  }
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', opacity: open ? 1 : 0, pointerEvents: open ? 'auto' : 'none', transition: 'opacity 200ms', zIndex: 930 }} />
+      <div style={{
+        position: 'absolute', left: 0, right: 0, bottom: 0,
+        background: 'var(--bg)', borderRadius: '20px 20px 0 0',
+        transform: open ? 'translateY(0)' : 'translateY(105%)',
+        transition: 'transform 300ms cubic-bezier(.2,0,.2,1)',
+        zIndex: 931, paddingBottom: 24,
+        display: 'flex', flexDirection: 'column',
+      }}>
+        <div style={{ width: 36, height: 4, borderRadius: 4, background: 'var(--hairline)', margin: '10px auto 0', flexShrink: 0 }} />
+
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', flexShrink: 0 }}>
+          <div style={{ fontFamily: 'var(--serif)', fontSize: 20, fontStyle: 'italic', color: 'var(--fg)', letterSpacing: -0.3 }}>Idioma y moneda</div>
+          <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: 14, background: 'var(--surface)', border: '1px solid var(--hairline)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--fg-3)' }}>
+            <svg width="10" height="10" viewBox="0 0 12 12"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" fill="none"/></svg>
+          </button>
+        </div>
+
+        <div style={{ padding: '0 18px 16px', display: 'flex', flexDirection: 'column', gap: 22 }}>
+
+          {/* Idioma */}
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.1, textTransform: 'uppercase', color: 'var(--fg-3)', marginBottom: 10 }}>Idioma</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {LANGUAGES.map(lang => (
+                <div key={lang.code} style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '12px 14px', borderRadius: 14,
+                  background: lang.available ? 'var(--surface)' : 'transparent',
+                  border: `1.5px solid ${lang.available ? 'var(--lime)' : 'var(--hairline)'}`,
+                  opacity: lang.available ? 1 : 0.6,
+                }}>
+                  <span style={{ fontSize: 22 }}>{lang.flag}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--fg)' }}>{lang.label}</div>
+                    {!lang.available && (
+                      <div style={{ fontSize: 10.5, color: 'var(--fg-3)', marginTop: 2 }}>Próximamente</div>
+                    )}
+                  </div>
+                  {lang.available && (
+                    <div style={{ width: 18, height: 18, borderRadius: 18, border: '5px solid var(--lime)', background: 'var(--bg)' }} />
+                  )}
+                  {!lang.available && (
+                    <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.08, textTransform: 'uppercase', padding: '3px 8px', borderRadius: 100, background: 'var(--hairline)', color: 'var(--fg-3)' }}>Pronto</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Moneda */}
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.1, textTransform: 'uppercase', color: 'var(--fg-3)', marginBottom: 10 }}>Moneda por defecto</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {CURRENCIES.map(cur => {
+                const selected = currency === cur.code;
+                return (
+                  <button key={cur.code} onClick={() => setCurrency(cur.code)} style={{
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    padding: '12px 14px', borderRadius: 14, textAlign: 'left',
+                    background: selected ? 'rgba(213,240,58,0.08)' : 'var(--surface)',
+                    border: `1.5px solid ${selected ? 'var(--lime)' : 'var(--hairline)'}`,
+                    transition: 'border-color 150ms, background 150ms',
+                  }}>
+                    <span style={{ fontSize: 22 }}>{cur.flag}</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--fg)' }}>{cur.code}</div>
+                      <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 1 }}>{cur.label}</div>
+                    </div>
+                    <div style={{
+                      width: 18, height: 18, borderRadius: 18, flexShrink: 0,
+                      border: selected ? '5px solid var(--lime)' : '1.5px solid var(--hairline)',
+                      background: selected ? 'var(--bg)' : 'transparent',
+                      transition: 'border 140ms',
+                    }} />
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 8, lineHeight: 1.4 }}>
+              Fina usa esta moneda por defecto al registrar gastos. Podés cambiarla por transacción.
+            </div>
+          </div>
+        </div>
+
+        <div style={{ padding: '0 18px', flexShrink: 0 }}>
+          <button onClick={handleSave} style={{ width: '100%', height: 50, borderRadius: 14, background: 'var(--lime)', color: 'var(--ink-stable)', fontSize: 14.5, fontWeight: 700 }}>
+            Guardar
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ─── Profile Edit Sheet ───────────────────────────────────────────────────────
+
+interface ProfileEditSheetProps {
+  open: boolean;
+  onClose: () => void;
+}
+
+function ProfileEditSheet({ open, onClose }: ProfileEditSheetProps) {
+  const [nombre, setNombre] = useState('');
+  const [apellido, setApellido] = useState('');
+  const [apodo, setApodo] = useState('');
+  const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setLoading(true);
+    setError('');
+    setSuccess(false);
+    fetch('/api/v1/auth/profile', {
+      headers: { Authorization: `Bearer ${localStorage.getItem('finanzas_token')}` },
+    })
+      .then(r => r.json())
+      .then(d => {
+        setNombre(d.nombre || '');
+        setApellido(d.apellido || '');
+        // apodo: from server if available, fallback to localStorage
+        setApodo(d.apodo || localStorage.getItem('fina-apodo') || '');
+        setEmail(d.email || '');
+      })
+      .catch(() => setError('No se pudo cargar el perfil'))
+      .finally(() => setLoading(false));
+  }, [open]);
+
+  async function handleSave() {
+    setSaving(true);
+    setError('');
+    setSuccess(false);
+    try {
+      const res = await fetch('/api/v1/auth/profile', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('finanzas_token')}`,
+        },
+        body: JSON.stringify({ nombre: nombre.trim(), apellido: apellido.trim(), apodo: apodo.trim() }),
+      });
+      if (!res.ok) throw new Error('Error al guardar');
+      // Also save apodo to localStorage as fallback until DB migration runs
+      if (apodo.trim()) localStorage.setItem('fina-apodo', apodo.trim());
+      else localStorage.removeItem('fina-apodo');
+      setSuccess(true);
+      setTimeout(onClose, 900);
+    } catch {
+      setError('No se pudo guardar. Intentá de nuevo.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const fieldStyle = {
+    width: '100%',
+    padding: '12px 14px',
+    borderRadius: 12,
+    border: '1.5px solid var(--hairline)',
+    background: 'var(--surface)',
+    color: 'var(--fg)',
+    fontSize: 14,
+    outline: 'none',
+    boxSizing: 'border-box' as const,
+  };
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', opacity: open ? 1 : 0, pointerEvents: open ? 'auto' : 'none', transition: 'opacity 200ms', zIndex: 930 }} />
+      <div style={{
+        position: 'absolute', left: 0, right: 0, bottom: 0,
+        background: 'var(--bg)',
+        borderRadius: '20px 20px 0 0',
+        transform: open ? 'translateY(0)' : 'translateY(105%)',
+        transition: 'transform 300ms cubic-bezier(.2,0,.2,1)',
+        zIndex: 931,
+        paddingBottom: 24,
+        maxHeight: '90%',
+        display: 'flex', flexDirection: 'column',
+      }}>
+        <div style={{ width: 36, height: 4, borderRadius: 4, background: 'var(--hairline)', margin: '10px auto 0', flexShrink: 0 }} />
+
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', flexShrink: 0 }}>
+          <div style={{ fontFamily: 'var(--serif)', fontSize: 20, fontStyle: 'italic', color: 'var(--fg)', letterSpacing: -0.3 }}>Datos personales</div>
+          <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: 14, background: 'var(--surface)', border: '1px solid var(--hairline)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--fg-3)' }}>
+            <svg width="10" height="10" viewBox="0 0 12 12"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" fill="none"/></svg>
+          </button>
+        </div>
+
+        {/* Body */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '0 18px 8px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--fg-3)', fontSize: 13 }}>Cargando...</div>
+          ) : (
+            <>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.1, textTransform: 'uppercase', color: 'var(--fg-3)', marginBottom: 6 }}>Nombre</div>
+                <input value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Tu nombre" style={fieldStyle} />
+              </div>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.1, textTransform: 'uppercase', color: 'var(--fg-3)', marginBottom: 6 }}>Apellido</div>
+                <input value={apellido} onChange={e => setApellido(e.target.value)} placeholder="Tu apellido" style={fieldStyle} />
+              </div>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.1, textTransform: 'uppercase', color: 'var(--fg-3)', marginBottom: 6 }}>
+                  Apodo <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: 'var(--fg-3)' }}>· opcional</span>
+                </div>
+                <input value={apodo} onChange={e => setApodo(e.target.value)} placeholder="¿Cómo te decimos? Ej: Nacho" style={fieldStyle} />
+                <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 5 }}>Fina te va a saludar con este nombre en el chat.</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.1, textTransform: 'uppercase', color: 'var(--fg-3)', marginBottom: 6 }}>Email</div>
+                <input value={email} disabled style={{ ...fieldStyle, opacity: 0.5, cursor: 'not-allowed' }} />
+                <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 5 }}>El email no se puede cambiar desde acá.</div>
+              </div>
+
+              {error && <div style={{ fontSize: 12.5, color: '#C62828', background: '#FFEBEE', borderRadius: 8, padding: '8px 12px' }}>{error}</div>}
+              {success && <div style={{ fontSize: 12.5, color: '#1B5E20', background: '#E8F5E9', borderRadius: 8, padding: '8px 12px' }}>✓ Perfil actualizado</div>}
+            </>
+          )}
+        </div>
+
+        {/* CTA */}
+        {!loading && (
+          <div style={{ padding: '8px 18px 0', flexShrink: 0 }}>
+            <button onClick={handleSave} disabled={saving} style={{ width: '100%', height: 50, borderRadius: 14, background: saving ? 'var(--hairline)' : 'var(--lime)', color: 'var(--ink-stable)', fontSize: 14.5, fontWeight: 700, transition: 'background 150ms' }}>
+              {saving ? 'Guardando...' : 'Guardar cambios'}
+            </button>
+          </div>
+        )}
       </div>
     </>
   );

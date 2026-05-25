@@ -331,7 +331,9 @@ async def set_onboarding_step(
 
 
 class ProfileUpdate(BaseModel):
+    nombre: str | None = None
     apellido: str | None = None
+    apodo: str | None = None
     email: str | None = None
     whatsapp: str | None = None
 
@@ -349,6 +351,7 @@ async def get_profile(
         "id": user["id"],
         "nombre": user["Nombre"],
         "apellido": user["Apellido"],
+        "apodo": user.get("Apodo") or "",
         "email": user["gmail"],
         "whatsapp": user["Whatsapp"],
         "whatsapp_vinculado": bool(user["WppEntero"]),
@@ -378,7 +381,9 @@ async def update_profile(
 
     updated = await update_user_profile(
         db, id_usuario,
+        nombre=payload.nombre,
         apellido=payload.apellido,
+        apodo=payload.apodo,
         gmail=payload.email,
         whatsapp=wpp_clean,
         wpp_entero=wpp_entero,
