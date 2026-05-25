@@ -208,7 +208,7 @@ export function TxRow({
               userSelect: 'none', WebkitUserSelect: 'none',
             }}
           >
-            <div style={{ width: 36, height: 36, borderRadius: 10, background: cat?.color ? `${cat.color}20` : 'var(--surface-secondary,#f5f5f5)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
+            <div style={{ width: 36, height: 36, borderRadius: '50%', background: cat?.color ? `${cat.color}18` : 'var(--surface-secondary,#efefef)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
               {cat?.icon ?? '?'}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -504,8 +504,8 @@ function CategoryView({
                 style={{
                   width: 36,
                   height: 36,
-                  borderRadius: 10,
-                  background: c.color ? `${c.color}22` : '#f5f5f5',
+                  borderRadius: '50%',
+                  background: c.color ? `${c.color}18` : '#efefef',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
