@@ -207,7 +207,7 @@ export function TxRow({
               cursor: 'pointer',
               transform: `translateX(${offset}px)`,
               transition: dragging.current ? 'none' : 'transform 0.22s ease',
-              background: 'var(--bg, #fff)',
+              background: '#fff',
               position: 'relative', zIndex: 1,
               userSelect: 'none', WebkitUserSelect: 'none',
             }}
