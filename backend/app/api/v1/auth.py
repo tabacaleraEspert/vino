@@ -13,6 +13,7 @@ from app.repositories.user_repo import (
     complete_onboarding,
     create_user,
     get_or_create_google_user,
+    get_user_by_gmail,
     get_user_by_nombre,
     get_user_by_id,
     save_wpp_otp,
@@ -248,7 +249,11 @@ async def login(payload: LoginIn, db: AsyncSession = Depends(get_db)):
     if not payload.username or not payload.password:
         raise HTTPException(status_code=400, detail="username/password requeridos")
 
-    user = await get_user_by_nombre(db, payload.username.strip())
+    username = payload.username.strip()
+    # Try by nombre first, then by gmail (supports "tu@email.com" in the username field)
+    user = await get_user_by_nombre(db, username)
+    if not user:
+        user = await get_user_by_gmail(db, username)
     if not user:
         raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
 

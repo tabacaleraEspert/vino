@@ -7,7 +7,7 @@
  * - Mutaciones refrescan solo lo necesario (no full re-fetch)
  * - Sin refreshCatalog() redundante en cada pantalla
  */
-import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo, ReactNode } from "react";
 import { useAuth } from "./AuthContext";
 import { useMonth } from "./MonthContext";
 import { useCatalog } from "./CatalogContext";
@@ -17,6 +17,7 @@ import {
   mapMovimientoItemToTransaction,
   mapReglasToMerchantRules,
   mapPresupuestosToBudgets,
+  calcSpentFromTransactions,
   transactionToPatchPayload,
   type ReglaRaw,
   type Category,
@@ -69,10 +70,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
     isLoading: catalogLoading, error: catalogError,
   } = useCatalog();
 
-  const [budgets, setBudgets] = useState<Budget[]>([]);
+  const [rawBudgets, setRawBudgets] = useState<Budget[]>([]);
   const [merchants, setMerchants] = useState<Merchant[]>([]);
   const [merchantRules, setMerchantRules] = useState<MerchantRule[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  // Budgets con spent calculado desde las transacciones del mes actual
+  const budgets = useMemo<Budget[]>(() => {
+    return rawBudgets.map((b) => ({
+      ...b,
+      spent: calcSpentFromTransactions(b, transactions, selectedMonth),
+    }));
+  }, [rawBudgets, transactions, selectedMonth]);
+
+  // Para compatibilidad: setBudgets setea rawBudgets
+  const setBudgets: React.Dispatch<React.SetStateAction<Budget[]>> = setRawBudgets;
+
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -103,7 +115,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const cats = mapCatalogToCategories(data.categorias, data.subcategorias);
 
         // Budgets
-        setBudgets(mapPresupuestosToBudgets(data.presupuestos as any[] ?? []));
+        setRawBudgets(mapPresupuestosToBudgets(data.presupuestos as any[] ?? []));
 
         // Merchants + rules
         const mersList = data.comercios ?? [];
@@ -166,7 +178,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const data = await fetchBootstrap(token);
       setRawCatalog(data.categorias, data.subcategorias);
       const cats = mapCatalogToCategories(data.categorias, data.subcategorias);
-      setBudgets(mapPresupuestosToBudgets(data.presupuestos as any[] ?? []));
+      setRawBudgets(mapPresupuestosToBudgets(data.presupuestos as any[] ?? []));
       const mersList = data.comercios ?? [];
       setMerchants(mersList);
       setMerchantRules(mapReglasToMerchantRules(data.reglas ?? [], mersList));
@@ -198,14 +210,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (!token) return;
     await api.budgets.create(budget);
     const rows = await api.budgets.list({ mes_anio: period });
-    setBudgets(mapPresupuestosToBudgets(rows ?? []));
+    setRawBudgets(mapPresupuestosToBudgets(rows ?? []));
   };
 
   const updateBudget = async (id: string, updates: Partial<Budget>) => {
     if (!token) return;
     await api.budgets.update(id, updates);
     const rows = await api.budgets.list({ mes_anio: period });
-    setBudgets(mapPresupuestosToBudgets(rows ?? []));
+    setRawBudgets(mapPresupuestosToBudgets(rows ?? []));
   };
 
   const deleteBudget = async (id: string) => {

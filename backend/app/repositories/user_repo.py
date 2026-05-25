@@ -143,8 +143,8 @@ async def update_user_profile(
         user.Nombre = nombre
     if apellido is not None:
         user.Apellido = apellido
-    if apodo is not None:
-        user.Apodo = apodo
+    # if apodo is not None:  # TODO: re-enable after migration 015
+    #     user.Apodo = apodo
     if gmail is not None:
         user.gmail = gmail
     if whatsapp is not None:
@@ -248,7 +248,8 @@ def _user_to_dict(user: User) -> dict[str, Any]:
         "Id": user.id,
         "Nombre": user.Nombre,
         "Apellido": user.Apellido or "",
-        "Apodo": user.Apodo or "",
+        "Apodo": "",  # TODO: re-enable after migration 015 (user.Apodo or "")
+
         "gmail": user.gmail or "",
         "WppEntero": user.WppEntero or "",
         "Whatsapp": user.Whatsapp or "",

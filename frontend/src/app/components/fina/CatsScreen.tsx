@@ -88,6 +88,7 @@ export function CatsScreen({ onEditCat, onCreateCat, onEditBudget }: CatsScreenP
 
   return (
     <Screen>
+      <div style={{ padding: '0 16px 32px' }}>
       {/* Month switcher */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, marginBottom: 24 }}>
         <button
@@ -132,7 +133,7 @@ export function CatsScreen({ onEditCat, onCreateCat, onEditBudget }: CatsScreenP
                   Gastado {fmtK(g.spent)} / {fmtK(g.target)}
                 </span>
               </div>
-              <Bar value={pct} />
+              <Bar pct={pct} fillOpacity={0.65} />
             </div>
           );
         })}
@@ -188,7 +189,7 @@ export function CatsScreen({ onEditCat, onCreateCat, onEditBudget }: CatsScreenP
                 <SectionHead>{group.label}</SectionHead>
                 <Pill>{group.pct}%</Pill>
               </div>
-              <Bar value={groupPct} />
+              <Bar pct={groupPct} fillOpacity={0.65} />
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
                 <span style={{ fontSize: 12, color: 'var(--color-muted)' }}>
                   {fmt(stats.spent)} gastado
@@ -241,7 +242,7 @@ export function CatsScreen({ onEditCat, onCreateCat, onEditBudget }: CatsScreenP
                         </span>
                       </div>
                       <div style={{ marginTop: 6 }}>
-                        <Bar value={catPct} color={cat.color} />
+                        <Bar pct={catPct} color={cat.color} fillOpacity={0.65} />
                       </div>
                     </div>
                   </div>
@@ -329,6 +330,7 @@ export function CatsScreen({ onEditCat, onCreateCat, onEditBudget }: CatsScreenP
         <p style={{ fontSize: 13, lineHeight: 1.5, color: 'var(--color-text-light, #e2e8f0)' }}>
           Revisá las categorías sin presupuesto asignado. Definir un límite te ayuda a detectar desvíos antes de fin de mes.
         </p>
+      </div>
       </div>
     </Screen>
   );

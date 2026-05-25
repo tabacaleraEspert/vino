@@ -523,19 +523,30 @@ export function CatTile({ name, emoji, size = 36, tone = "surface" }: CatTilePro
    ───────────────────────────────────────────── */
 
 interface BarProps {
-  pct: number;
+  pct?: number;
+  value?: number;
+  max?: number;
   color?: string;
   track?: string;
   height?: number;
+  fillOpacity?: number;
+  overColor?: string;
 }
 
 export function Bar({
   pct,
+  value,
+  max,
   color = "var(--lime)",
   track = "var(--surface-2)",
   height = 6,
+  fillOpacity = 1,
+  overColor,
 }: BarProps) {
-  const clamped = Math.max(0, Math.min(100, pct));
+  const resolved = pct !== undefined ? pct : max && max > 0 ? (value! / max) * 100 : 0;
+  const isOver = resolved > 100;
+  const clamped = Math.max(0, Math.min(100, resolved));
+  const fillColor = isOver && overColor ? overColor : color;
   return (
     <div
       style={{
@@ -551,7 +562,8 @@ export function Bar({
           width: `${clamped}%`,
           height: "100%",
           borderRadius: height / 2,
-          background: color,
+          background: fillColor,
+          opacity: fillOpacity,
           transition: "width .3s ease",
         }}
       />

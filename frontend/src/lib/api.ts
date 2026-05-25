@@ -39,6 +39,7 @@ export interface Merchant {
 export interface MerchantRule {
   id: string;
   merchantId: string;
+  comercio: string;       // patrón original (FOODGOL, etc.)
   categoryId: string;
   subcategoryId?: string;
 }
@@ -537,16 +538,16 @@ export function mapCatalogToCategories(
       console.log("[mapCatalogToCategories] ✓", cat.nombre, "id:", cat.id, "→", subcats.length, "subcategorías");
     }
     return {
-      id: cat.id,
+      id: String(cat.id),
       name: cat.nombre,
       icon: resolveIcon(cat.icon, cat.nombre),
       color: cat.color || "#6b7280",
       bucket: cat.bucket || "",
       tipo: (cat.tipo as "Gasto" | "Ingreso") || "Gasto",
       subcategories: subcats.map((s) => ({
-        id: getSubId(s),
+        id: String(getSubId(s)),
         name: getSubNombre(s),
-        categoryId: cat.id,
+        categoryId: String(cat.id),
       })),
     };
   });
@@ -562,10 +563,11 @@ export function mapReglasToMerchantRules(
       (m) => m.name.toLowerCase() === r.comercio.toLowerCase()
     );
     return {
-      id: r.id,
+      id: String(r.id),
       merchantId: merchant?.id ?? "unknown",
-      categoryId: r.categoria_id,
-      subcategoryId: r.subcategoria_id || undefined,
+      comercio: r.comercio,
+      categoryId: String(r.categoria_id),
+      subcategoryId: r.subcategoria_id ? String(r.subcategoria_id) : undefined,
     };
   });
 }
