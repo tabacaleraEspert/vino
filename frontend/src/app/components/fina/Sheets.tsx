@@ -76,7 +76,7 @@ interface NewExpenseSheetProps {
 }
 
 export function NewExpenseSheet({ open, onClose, initial, onDelete }: NewExpenseSheetProps) {
-  const { updateTransaction } = useData();
+  const { updateTransaction, refresh } = useData();
   const { categories, expenseCategories, incomeCategories } = useCatalog();
 
   const isEditing = !!initial;
@@ -142,18 +142,17 @@ export function NewExpenseSheet({ open, onClose, initial, onDelete }: NewExpense
           subcategoryId,
         });
       } else {
-        // Convert date from YYYY-MM-DD to DD/MM/YYYY
-        const [y, m, d] = date.split('-');
-        const fechaFormatted = `${d}/${m}/${y}`;
         await api.movimientos.create({
-          fecha: fechaFormatted,
+          fecha: date,
           monto: parseAmount(),
-          tipo_movimiento: tipo,
+          tipo,
           descripcion: note || merchant || (tipo === 'Ingreso' ? 'Ingreso manual' : 'Gasto manual'),
           id_categoria: parseInt(categoryId) || undefined,
           id_subcategoria: parseInt(subcategoryId) || undefined,
           moneda: currency,
+          MedioCarga: 'Manual',
         });
+        await refresh();
       }
       onClose();
     } catch (e) {
