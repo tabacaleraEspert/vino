@@ -169,7 +169,7 @@ async def complete_onboarding(session: AsyncSession, user_id: int) -> bool:
     if not user:
         return False
     user.OnboardingCompletado = True
-    user.OnboardingCompletadoAt = datetime.now(UTC)
+    user.OnboardingCompletadoAt = datetime.utcnow()
     await session.flush()
     return True
 
@@ -219,11 +219,11 @@ async def verify_and_link_wpp(
         return None
     if user.WppOtpPhone != phone:
         return None
-    # Timezone-safe expiration check
+    # Expiration check — Timestamp column is naive UTC
     expires = user.WppOtpExpiresAt
-    if expires.tzinfo is None:
-        expires = expires.replace(tzinfo=UTC)
-    if datetime.now(UTC) > expires:
+    if expires.tzinfo is not None:
+        expires = expires.replace(tzinfo=None)
+    if datetime.utcnow() > expires:
         return None
 
     # Check uniqueness

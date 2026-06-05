@@ -273,7 +273,7 @@ async def poll_user_gmail(
     result = await db.execute(stmt)
     user = result.scalar_one_or_none()
     if user:
-        user.GmailLastPolledAt = datetime.now(UTC)
+        user.GmailLastPolledAt = datetime.utcnow()
         if last_successfully_processed_id:
             user.GmailLastMessageId = last_successfully_processed_id
         await db.flush()

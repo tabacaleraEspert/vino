@@ -69,7 +69,7 @@ async def gmail_connect(
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
     user.GmailRefreshToken = encrypt_token(refresh_token)
-    user.GmailConnectedAt = datetime.now(UTC)
+    user.GmailConnectedAt = datetime.utcnow()
     await db.flush()
 
     logger.info("Gmail connected for user %d", id_usuario)

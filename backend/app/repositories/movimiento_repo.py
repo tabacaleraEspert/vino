@@ -316,9 +316,10 @@ async def find_duplicate_cross_source(
     Catches: bank email + MercadoPago email for the same purchase,
     or duplicate notifications from the same source.
     """
-    from datetime import datetime, timedelta, UTC
+    from datetime import datetime, timedelta
 
-    now = datetime.now(UTC)
+    # Use naive UTC datetime — Timestamp column is WITHOUT TIME ZONE in PostgreSQL
+    now = datetime.utcnow()
     window_start = now - timedelta(minutes=window_minutes)
 
     # Match by: same user, same amount (exact), same currency, same date, recent timestamp

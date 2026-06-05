@@ -439,7 +439,7 @@ async def whatsapp_send_code(
         raise HTTPException(status_code=400, detail="Número de WhatsApp inválido. Debe tener formato +54XXXXXXXXXX")
 
     code = f"{secrets.randbelow(1000000):06d}"
-    expires_at = datetime.now(UTC) + timedelta(minutes=5)
+    expires_at = datetime.utcnow() + timedelta(minutes=5)
 
     saved = await save_wpp_otp(db, id_usuario, code, phone, expires_at)
     if not saved:
