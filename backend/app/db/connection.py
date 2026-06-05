@@ -8,7 +8,10 @@ from contextlib import contextmanager
 from urllib.parse import quote_plus
 from typing import Generator
 
-import pyodbc
+try:
+    import pyodbc
+except ImportError:
+    pyodbc = None  # Not available on PostgreSQL deployments
 
 from app.core.config import settings
 from app.core.request_metrics import add_sql_time
@@ -59,11 +62,13 @@ def _get_engine():
 
 
 @contextmanager
-def get_connection() -> Generator[pyodbc.Connection, None, None]:
+def get_connection() -> Generator:
     """
     Context manager para obtener conexión a Azure SQL.
-    Reusa pool cuando SQLAlchemy está disponible.
+    No disponible en deployments PostgreSQL — lanza NotImplementedError.
     """
+    if pyodbc is None:
+        raise NotImplementedError("pyodbc no disponible — este deployment usa PostgreSQL/Neon")
     t0 = time.perf_counter()
     try:
         engine = _get_engine()
