@@ -132,6 +132,7 @@ async def poll_user_gmail(
     gmail: str,
     refresh_token_encrypted: str,
     last_message_id: str | None = None,
+    days_back: int = 3,
 ) -> dict[str, Any]:
     """
     Poll one user's Gmail for bank expense notifications.
@@ -147,11 +148,13 @@ async def poll_user_gmail(
         log_event("gmail_error", user_id=user_id, gmail=gmail, error=str(e), step="build_service")
         return {"user_id": user_id, "error": str(e)}
 
-    # Build query — last 3 days of bank emails (resilient to downtime, dedup prevents duplicates)
-    query = build_gmail_query(days_back=3)
+    # Build query — bank emails within the specified window (dedup prevents duplicates)
+    query = build_gmail_query(days_back=days_back)
 
+    # Scale max_results with the look-back window (backfills may have many messages)
+    max_results = min(30 + (days_back - 3) * 10, 100)
     try:
-        messages = await asyncio.to_thread(_list_messages, service, query, 30)
+        messages = await asyncio.to_thread(_list_messages, service, query, max_results)
     except Exception as e:
         logger.error("Gmail list failed for user %d: %s", user_id, e, exc_info=True)
         return {"user_id": user_id, "error": str(e)}
@@ -370,7 +373,7 @@ async def _notify_whatsapp(ingest_result: dict, payload: dict) -> None:
 # Poll all connected users
 # ---------------------------------------------------------------------------
 
-async def poll_all_users(db: AsyncSession) -> list[dict[str, Any]]:
+async def poll_all_users(db: AsyncSession, days_back: int = 3) -> list[dict[str, Any]]:
     """Poll Gmail for all users with connected Gmail accounts."""
     stmt = select(User).where(User.GmailRefreshToken.isnot(None))
     result = await db.execute(stmt)
@@ -388,6 +391,7 @@ async def poll_all_users(db: AsyncSession) -> list[dict[str, Any]]:
                 gmail=user.gmail or "",
                 refresh_token_encrypted=user.GmailRefreshToken,
                 last_message_id=user.GmailLastMessageId,
+                days_back=days_back,
             )
             results.append(r)
         except Exception as e:

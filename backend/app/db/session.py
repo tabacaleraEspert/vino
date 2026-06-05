@@ -1,12 +1,10 @@
 """
 Async SQLAlchemy engine y session factory.
-Usa aioodbc para SQL Server async (no bloquea el event loop).
-Fallback a run_in_executor con pyodbc síncrono si aioodbc no está disponible.
+Usa asyncpg para PostgreSQL (Neon).
 """
 from __future__ import annotations
 
 import logging
-from urllib.parse import quote_plus
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -18,33 +16,19 @@ _async_engine = None
 _async_session_factory = None
 
 
-def _get_async_connection_url() -> str:
-    if not all([settings.SQL_SERVER, settings.SQL_DB, settings.SQL_USER, settings.SQL_PASSWORD]):
-        raise RuntimeError("Faltan variables de entorno: SQL_SERVER, SQL_DB, SQL_USER, SQL_PASSWORD")
-
-    driver = "{ODBC Driver 18 for SQL Server}"
-    trust = "yes" if settings.SQL_TRUST_SERVER_CERTIFICATE else "no"
-    timeout = settings.SQL_CONNECTION_TIMEOUT
-
-    conn_str = (
-        f"Driver={driver};"
-        f"Server={settings.SQL_SERVER},1433;"
-        f"Database={settings.SQL_DB};"
-        f"Uid={settings.SQL_USER};"
-        f"Pwd={settings.SQL_PASSWORD};"
-        f"Encrypt=yes;TrustServerCertificate={trust};Connection Timeout={timeout};"
-    )
-    return f"mssql+aioodbc:///?odbc_connect={quote_plus(conn_str)}"
-
-
 def get_async_engine():
     global _async_engine
     if _async_engine is None:
-        url = _get_async_connection_url()
+        url = settings.DATABASE_URL
+        if not url:
+            raise RuntimeError("Falta variable de entorno: DATABASE_URL")
+        # Neon requires ssl=require; asyncpg uses ssl keyword
+        if "sslmode=require" in url:
+            url = url.replace("sslmode=require", "ssl=require")
         _async_engine = create_async_engine(
             url,
-            pool_size=20,
-            max_overflow=30,
+            pool_size=5,
+            max_overflow=10,
             pool_pre_ping=True,
             pool_recycle=1800,
             echo=False,

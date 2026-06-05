@@ -13,7 +13,11 @@ BANK_FILTERS = [
     # Santander Argentina (n8n: Gmail DV, Gmail MM)
     {"sender": "santander", "subjects": ["Pagaste", "Compraste", "Aviso de transferencia"], "tipo": "Gasto"},
     # BBVA Argentina (n8n: Gmail IM, Gmail Loli)
-    {"sender": "bbva", "subjects": ["Nueva compra", "Compra aprobada", "Realizaste una transferencia"], "tipo": "Gasto"},
+    # Note: BBVA uses two subject formats — old ("Compra aprobada") and new ("Mensajes y Avisos...")
+    {"sender": "bbva", "subjects": [
+        "Nueva compra", "Compra aprobada", "Realizaste una transferencia",
+        "AVISO TRANSFERENCIA INMEDIATA DEBITADA", "AVISO DE COMPRA",
+    ], "tipo": "Gasto"},
     # Banco Macro (n8n: Gmail MM)
     {"sender": "macro", "subjects": ["Aviso de compra"], "tipo": "Gasto"},
     # MercadoPago (n8n: Gmail IM, Gmail Loli)
@@ -32,7 +36,10 @@ BANK_FILTERS = [
     # Santander
     {"sender": "santander", "subjects": ["Transferencia recibida", "Te transfirieron", "Recibiste una transferencia"], "tipo": "Ingreso"},
     # BBVA
-    {"sender": "bbva", "subjects": ["Recibiste una transferencia", "Te transfirieron"], "tipo": "Ingreso"},
+    {"sender": "bbva", "subjects": [
+        "Recibiste una transferencia", "Te transfirieron",
+        "AVISO TRANSFERENCIA INMEDIATA ACREDITADA",
+    ], "tipo": "Ingreso"},
     # Banco Macro
     {"sender": "macro", "subjects": ["Transferencia recibida", "Te transfirieron"], "tipo": "Ingreso"},
     # MercadoPago

@@ -149,17 +149,42 @@ async def gmail_status(
 # Poll — triggered by Azure Timer or manual cron
 # ---------------------------------------------------------------------------
 
+class PollOptions(BaseModel):
+    days_back: int = 3  # How far back to query Gmail (use 14+ for backfill)
+    user_id: int | None = None  # Limit to a single user (None = all users)
+
+
 @router.post("/poll")
 async def trigger_gmail_poll(
+    opts: PollOptions = PollOptions(),
     _: None = Depends(require_master_key),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Poll Gmail for all connected users. Protected by master key.
     Called by Azure Timer Trigger every 1-2 minutes.
+
+    Pass days_back > 3 for a backfill (e.g. days_back=14).
+    Pass user_id to limit to a single user.
     """
-    from app.services.gmail_poller import poll_all_users
-    results = await poll_all_users(db)
+    from app.services.gmail_poller import poll_all_users, poll_user_gmail
+    from sqlalchemy import select as _select
+    if opts.user_id is not None:
+        stmt = _select(User).where(User.id == opts.user_id).where(User.GmailRefreshToken.isnot(None))
+        result = await db.execute(stmt)
+        user = result.scalar_one_or_none()
+        if not user:
+            return {"results": [], "error": f"User {opts.user_id} not found or has no Gmail token"}
+        r = await poll_user_gmail(
+            db,
+            user_id=user.id,
+            gmail=user.gmail or "",
+            refresh_token_encrypted=user.GmailRefreshToken,
+            last_message_id=user.GmailLastMessageId,
+            days_back=opts.days_back,
+        )
+        return {"results": [r]}
+    results = await poll_all_users(db, days_back=opts.days_back)
     return {"results": results}
 
 

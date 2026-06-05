@@ -28,18 +28,18 @@ class Settings(BaseSettings):
         "ionic://localhost",
     ]
 
+    # PostgreSQL/Neon connection URL (asyncpg)
+    DATABASE_URL: str = ""
+
+    # Legacy SQL Server fields (kept for reference, no longer used)
     SQL_SERVER: str | None = None
     SQL_DB: str | None = None
     SQL_USER: str | None = None
     SQL_PASSWORD: str | None = None
-    # Timeout de conexión en segundos. Aumentar si hay latencia o firewall lento.
     SQL_CONNECTION_TIMEOUT: int = 60
-    # TrustServerCertificate=yes para SQL Server local o dev sin certificado válido.
     SQL_TRUST_SERVER_CERTIFICATE: bool = False
     SQL_USUARIO_TABLE: str = "MaestroUsuarios"
-    # Cache de usuario por nombre para login (segundos). 0 = desactivado.
     SQL_LOGIN_CACHE_TTL_SEC: int = 60
-    # Cache de catálogos (categorías, subcategorías, reglas, presupuestos) por id_usuario. 0 = desactivado.
     SQL_CATALOG_CACHE_TTL_SEC: int = 300
 
     class Config:
