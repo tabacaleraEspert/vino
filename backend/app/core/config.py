@@ -21,8 +21,14 @@ class Settings(BaseSettings):
     ADMIN_USER_IDS: list[int] = [8, 11]  # Davor, Nacho — can access admin pipeline log
     CORS_ORIGINS: list[str] = [
         "http://localhost:5173",
+        "http://localhost:5174",
+        "http://localhost:5175",
         "http://127.0.0.1:5173",
         "http://localhost:3000",
+        # Firebase Hosting (producción)
+        "https://ahorros-app-46e0e.web.app",
+        "https://ahorros-app-46e0e.firebaseapp.com",
+        # Azure legacy (mantener mientras haya usuarios en la versión vieja)
         "https://lively-sand-05dbb8b0f.1.azurestaticapps.net",
         "capacitor://localhost",
         "ionic://localhost",
