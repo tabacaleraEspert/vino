@@ -292,7 +292,7 @@ async def get_movimiento_by_origen(
         Movimiento.Id_usuario == id_usuario,
         Movimiento.Origen == origen,
         Movimiento.Origen_Id == origen_id,
-    ))
+    )).order_by(Movimiento.Id.desc()).limit(1)
     result = await session.execute(stmt)
     row = result.scalar_one_or_none()
     if not row:

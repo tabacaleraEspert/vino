@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     ENV: str = "local"
 
     JWT_SECRET: str = "dev_change_me"
-    JWT_EXPIRE_MIN: int = 60 * 24
+    JWT_EXPIRE_MIN: int = 60 * 24 * 30  # 30 días
     MASTER_KEY: str = "dev_master_change_me"
     OPENAI_API_KEY: str = ""
     GOOGLE_CLIENT_ID: str = ""

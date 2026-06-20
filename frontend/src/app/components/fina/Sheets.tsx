@@ -2,8 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import { useData } from '../../context/DataContext';
 import { useCatalog } from '../../context/CatalogContext';
 import { useAuth } from '../../context/AuthContext';
-import { api } from '@/lib/api';
+import { api, apiFetch } from '@/lib/api';
 import { fmt, fmtK } from './shared';
+import { useGoogleLogin } from '@react-oauth/google';
 
 /* ─────────────────────────────────────────────────────────────
    Shared styles & helpers
@@ -91,6 +92,8 @@ export function NewExpenseSheet({ open, onClose, initial, onDelete }: NewExpense
   const [paymentMethod, setPaymentMethod] = useState('');
   const [note, setNote] = useState(initial?.description ?? '');
   const [saving, setSaving] = useState(false);
+  const [bulkPrompt, setBulkPrompt] = useState<{ comercio: string; categoriaId: string; subcategoriaId: string; count: number } | null>(null);
+  const [applyingBulk, setApplyingBulk] = useState(false);
 
   const filteredCategories = tipo === 'Ingreso' ? incomeCategories : expenseCategories;
   const accentColor = tipo === 'Ingreso' ? '#22c55e' : LIME;
@@ -134,6 +137,9 @@ export function NewExpenseSheet({ open, onClose, initial, onDelete }: NewExpense
     setSaving(true);
     try {
       if (isEditing && initial) {
+        const categoryChanged = categoryId !== (initial.categoryId ?? '');
+        const comercioName = (initial.description || '').trim();
+
         await updateTransaction(initial.id, {
           amount: parseAmount(),
           description: note,
@@ -141,6 +147,24 @@ export function NewExpenseSheet({ open, onClose, initial, onDelete }: NewExpense
           categoryId,
           subcategoryId,
         });
+
+        // Si cambió la categoría, ver si hay otros gastos sin categorizar
+        // del mismo comercio para ofrecer aplicar el cambio a todos.
+        if (categoryChanged && comercioName) {
+          try {
+            const res = await api.movimientos.list({
+              comercio: comercioName,
+              categoria_id: initial.categoryId,
+              limit: 1,
+            });
+            const otherCount = Math.max(0, (res?.total ?? 0) - 1);
+            if (otherCount > 0) {
+              setBulkPrompt({ comercio: comercioName, categoriaId: categoryId, subcategoriaId: subcategoryId, count: otherCount });
+              setSaving(false);
+              return;
+            }
+          } catch {}
+        }
       } else {
         await api.movimientos.create({
           fecha: date,
@@ -160,6 +184,31 @@ export function NewExpenseSheet({ open, onClose, initial, onDelete }: NewExpense
     } finally {
       setSaving(false);
     }
+  }
+
+  async function applyBulkToAll() {
+    if (!bulkPrompt) return;
+    setApplyingBulk(true);
+    try {
+      await api.merchants.smart.categorize({
+        comercio: bulkPrompt.comercio,
+        categoria_id: parseInt(bulkPrompt.categoriaId),
+        subcategoria_id: bulkPrompt.subcategoriaId ? parseInt(bulkPrompt.subcategoriaId) : null,
+        create_rule: true,
+      });
+      await refresh();
+    } catch (e) {
+      console.error('Error applying bulk categorize', e);
+    } finally {
+      setApplyingBulk(false);
+      setBulkPrompt(null);
+      onClose();
+    }
+  }
+
+  function dismissBulkPrompt() {
+    setBulkPrompt(null);
+    onClose();
   }
 
   const numpadKeys = ['1','2','3','4','5','6','7','8','9',',','0','del'];
@@ -429,6 +478,56 @@ export function NewExpenseSheet({ open, onClose, initial, onDelete }: NewExpense
           </div>
         </div>
       </div>
+
+      {bulkPrompt && (
+        <>
+          <div style={{ ...SCRIM, zIndex: 950, opacity: 1 }} onClick={dismissBulkPrompt} />
+          <div style={{ ...SHEET_BASE, zIndex: 951, transform: 'translateY(0)', padding: 20 }}>
+            <p style={{ fontFamily: SANS, fontSize: 15, fontWeight: 600, marginBottom: 6 }}>
+              También tenés {bulkPrompt.count} {bulkPrompt.count === 1 ? 'gasto más' : 'gastos más'} de "{bulkPrompt.comercio}"
+            </p>
+            <p style={{ fontFamily: SANS, fontSize: 13, opacity: 0.7, marginBottom: 18 }}>
+              ¿Categorizamos todos igual? Así no tenés que hacerlo uno por uno la próxima vez.
+            </p>
+            <div style={{ display: 'flex', gap: 10, paddingBottom: 8 }}>
+              <button
+                onClick={dismissBulkPrompt}
+                disabled={applyingBulk}
+                style={{
+                  flex: 1,
+                  padding: '14px',
+                  borderRadius: 12,
+                  border: '1px solid rgba(255,255,255,0.15)',
+                  background: 'transparent',
+                  color: 'var(--paper-stable)',
+                  fontWeight: 600,
+                  fontSize: 14,
+                  opacity: applyingBulk ? 0.5 : 1,
+                }}
+              >
+                Solo este
+              </button>
+              <button
+                onClick={applyBulkToAll}
+                disabled={applyingBulk}
+                style={{
+                  flex: 1,
+                  padding: '14px',
+                  borderRadius: 12,
+                  border: 'none',
+                  background: LIME,
+                  color: '#14130F',
+                  fontWeight: 700,
+                  fontSize: 14,
+                  opacity: applyingBulk ? 0.5 : 1,
+                }}
+              >
+                {applyingBulk ? '...' : 'Todos'}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </>
   );
 }
@@ -792,9 +891,62 @@ function DrawerSubItem({ label, sub, onClick }: { label: string; sub?: string; o
   );
 }
 
-function SourceCard({ provider, name, desc, connected }: { provider: 'gmail' | 'wpp'; name: string; desc: string; connected: boolean }) {
+function GmailConnectButtonInline({ onConnected }: { onConnected: () => void }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const googleLogin = useGoogleLogin({
+    flow: 'auth-code',
+    scope: 'https://www.googleapis.com/auth/gmail.readonly',
+    onSuccess: async (response) => {
+      setLoading(true);
+      try {
+        await apiFetch('/gmail/connect', { method: 'POST', body: JSON.stringify({ code: response.code }) });
+        onConnected();
+      } catch { setError('Error al conectar'); }
+      setLoading(false);
+    },
+    onError: () => setError('Error al conectar con Google'),
+  });
+  return (
+    <div>
+      <button
+        onClick={() => googleLogin()}
+        disabled={loading}
+        style={{ width: '100%', padding: '8px 0', borderRadius: 9, background: LIME, color: '#14130F', fontSize: 12.5, fontWeight: 700, border: 'none', cursor: 'pointer', opacity: loading ? 0.7 : 1 }}
+      >
+        {loading ? 'Conectando...' : '📧 Conectar Gmail'}
+      </button>
+      {error && <div style={{ fontSize: 11, color: '#C5221F', marginTop: 4 }}>{error}</div>}
+    </div>
+  );
+}
+
+function SourceCard({ provider, name, desc, connected: initialConnected }: { provider: 'gmail' | 'wpp'; name: string; desc: string; connected: boolean }) {
   const [confirming, setConfirming] = useState(false);
   const [wppInfo, setWppInfo] = useState(false);
+  const [connected, setConnected] = useState(initialConnected);
+  const [loading, setLoading] = useState(false);
+  const [showConnect, setShowConnect] = useState(false);
+
+  // Fetch real Gmail status on mount
+  useEffect(() => {
+    if (provider !== 'gmail') return;
+    apiFetch<{ connected: boolean }>('/gmail/status').then(s => {
+      setConnected(s.connected);
+      setShowConnect(!s.connected);
+    }).catch(() => {});
+  }, [provider]);
+
+  const handleDisconnect = async () => {
+    setLoading(true);
+    try {
+      await apiFetch('/gmail/connect', { method: 'DELETE' });
+      setConnected(false);
+      setShowConnect(true);
+    } catch {}
+    setConfirming(false);
+    setLoading(false);
+  };
 
   const icon = provider === 'gmail' ? (
     <div style={{ width: 32, height: 32, borderRadius: 9, background: '#fff', border: '1px solid var(--hairline)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -845,10 +997,17 @@ function SourceCard({ provider, name, desc, connected }: { provider: 'gmail' | '
             <button onClick={() => setConfirming(false)} style={{ flex: 1, padding: '7px', borderRadius: 8, border: '1px solid #FFCA28', background: 'transparent', color: '#7A5700', fontSize: 12, fontWeight: 600 }}>
               Cancelar
             </button>
-            <button onClick={() => setConfirming(false)} style={{ flex: 1, padding: '7px', borderRadius: 8, background: '#7A5700', color: '#fff', fontSize: 12, fontWeight: 600 }}>
-              Sí, desconectar
+            <button onClick={handleDisconnect} disabled={loading} style={{ flex: 1, padding: '7px', borderRadius: 8, background: '#7A5700', color: '#fff', fontSize: 12, fontWeight: 600, opacity: loading ? 0.6 : 1 }}>
+              {loading ? 'Desconectando...' : 'Sí, desconectar'}
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Gmail reconnect button */}
+      {provider === 'gmail' && showConnect && (
+        <div style={{ marginTop: 10 }}>
+          <GmailConnectButtonInline onConnected={() => { setConnected(true); setShowConnect(false); }} />
         </div>
       )}
 
@@ -866,20 +1025,327 @@ function SourceCard({ provider, name, desc, connected }: { provider: 'gmail' | '
 }
 
 /* ─────────────────────────────────────────────────────────────
+   2b. MediosPagoSheet — Billeteras / wallets
+   ───────────────────────────────────────────────────────────── */
+
+interface MediosPagoSheetProps {
+  open: boolean;
+  onClose: () => void;
+}
+
+export function MediosPagoSheet({ open, onClose }: MediosPagoSheetProps) {
+  const [billeteras, setBilleteras] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [nombre, setNombre] = useState('');
+  const [moneda, setMoneda] = useState('ARS');
+  const [saldo, setSaldo] = useState('');
+
+  const ICON_MAP: Record<string, string> = { ARS: '🇦🇷', USD: '🇺🇸', EUR: '🇪🇺' };
+
+  const fetchBilleteras = async () => {
+    setLoading(true);
+    try {
+      const data = await api.billeteras.list();
+      setBilleteras((data as any[]) || []);
+    } catch {}
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    if (open) { fetchBilleteras(); setShowForm(false); }
+  }, [open]);
+
+  const handleCreate = async () => {
+    if (!nombre.trim()) return;
+    setCreating(true);
+    try {
+      await api.billeteras.create({
+        nombre: nombre.trim(),
+        moneda,
+        icono: ICON_MAP[moneda] || '💰',
+        saldo_inicial: parseFloat(saldo.replace(/[^0-9.]/g, '')) || 0,
+      });
+      setNombre(''); setSaldo(''); setShowForm(false);
+      await fetchBilleteras();
+    } catch {}
+    setCreating(false);
+  };
+
+  if (!open) return null;
+
+  return (
+    <>
+      <div style={{ ...SCRIM }} onClick={onClose} />
+      <div style={{ ...SHEET_BASE, maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}>
+        {/* Handle */}
+        <div style={{ width: 36, height: 4, borderRadius: 99, background: 'rgba(239,233,212,0.2)', margin: '12px auto 0', flexShrink: 0 }} />
+
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px 12px', flexShrink: 0 }}>
+          <span style={{ fontFamily: SERIF, fontStyle: 'italic', fontSize: 22, color: 'var(--paper-stable)' }}>
+            Métodos de pago
+          </span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={() => setShowForm(f => !f)}
+              style={{ width: 32, height: 32, borderRadius: 10, background: LIME, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', cursor: 'pointer' }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                <path d="M12 5v14M5 12h14" stroke="#14130F" strokeWidth="2.4" strokeLinecap="round" />
+              </svg>
+            </button>
+            <CloseBtn onClick={onClose} />
+          </div>
+        </div>
+
+        {/* Create form */}
+        {showForm && (
+          <div style={{ padding: '0 20px 16px', borderBottom: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
+            <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 14, padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <input
+                type="text"
+                value={nombre}
+                onChange={e => setNombre(e.target.value)}
+                placeholder="Nombre (ej: Cuenta sueldo)"
+                autoFocus
+                style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, padding: '10px 12px', color: 'var(--paper-stable)', fontSize: 14, outline: 'none', width: '100%', boxSizing: 'border-box' }}
+              />
+              <div style={{ display: 'flex', gap: 8 }}>
+                <select
+                  value={moneda}
+                  onChange={e => setMoneda(e.target.value)}
+                  style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, padding: '10px 12px', color: 'var(--paper-stable)', fontSize: 14, outline: 'none' }}
+                >
+                  <option value="ARS">🇦🇷 ARS</option>
+                  <option value="USD">🇺🇸 USD</option>
+                  <option value="EUR">🇪🇺 EUR</option>
+                </select>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={saldo}
+                  onChange={e => setSaldo(e.target.value.replace(/[^0-9]/g, ''))}
+                  placeholder="Saldo inicial"
+                  style={{ flex: 1, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, padding: '10px 12px', color: 'var(--paper-stable)', fontSize: 14, outline: 'none' }}
+                />
+              </div>
+              <button
+                onClick={handleCreate}
+                disabled={!nombre.trim() || creating}
+                style={{ padding: '11px', borderRadius: 10, background: nombre.trim() ? LIME : 'rgba(255,255,255,0.1)', color: nombre.trim() ? '#14130F' : 'rgba(255,255,255,0.3)', fontWeight: 700, fontSize: 13.5, border: 'none', cursor: nombre.trim() ? 'pointer' : 'default' }}
+              >
+                {creating ? 'Creando...' : 'Crear cuenta'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* List */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '8px 20px 32px' }}>
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: 40, color: 'rgba(239,233,212,0.4)', fontSize: 14 }}>Cargando...</div>
+          ) : billeteras.filter((b: any) => b.activa).length === 0 ? (
+            <div style={{ textAlign: 'center', padding: 40 }}>
+              <div style={{ fontSize: 36, marginBottom: 10 }}>💳</div>
+              <div style={{ color: 'var(--paper-stable)', fontSize: 15, fontWeight: 500, marginBottom: 4 }}>Sin cuentas todavía</div>
+              <div style={{ color: 'rgba(239,233,212,0.45)', fontSize: 13 }}>Tocá + para agregar tu primera cuenta</div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 8 }}>
+              {billeteras.filter((b: any) => b.activa).map((b: any) => (
+                <div key={b.id} style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 14, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ width: 42, height: 42, borderRadius: 12, background: 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>
+                    {b.icono}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--paper-stable)' }}>{b.nombre}</div>
+                    <div style={{ fontSize: 11.5, color: 'rgba(239,233,212,0.5)', marginTop: 2 }}>{b.moneda}{b.es_default ? ' · Default' : ''}</div>
+                  </div>
+                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: b.saldo_actual >= 0 ? LIME : '#ff6b6b' }}>
+                      {b.moneda === 'USD' ? 'US' : ''}${b.saldo_actual.toLocaleString('es-AR')}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'rgba(239,233,212,0.4)', marginTop: 2 }}>saldo actual</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────
+   WhatsAppSheet
+   ───────────────────────────────────────────────────────────── */
+
+export function WhatsAppSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [step, setStep] = useState<'phone' | 'otp' | 'success'>('phone');
+  const [digits, setDigits] = useState('');
+  const [fullPhone, setFullPhone] = useState('');
+  const [otp, setOtp] = useState('');
+  const [sending, setSending] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [error, setError] = useState('');
+  const [cooldown, setCooldown] = useState(0);
+
+  useEffect(() => {
+    if (open) { setStep('phone'); setDigits(''); setOtp(''); setError(''); }
+  }, [open]);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const t = setTimeout(() => setCooldown(c => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [cooldown]);
+
+  const cleaned = digits.replace(/\D/g, '');
+  const isValid = cleaned.length === 10 || cleaned.length === 11;
+  const normalized = cleaned.startsWith('9') ? cleaned : '9' + cleaned;
+  const phone = `+54${normalized}`;
+
+  const sendCode = async () => {
+    setSending(true); setError('');
+    try {
+      await apiFetch('/auth/whatsapp/send-code', { method: 'POST', body: JSON.stringify({ whatsapp: phone }) });
+      setFullPhone(phone); setStep('otp'); setCooldown(60);
+    } catch (e: any) { setError(e?.message || 'No se pudo enviar el código'); }
+    setSending(false);
+  };
+
+  const verify = async () => {
+    if (otp.length !== 6) return;
+    setVerifying(true); setError('');
+    try {
+      await apiFetch('/auth/whatsapp/verify-code', { method: 'POST', body: JSON.stringify({ whatsapp: fullPhone, code: otp }) });
+      setStep('success');
+    } catch (e: any) { setError(e?.message || 'Código incorrecto'); setOtp(''); }
+    setVerifying(false);
+  };
+
+  if (!open) return null;
+
+  return (
+    <>
+      <div style={SCRIM} onClick={onClose} />
+      <div style={{ ...SHEET_BASE, maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ width: 36, height: 4, borderRadius: 99, background: 'rgba(239,233,212,0.2)', margin: '12px auto 0', flexShrink: 0 }} />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px 12px', flexShrink: 0 }}>
+          <span style={{ fontFamily: SERIF, fontStyle: 'italic', fontSize: 22, color: 'var(--paper-stable)' }}>WhatsApp</span>
+          <CloseBtn onClick={onClose} />
+        </div>
+
+        <div style={{ flex: 1, overflowY: 'auto', padding: '8px 20px 40px' }}>
+          {step === 'success' ? (
+            <div style={{ textAlign: 'center', padding: '40px 0' }}>
+              <div style={{ fontSize: 52, marginBottom: 16 }}>✅</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--paper-stable)', marginBottom: 6 }}>¡Listo!</div>
+              <div style={{ fontSize: 14, color: 'rgba(239,233,212,0.6)', marginBottom: 32 }}>{fullPhone} conectado</div>
+              <button
+                onClick={onClose}
+                style={{ padding: '13px 32px', borderRadius: 14, background: LIME, color: '#14130F', fontWeight: 700, fontSize: 15, border: 'none', cursor: 'pointer' }}
+              >
+                Cerrar
+              </button>
+            </div>
+          ) : step === 'phone' ? (
+            <div>
+              <div style={{ fontSize: 14, color: 'rgba(239,233,212,0.65)', marginBottom: 24, lineHeight: 1.5 }}>
+                Ingresá tu número para recibir confirmaciones de gastos detectados por Gmail.
+              </div>
+              <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 14, padding: '14px 16px', marginBottom: 12 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.8, color: 'rgba(239,233,212,0.4)', textTransform: 'uppercase', marginBottom: 8 }}>Tu número</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontFamily: MONO, fontSize: 20, fontWeight: 800, color: 'var(--paper-stable)' }}>+54</span>
+                  <input
+                    type="tel"
+                    inputMode="numeric"
+                    value={cleaned}
+                    onChange={e => setDigits(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                    placeholder="9 11 1234 5678"
+                    autoFocus
+                    style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontFamily: MONO, fontSize: 20, fontWeight: 800, color: 'var(--paper-stable)', letterSpacing: 1 }}
+                  />
+                </div>
+              </div>
+              {error && <div style={{ color: '#ff6b6b', fontSize: 13, fontWeight: 600, marginBottom: 10 }}>{error}</div>}
+              <button
+                onClick={sendCode}
+                disabled={!isValid || sending}
+                style={{ width: '100%', padding: 14, borderRadius: 14, background: isValid ? LIME : 'rgba(255,255,255,0.1)', color: isValid ? '#14130F' : 'rgba(255,255,255,0.3)', fontWeight: 700, fontSize: 15, border: 'none', cursor: isValid ? 'pointer' : 'default', marginTop: 4 }}
+              >
+                {sending ? 'Enviando...' : 'Enviar código →'}
+              </button>
+            </div>
+          ) : (
+            <div>
+              <div style={{ fontSize: 14, color: 'rgba(239,233,212,0.65)', marginBottom: 20, lineHeight: 1.5 }}>
+                Enviamos un código de 6 dígitos a <strong style={{ color: 'var(--paper-stable)' }}>{fullPhone}</strong>.
+              </div>
+              <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 14, padding: '14px 16px', marginBottom: 12 }}>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={otp}
+                  onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="000000"
+                  autoFocus
+                  style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', fontFamily: MONO, fontSize: 28, fontWeight: 800, color: LIME, letterSpacing: 6, textAlign: 'center', boxSizing: 'border-box' }}
+                />
+              </div>
+              {error && <div style={{ color: '#ff6b6b', fontSize: 13, fontWeight: 600, marginBottom: 10 }}>{error}</div>}
+              <button
+                onClick={verify}
+                disabled={otp.length !== 6 || verifying}
+                style={{ width: '100%', padding: 14, borderRadius: 14, background: otp.length === 6 ? LIME : 'rgba(255,255,255,0.1)', color: otp.length === 6 ? '#14130F' : 'rgba(255,255,255,0.3)', fontWeight: 700, fontSize: 15, border: 'none', cursor: otp.length === 6 ? 'pointer' : 'default', marginBottom: 10 }}
+              >
+                {verifying ? 'Verificando...' : 'Verificar →'}
+              </button>
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 16 }}>
+                <button
+                  onClick={() => { if (cooldown === 0) sendCode(); }}
+                  disabled={cooldown > 0 || sending}
+                  style={{ background: 'none', border: 'none', color: cooldown > 0 ? 'rgba(239,233,212,0.3)' : 'rgba(239,233,212,0.6)', fontSize: 13, fontWeight: 600, cursor: cooldown > 0 ? 'default' : 'pointer' }}
+                >
+                  {cooldown > 0 ? `Reenviar (${cooldown}s)` : 'Reenviar código'}
+                </button>
+                <button
+                  onClick={() => { setStep('phone'); setError(''); setOtp(''); }}
+                  style={{ background: 'none', border: 'none', color: 'rgba(239,233,212,0.4)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                >
+                  Cambiar número
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────
    3. Drawer
    ───────────────────────────────────────────────────────────── */
 
 interface DrawerProps {
   open: boolean;
   onClose: () => void;
+  onOpenWhatsApp?: () => void;
   theme?: 'light' | 'dark';
   onTheme?: (t: 'light' | 'dark') => void;
   onLogout: () => void;
   onOpenPlans?: () => void;
   onOpenStories?: () => void;
+  onOpenMediosPago?: () => void;
 }
 
-export function Drawer({ open, onClose, theme = 'light', onTheme, onLogout, onOpenPlans, onOpenStories }: DrawerProps) {
+export function Drawer({ open, onClose, theme = 'light', onTheme, onLogout, onOpenPlans, onOpenStories, onOpenMediosPago, onOpenWhatsApp }: DrawerProps) {
   const { user } = useAuth();
   const [fuentesOpen, setFuentesOpen] = useState(true);
   const [perfilOpen, setPerfilOpen] = useState(false);
@@ -969,6 +1435,14 @@ export function Drawer({ open, onClose, theme = 'light', onTheme, onLogout, onOp
               icon={(c) => <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="2.5" y="6" width="19" height="13" rx="2.5" stroke={c} strokeWidth="1.7" /><path d="M2.5 10.5h19" stroke={c} strokeWidth="1.7" /></svg>}
               label="Métodos de pago"
               sub="Tus bancos y billeteras"
+              onClick={() => { onClose(); onOpenMediosPago?.(); }}
+            />
+
+            <DrawerItem
+              icon={(c) => <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M20.5 3.5a12 12 0 0 1-8.5 20.5 12 12 0 0 1-6.4-1.8L2 22l1.8-3.6A12 12 0 0 1 3.5 12 12 12 0 0 1 20.5 3.5z" stroke={c} strokeWidth="1.6" strokeLinejoin="round"/><path d="M9 10.5s0-1 1.5-1 1.5 1.5 1.5 1.5-1.5 2-1.5 3h3M15 14h.01" stroke={c} strokeWidth="1.6" strokeLinecap="round"/></svg>}
+              label="WhatsApp"
+              sub="Recibí notificaciones de gastos"
+              onClick={() => { onClose(); onOpenWhatsApp?.(); }}
             />
 
             <DrawerItem

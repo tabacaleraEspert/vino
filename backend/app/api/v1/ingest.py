@@ -17,7 +17,6 @@ from app.repositories.medio_pago_repo import resolve_medio_pago
 from app.repositories.regla_repo import create_regla, resolve_regla
 from app.repositories.user_repo import get_user_by_gmail
 from app.repositories.categoria_repo import list_categorias, list_subcategorias
-from app.services.merchant_identifier import identify_merchant
 from app.utils.normalize import normalize_text
 from app.utils.parse_utils import parse_date_flex, parse_money
 
@@ -61,7 +60,7 @@ async def _get_default_category(db, id_usuario: int, tipo: str = "Gasto") -> tup
         stmt = select(Categoria).where(and_(
             Categoria.Id_usuario == id_usuario,
             Categoria.Nombre.in_(["Otros", "otros"]),
-        ))
+        )).limit(1)
         result = await db.execute(stmt)
         cat = result.scalar_one_or_none()
         if not cat:
@@ -192,32 +191,8 @@ async def process_ingest(db: AsyncSession, payload: Dict[str, Any]) -> Dict[str,
             id_categoria = regla_match["categoria_id"]
             id_subcategoria = regla_match["subcategoria_id"]
         else:
-            # Sin regla: intentar identificar comercio con IA
-            ai_cat_id = None
-            ai_sub_id = None
-            ai_confianza = "baja"
-            try:
-                cats = await list_categorias(db, id_usuario, tipo=tipo)
-                subs = await list_subcategorias(db, id_usuario)
-                sub_by_cat: dict[int, list] = {}
-                for s in subs:
-                    cid = s.get("categoria_id")
-                    if cid:
-                        sub_by_cat.setdefault(cid, []).append(s)
-                cats_with_subs = [{**c, "subcategorias": sub_by_cat.get(c["id"], [])} for c in cats]
-                ai_result = await identify_merchant(comercio_raw, cats_with_subs, use_web_search=False)
-                ai_cat_id = ai_result.get("categoria_id")
-                ai_sub_id = ai_result.get("subcategoria_id")
-                ai_confianza = ai_result.get("confianza", "baja")
-            except Exception as e:
-                logger.warning("AI merchant identification failed for '%s': %s", comercio_raw, e)
-
-            # Use AI suggestion if confidence is not low, otherwise default
-            if ai_cat_id and ai_confianza in ("alta", "media"):
-                id_categoria = ai_cat_id
-                id_subcategoria = ai_sub_id
-            else:
-                id_categoria, id_subcategoria = await _get_default_category(db, id_usuario, tipo)
+            # Sin regla: asignar categoría por defecto (usuario categoriza después)
+            id_categoria, id_subcategoria = await _get_default_category(db, id_usuario, tipo)
 
             try:
                 regla_match = await create_regla(
@@ -226,7 +201,7 @@ async def process_ingest(db: AsyncSession, payload: Dict[str, Any]) -> Dict[str,
                     patron=comercio_raw,
                     id_categoria=id_categoria,
                     id_subcategoria=id_subcategoria,
-                    confianza=f"AI_{ai_confianza}" if ai_cat_id else "AUTO",
+                    confianza="AUTO",
                     tipo_movimiento=tipo,
                 )
                 regla_creada = True

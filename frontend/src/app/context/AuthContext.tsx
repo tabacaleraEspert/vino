@@ -26,8 +26,28 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const TOKEN_KEY = "finanzas_token";
 const USER_KEY = "finanzas_user";
 
+/** Devuelve true si el JWT está expirado (o es inválido). */
+function isJwtExpired(token: string): boolean {
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    // exp es en segundos; damos 60 segundos de margen
+    return payload.exp * 1000 < Date.now() + 60_000;
+  } catch {
+    return true;
+  }
+}
+
 // Restore token synchronously so it's available before any child renders
-const savedTokenSync = localStorage.getItem(TOKEN_KEY);
+const _rawToken = localStorage.getItem(TOKEN_KEY);
+const savedTokenSync: string | null =
+  _rawToken && !isJwtExpired(_rawToken) ? _rawToken : null;
+
+// Si el token existe pero está vencido, limpiamos localStorage ahora mismo
+if (_rawToken && !savedTokenSync) {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
+}
+
 const savedUserSync = (() => {
   try {
     const raw = localStorage.getItem(USER_KEY);

@@ -1,54 +1,61 @@
-# CLAUDE.md — Vino (Finanzas Personales)
+# CLAUDE.md — Fina (Finanzas Personales)
 
 ## Qué es este proyecto
 
-App full-stack de finanzas personales. Permite registrar gastos/ingresos, categorizarlos, asignar presupuestos mensuales y definir reglas de auto-categorización por comercio. Multi-usuario con JWT. Desplegado en Azure.
+App full-stack de finanzas personales. Permite registrar gastos/ingresos automáticamente desde Gmail, categorizarlos, asignar presupuestos mensuales y consultar/registrar gastos vía WhatsApp. Multi-usuario con JWT.
 
-## Stack
+## Stack actual
 
-- **Backend:** Python 3 · FastAPI 0.115 · SQLAlchemy 2.0 (async, aioodbc) · Azure SQL Server
-- **Frontend:** React 18 · React Router 7 · Vite 6 · Tailwind CSS 4 · Radix UI / shadcn · Recharts
-- **Auth:** JWT (PyJWT) + bcrypt · token en localStorage (`finanzas_token`)
-- **Deploy:** Azure Static Web Apps (frontend) + Azure App Service (backend)
+- **Backend:** Python 3 · FastAPI 0.115 · SQLAlchemy 2.0 async · **Neon PostgreSQL** (asyncpg)
+- **Frontend:** React 18 · React Router 7 · Vite 6 · Tailwind CSS 4 · Radix UI / shadcn · PWA
+- **Auth:** JWT (PyJWT, 30 días) + bcrypt · Google OAuth · Apple Sign-In
+- **IA:** OpenAI GPT-4.1-mini (extracción, clasificación, queries) · Whisper (audio WA)
+- **WhatsApp:** Twilio Sandbox (+1 570 909-1218)
+- **Deploy:** Firebase Hosting (frontend) · Google Cloud Run (backend)
+- **GCP:** Proyecto `ahorro-app-498519` · Servicio `ahorros-backend` · Región `us-central1`
+
+## URLs de producción
+
+- **Frontend:** https://ahorros-app-46e0e.web.app
+- **Backend:** https://ahorros-backend-243397640627.us-central1.run.app
+- **DB:** Neon PostgreSQL (ver DATABASE_URL en .env)
 
 ## Estructura del proyecto
 
 ```
 backend/
   app/
-    api/v1/          # Endpoints: auth, movimientos, categorias, subcategorias,
-                     #   comercios, reglas, presupuestos, bootstrap, health, admin, views
-    core/            # config.py (Settings), security.py (JWT/bcrypt), logging.py
-    models/          # ORM: user, movimiento_orm, categoria, subcategoria,
-                     #   regla_comercio, presupuesto, job_recategorizacion
-    repositories/    # Data access: movimiento_repo, categoria_repo, presupuesto_repo,
-                     #   regla_repo, user_repo
-    services/        # Business logic
+    api/v1/          # auth, movimientos, categorias, subcategorias,
+                     # comercios, reglas, presupuestos, bootstrap,
+                     # health, admin, gmail, whatsapp, ingest, views
+    core/            # config.py (Settings), security.py (JWT/bcrypt)
+    models/          # ORM: user, movimiento_orm, categoria, etc.
+    repositories/    # Data access layer
+    services/        # Business logic:
+                     #   gmail_poller.py — polling Gmail cada ~90s
+                     #   email_expense_extractor.py — GPT extrae datos de emails
+                     #   expense_extractor.py — GPT extrae datos de mensajes WA
+                     #   whatsapp_intake.py — clasifica intent WA (DATA/QUERY/etc.)
+                     #   query_parser/executor/formatter — responde preguntas financieras
+                     #   twilio_client.py — envía mensajes WA
+                     #   purchase_advisor.py — "¿puedo comprar X?"
+                     #   ticket_reader.py — OCR de fotos de tickets
     middleware/      # error_handler, metrics
-    cache/           # Catálogo cache con TTL
     db/              # session.py (async engine, pool)
-    deps.py          # Dependency injection (get_db, get_current_user)
-    main.py          # App init, lifespan, middleware, router mount
-  migrations/        # Alembic
-  requirements.txt
-  .env               # Variables de entorno (SQL_*, JWT_*, MASTER_KEY)
+    deps.py          # Dependency injection
+    main.py          # App init, lifespan, routers
+  .env               # Credenciales reales — NO commitear
 
 frontend/
   src/
     app/
-      components/    # Dashboard, Transactions, Categories, Budgets, Merchants,
-                     #   MerchantDetail, Stats, Login, RootLayout, ProtectedRoute,
-                     #   modales de creación/edición
-      context/       # AuthContext, DataContext, CatalogContext, MonthContext
-      routes.tsx     # React Router config
-      App.tsx
+      components/fina/   # Todas las pantallas y sheets de la app
+      context/           # AuthContext, DataContext, CatalogContext, MonthContext
+      routes.tsx
     lib/
-      api.ts         # Tipos TypeScript + mappers backend↔frontend
-      api/client.ts  # HTTP client con JWT automático
-      dataLayer.ts   # fetchBootstrap(), fetchMovimientos(), cache
-    styles/
-  vite.config.ts     # Proxy /api → localhost:8000, alias @ → src/
-  package.json
+      api.ts             # Tipos TypeScript + mappers backend↔frontend
+      dataLayer.ts       # fetchBootstrap(), fetchMovimientos(), cache
+  vite.config.ts         # Proxy /api → localhost:8000
 ```
 
 ## Comandos de desarrollo
@@ -56,7 +63,7 @@ frontend/
 ```bash
 # Backend
 cd backend
-python -m venv .venv && source .venv/bin/activate
+.venv\Scripts\activate   # Windows
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 
@@ -65,89 +72,93 @@ cd frontend
 npm install
 npm run dev          # Vite en :5173, proxy /api → :8000
 npm run build        # Build a dist/
+firebase deploy      # Deploy frontend a Firebase
+```
+
+## Deploy backend
+
+```bash
+gcloud run deploy ahorros-backend --source . --region=us-central1 --project=ahorro-app-498519 --quiet
 ```
 
 ## Base de datos
 
-- Azure SQL Server (`mssql+aioodbc://`), ODBC Driver 18
-- Pool: size=20, max_overflow=30, recycle=1800s
-- Config en `backend/.env`: SQL_SERVER, SQL_DB, SQL_USER, SQL_PASSWORD
-- Tablas principales: MaestroUsuarios, movimientos, Categoria, SubCategoria, ReglaComercio, Presupuesto
+- **Neon PostgreSQL** (serverless, cloud)
+- Config en `.env`: `DATABASE_URL=postgresql+asyncpg://...`
+- Tablas principales: `MaestroUsuarios`, `movimientos`, `Categoria`, `SubCategoria`, `ReglaComercio`, `Presupuesto`
+- Google Sheets: **ya no se usa** — todo migrado a Postgres
+
+## Flujo de ingesta Gmail (reemplazó n8n)
+
+El backend tiene su propio poller interno que corre cada ~90 segundos:
+
+```
+gmail_poller.py (cada ~90s por usuario)
+  → Busca emails bancarios nuevos (BBVA, MercadoPago, Santander, etc.)
+    → GPT extrae: monto, comercio, fecha, tipo, medio_de_pago
+      → Busca regla en ReglaComercio para el comercio
+        → SI regla existe: asigna categoría de la regla
+        → NO existe: asigna "Otros / Gastos no categorizados" (cat 6, subcat 42)
+          + crea ReglaComercio con confianza="AUTO" para que el usuario la categorice
+      → Crea movimiento en DB
+      → Notifica por WhatsApp (freeform — requiere ventana 24h activa)
+```
+
+**Usuarios con Gmail conectado:**
+- Ignacio (id=11) — ignamedico@gmail.com — BBVA + MercadoPago
+
+**Nota importante:** La categorización con IA fue removida intencionalmente.
+Los comercios nuevos van directo a "Otros" para que el usuario los categorice manualmente.
+Esto es una decisión de producto — la categorización AI automática es un feature premium futuro.
+
+## Flujo WhatsApp
+
+El webhook en `POST /api/v1/whatsapp/webhook` recibe mensajes de Twilio y:
+1. Resuelve usuario por `WppEntero` (formato `whatsapp:+549...`)
+2. Detecta comandos (CAMBIAR, CATEGORIZAR, etc.) o clasifica intent con GPT
+3. Rutea: DATA → registra gasto | QUERY → responde consulta | SUGERENCIAS → advice | OTHER → conversacional
+4. Soporta: texto, audio (Whisper), fotos de tickets (OCR)
+
+**Config Twilio Sandbox:** en Twilio Console → Messaging → Try it out → WhatsApp → Sandbox Settings
+URL webhook: `https://ahorros-backend-243397640627.us-central1.run.app/api/v1/whatsapp/webhook`
 
 ## API
 
 - Base: `/api/v1`
 - Auth: Bearer token en header `Authorization`
-- Endpoints principales:
-  - `POST /auth/login`, `POST /auth/register`, `GET /auth/me`
-  - `GET /bootstrap` — carga catálogo completo (categorías, subcategorías, reglas, presupuestos, comercios) en 1 request
+- Master Key: header `X-Master-Key` para endpoints admin/internos
+- Endpoints clave:
+  - `POST /auth/login`, `/auth/register`, `/auth/google`, `/auth/apple`
+  - `POST /auth/whatsapp/send-code`, `/auth/whatsapp/verify-code`
+  - `GET /bootstrap` — carga catálogo completo en 1 request
   - `GET|POST|PATCH|DELETE /movimientos`
   - `GET|POST|PATCH|DELETE /categorias`, `/subcategorias`, `/comercios`, `/reglas`, `/presupuestos`
-  - `GET /views/home/summary`, `/views/home/breakdown`
+  - `POST /gmail/poll` — fuerza re-poll Gmail (admin)
+  - `POST /whatsapp/webhook` — webhook Twilio (sin auth)
   - `GET /health`
-- Paginación: `?page=1&limit=50` → `{ items, page, limit, total }`
-- Filtros movimientos: `?period=YYYY-MM&tipo=Gasto|Ingreso&categoria_id=N`
 
 ## Patrones y convenciones
 
-- **Idioma del dominio:** español (nombres de tablas, campos, endpoints, UI)
+- **Idioma del dominio:** español (tablas, campos, endpoints, UI)
 - **Arquitectura backend:** Repository pattern → Services → Endpoints
 - **Estado frontend:** Context API (no Redux). 4 contextos: Auth, Data, Catalog, Month
-- **Bootstrap único:** El frontend carga todo el catálogo en 1 request al iniciar, luego movimientos por mes
-- **Formato fechas:** Backend DD/MM/YYYY ↔ Frontend YYYY-MM-DD (mappers en `lib/api.ts`)
-- **Errores:** Middleware centralizado, nunca se filtran detalles internos
-- **Imports frontend:** Alias `@/` apunta a `src/`
+- **JWT:** 30 días de expiración. Se valida en startup del frontend.
+- **Categoría default:** "Otros" (id=6) / "Gastos no categorizados" (id=42)
+- **Formato fechas:** Backend DD/MM/YYYY ↔ Frontend YYYY-MM-DD
+- **WppEntero:** formato `whatsapp:+549XXXXXXXXXX`
 
-## Flujo n8n — Ingesta automática de gastos desde email
+## Usuarios activos
 
-El sistema tiene un flujo externo en n8n que escribe directamente a la misma DB (Azure SQL Server). Este flujo es la fuente principal de datos de gastos.
-
-### Pipeline
-
-```
-Gmail triggers (cada minuto, 4 cuentas)
-  → GPT-4.1-mini extrae datos del email (fecha, monto, comercio, moneda, descripción)
-    → Busca usuario en MaestroUsuarios por gmail
-      → Normaliza medio de pago contra md_payment_method_catalog
-        → Matchea comercio contra ReglaComercio (contains sobre PatronNorm)
-          → SI match: INSERT Movimientos con categoría de la regla + WhatsApp confirmación
-          → NO match: INSERT Movimientos como "Otros/Gastos no categorizados" (cat 6, subcat 42)
-                      + INSERT nueva ReglaComercio + WhatsApp aviso
-```
-
-### Triggers Gmail configurados
-
-| Cuenta | Bancos/Subjects monitoreados |
-|--------|------------------------------|
-| DV (Davor) | Santander: "Pagaste", "Aviso de transferencia" |
-| MM | Macro: "Aviso de compra", Santander |
-| IM (Ignacio) | BBVA: "Nueva compra", "Compra aprobada", "Realizaste una transferencia"; MercadoPago: "Pago aprobado en", "Tu transferencia fue enviada" |
-| Loli | BBVA, MercadoPago (similar a IM) |
-
-### Tablas que usa n8n (además de las del app)
-
-- `md_payment_method_catalog` — catálogo de medios de pago (crédito/débito + medio final)
-- `md_card_funding_type` — tipos de financiamiento (crédito, débito)
-
-### Campos que n8n escribe en Movimientos
-
-`Id_usuario`, `Fecha`, `Timestamp`, `MedioCarga` ('Gmail'), `TipoMovimiento`, `Moneda`, `Monto`, `Id_Credito_Debito`, `Id_Medio_Pago_Final`, `Descripcion`, `Id_Categoria`, `Id_SubCategoria`, `Origen` ('Gmail'), `Origen_Id`, `ComercioRaw`, `ComercioNorm`, `ReglaComercioId`
-
-### Notificaciones
-
-- WhatsApp vía Twilio (templates con ContentSid)
-- Notifica confirmación de gasto categorizado o aviso de gasto sin categorizar
-
-### Implicaciones para el desarrollo
-
-- Los movimientos pueden venir del app (manual) o de n8n (automático) — ambos escriben a la misma tabla
-- Al modificar la tabla Movimientos o ReglaComercio, considerar que n8n también depende del schema
-- El campo `MedioCarga` distingue origen: 'Gmail' (n8n) vs otros (app)
-- Categoría "Otros" (id=6) / subcategoría "Gastos no categorizados" (id=42) son los defaults para gastos sin regla
+| id | Nombre  | Gmail                    | WPP |
+|----|---------|--------------------------|-----|
+| 11 | Ignacio | ignamedico@gmail.com     | ✅  |
+| 12 | Davor   | davor.vindis99@gmail.com | ✅  |
 
 ## Notas importantes
 
 - No hay tests todavía (ni backend ni frontend)
-- El `.env` del backend tiene credenciales reales — no commitear cambios a ese archivo sin cuidado
-- CORS configurado para localhost:5173-5175 y Azure Static Apps
-- Compresión GZip habilitada (min 500 bytes)
+- El `.env` del backend tiene credenciales reales — NO commitear
+- Twilio Sandbox: notificaciones freeform solo funcionan dentro de ventana 24h
+- CORS configurado para localhost:5173-5175, Firebase y Cloud Run
+- Google Sheets: removido. El campo `ID_Sheets` en MaestroUsuarios es legacy.
+- n8n: removido. El polling Gmail es interno al backend.

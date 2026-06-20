@@ -90,7 +90,7 @@ async def read_ticket_photo(
 
     try:
         response = await client.chat.completions.create(
-            model="gpt-5.5",
+            model="gpt-4.1-mini",
             messages=[
                 {"role": "system", "content": prompt},
                 {

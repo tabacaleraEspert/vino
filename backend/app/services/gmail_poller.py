@@ -34,19 +34,33 @@ class _HTMLStripper(HTMLParser):
     def __init__(self):
         super().__init__()
         self._text: list[str] = []
+        self._skip_depth = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ("style", "script"):
+            self._skip_depth += 1
+
+    def handle_endtag(self, tag):
+        if tag in ("style", "script") and self._skip_depth > 0:
+            self._skip_depth -= 1
 
     def handle_data(self, data: str):
-        self._text.append(data)
+        if self._skip_depth == 0:
+            self._text.append(data)
 
     def get_text(self) -> str:
         return " ".join(self._text)
 
 
 def strip_html(html: str) -> str:
-    """Strip HTML tags and return plain text."""
+    """Strip HTML tags and return plain text, collapsing whitespace."""
+    import re as _re
     s = _HTMLStripper()
     s.feed(html)
-    return s.get_text()
+    text = s.get_text()
+    # Collapse multiple spaces/newlines into single space
+    text = _re.sub(r'\s+', ' ', text).strip()
+    return text
 
 
 # ---------------------------------------------------------------------------
@@ -225,9 +239,11 @@ async def poll_user_gmail(
                     continue
 
                 # Build ingest payload (same format as n8n sends)
+                from app.utils.dates import today_ar
+                fecha_extraida = extracted.get("fecha") or today_ar().strftime("%Y-%m-%d")
                 ingest_payload = {
                     "usuario_gmail": gmail,
-                    "fecha": extracted.get("fecha"),
+                    "fecha": fecha_extraida,
                     "tipo": extracted.get("tipo", "Gasto"),
                     "monto": extracted.get("monto", 0),
                     "moneda": extracted.get("moneda", "ARS"),

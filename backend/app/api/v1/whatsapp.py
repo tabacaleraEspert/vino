@@ -232,7 +232,6 @@ async def register_expense(
     from app.repositories.movimiento_repo import create_movimiento
     from app.repositories.regla_repo import resolve_regla, create_regla
     from app.repositories.medio_pago_repo import resolve_medio_pago
-    from app.services.merchant_identifier import identify_merchant
     from app.utils.normalize import normalize_text
 
     message = payload.message.strip()
@@ -310,39 +309,8 @@ async def register_expense(
             categoria_nombre = regla_match.get("categoria_nombre", "")
             subcategoria_nombre = regla_match.get("subcategoria_nombre", "")
 
-    # Step 3: If no rule match, try AI merchant identification
-    if not id_categoria and comercio_raw:
-        try:
-            ai_result = await identify_merchant(comercio_raw, cats_with_subs, use_web_search=False)
-            if ai_result.get("confianza") in ("alta", "media") and ai_result.get("categoria_id"):
-                id_categoria = ai_result["categoria_id"]
-                id_subcategoria = ai_result.get("subcategoria_id")
-                try:
-                    await create_regla(
-                        db, id_usuario=payload.user_id, patron=comercio_raw,
-                        id_categoria=id_categoria, id_subcategoria=id_subcategoria,
-                        confianza=f"AI_{ai_result['confianza']}",
-                    )
-                except Exception:
-                    pass
-        except Exception as e:
-            logger.warning("AI merchant identification failed: %s", e)
-
-    # Step 3b: Use GPT's category suggestion from the extraction
-    if not id_categoria:
-        cat_sug = extracted.get("categoria_sugerida", "")
-        sub_sug = extracted.get("subcategoria_sugerida", "")
-        if cat_sug:
-            for c in cats:
-                if c.get("nombre", "").lower() == str(cat_sug).lower():
-                    id_categoria = c["id"]
-                    categoria_nombre = c.get("nombre", "")
-                    for s in sub_by_cat.get(c["id"], []):
-                        if sub_sug and s.get("nombre", "").lower() == str(sub_sug).lower():
-                            id_subcategoria = s["id"]
-                            subcategoria_nombre = s.get("nombre", "")
-                            break
-                    break
+    # Step 3: Sin regla → categoría por defecto, usuario categoriza después
+    # (AI merchant identification removida — el usuario categoriza manualmente)
 
     # Default if nothing matched
     if not id_categoria:

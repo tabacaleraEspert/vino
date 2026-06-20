@@ -89,8 +89,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const bootstrapDone = useRef(false);
+  const tokenRef = useRef(token);
 
   const period = `${selectedMonth.year}-${String(selectedMonth.month + 1).padStart(2, "0")}`;
+
+  // Mantener ref actualizada para usarla en listeners sin re-registrarlos
+  useEffect(() => { tokenRef.current = token; }, [token]);
 
   // --- Bootstrap: 1 request carga catálogo + presupuestos + reglas + comercios ---
   useEffect(() => {
@@ -169,6 +173,25 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
     return () => { cancelled = true; };
   }, [period]); // Solo period, no categories/merchants (evita loops)
+
+  // --- Auto-refresh al volver a la pestaña (visibilitychange) ---
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (!document.hidden && tokenRef.current && bootstrapDone.current) {
+        // Re-fetch movimientos del mes actual en silencio
+        fetchMovimientos(tokenRef.current, period, { forceRefresh: true })
+          .then((movsRes) => {
+            setTransactions((movsRes?.items ?? []).map((m) =>
+              mapMovimientoItemToTransaction(m, categories, merchants)
+            ));
+          })
+          .catch(() => {}); // silencioso — el usuario puede pulsar refresh manualmente
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [period]); // se re-registra solo cuando cambia el mes
 
   // --- Refresh completo (pull-to-refresh, botón refresh) ---
   const refresh = useCallback(async () => {

@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useCallback } from 'react';
 import { useData } from '../../context/DataContext';
 import { useCatalog } from '../../context/CatalogContext';
+import { useMonth } from '../../context/MonthContext';
 import { Screen, fmt, fmtK, Pill, Bar, SourceBadge } from './shared';
 import type { Transaction, Category } from '../../../lib/api';
 
@@ -583,11 +584,22 @@ export function GastosScreen({
 }) {
   const { transactions, budgets } = useData();
   const { categories } = useCatalog();
+  const { selectedMonth, setSelectedMonth, isCurrentMonth } = useMonth();
 
   const [view, setView] = useState<'movimientos' | 'categoria'>('movimientos');
   const [search, setSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [filterCat, setFilterCat] = useState<string | null>(null);
+
+  function prevMonth() {
+    const { month, year } = selectedMonth;
+    setSelectedMonth(month === 0 ? { month: 11, year: year - 1 } : { month: month - 1, year });
+  }
+
+  function nextMonth() {
+    const { month, year } = selectedMonth;
+    setSelectedMonth(month === 11 ? { month: 0, year: year + 1 } : { month: month + 1, year });
+  }
 
   // Only expenses (negative amounts)
   const expenses = useMemo(
@@ -631,8 +643,7 @@ export function GastosScreen({
   const groups = useMemo(() => groupByDay(filtered), [filtered]);
 
   // Current month label
-  const now = new Date();
-  const monthLabel = `${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
+  const monthLabel = `${MONTHS[selectedMonth.month]} ${selectedMonth.year}`;
 
   // Categories that have expenses (for filter chips)
   const activeCategories = useMemo(() => {
@@ -676,14 +687,23 @@ export function GastosScreen({
               />
             )}
           </div>
-          <div
-            style={{
-              fontSize: 13,
-              color: 'var(--text-tertiary, #999)',
-              marginTop: 6,
-            }}
-          >
-            {monthLabel} &middot; {expenses.length} movimiento{expenses.length !== 1 ? 's' : ''}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, marginTop: 6 }}>
+            <button
+              onClick={prevMonth}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 8px', color: 'var(--text-tertiary, #999)', fontSize: 20, lineHeight: 1, borderRadius: 6 }}
+            >
+              ‹
+            </button>
+            <span style={{ fontSize: 13, color: 'var(--text-tertiary, #999)' }}>
+              {monthLabel} &middot; {expenses.length} movimiento{expenses.length !== 1 ? 's' : ''}
+            </span>
+            <button
+              onClick={nextMonth}
+              disabled={isCurrentMonth}
+              style={{ background: 'none', border: 'none', cursor: isCurrentMonth ? 'default' : 'pointer', padding: '2px 8px', color: isCurrentMonth ? 'var(--border, #e0e0e0)' : 'var(--text-tertiary, #999)', fontSize: 20, lineHeight: 1, borderRadius: 6 }}
+            >
+              ›
+            </button>
           </div>
         </div>
 

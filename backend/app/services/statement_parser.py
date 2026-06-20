@@ -88,7 +88,7 @@ async def extract_from_text(text: str, categories: list[dict]) -> dict:
     prompt = _SYSTEM_PROMPT.replace("{categories_json}", _build_categories_json(categories))
 
     response = await client.chat.completions.create(
-        model="gpt-5.5",
+        model="gpt-4.1-mini",
         messages=[
             {"role": "system", "content": prompt},
             {"role": "user", "content": f"Extracto bancario:\n\n{text}"},
@@ -112,7 +112,7 @@ async def extract_from_image(image_bytes: bytes, mime_type: str, categories: lis
     b64 = base64.b64encode(image_bytes).decode("utf-8")
 
     response = await client.chat.completions.create(
-        model="gpt-5.5",
+        model="gpt-4.1-mini",
         messages=[
             {"role": "system", "content": prompt},
             {
@@ -932,7 +932,7 @@ Respondé SOLO JSON: {{"suggestions": [...]}}"""
     try:
         client = _get_client()
         response = await client.chat.completions.create(
-            model="gpt-5.5",
+            model="gpt-4.1-mini",
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             max_completion_tokens=2000,

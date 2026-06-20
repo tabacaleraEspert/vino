@@ -9,6 +9,7 @@ from typing import Any
 from openai import AsyncOpenAI
 
 from app.core.config import settings
+from app.services.bank_parsers import try_parse_with_regex
 
 logger = logging.getLogger(__name__)
 
@@ -44,18 +45,26 @@ Extraé los datos de un gasto desde un email de notificación bancaria argentina
 El email viene de un banco o fintech (Santander, BBVA, Macro, MercadoPago, Galicia, etc.).
 
 Extraé estos campos:
-- monto: número (sin $ ni puntos ni comas). Si hay moneda extranjera, convertí a la moneda indicada.
+- monto: número decimal en PESOS (o dólares si corresponde). IMPORTANTE sobre el formato argentino:
+  * El punto "." es separador de miles: "$4.000" = 4000 pesos, NO 4.
+  * La coma "," es separador decimal: "$4.000,50" = 4000.50 pesos.
+  * Nunca devuelvas el monto en centavos. "$4.000" → 4000, nunca 400000.
+  * Ejemplos: "$84.990" → 84990 | "$1.250,00" → 1250 | "$649.000" → 649000
 - moneda: "ARS" por defecto. "USD" si dice dólares, US$, USD, U$S, o cualquier referencia a dólares/moneda extranjera.
-- comercio_raw: nombre del comercio tal como aparece en el email.
-- descripcion: resumen corto (ej: "Compra en Carrefour", "Transferencia a Juan").
-- tipo: "Gasto" para compras/pagos/transferencias enviadas. "Ingreso" para cobros/transferencias recibidas.
-- medio_de_pago: extraer si dice crédito/débito/transferencia + banco/tarjeta. Ej: "Visa Crédito Santander".
+- comercio_raw: nombre del comercio o destinatario. Para transferencias sin comercio, dejá vacío.
+- descripcion: resumen corto. Ej: "Compra en Carrefour", "Transferencia inmediata debitada", "Transferencia a CUIT 27351111009".
+- tipo: "Gasto" para compras/pagos/transferencias enviadas/débitos. "Ingreso" para cobros/transferencias recibidas/acreditaciones.
+- medio_de_pago: extraer si dice crédito/débito/transferencia + banco/tarjeta. Ej: "Visa Crédito BBVA", "Transferencia BBVA".
 - fecha: en formato YYYY-MM-DD si aparece en el email. Si no → null.
-- datos_completos: true si pudiste extraer al menos monto y comercio/descripcion. false si el email no es un gasto.
+- datos_completos: true si pudiste extraer el monto. El comercio puede estar vacío (ej: transferencias). false solo si el email no es una notificación de movimiento bancario.
 
-Si el email NO es una notificación de gasto (ej: resumen mensual, promo, newsletter):
-- datos_completos: false
-- dato_faltante: "no_es_gasto"
+IMPORTANTE — estos emails SÍ son gastos/ingresos válidos aunque no tengan comercio:
+- "AVISO TRANSFERENCIA INMEDIATA DEBITADA" → Gasto, datos_completos: true
+- "Realizaste una transferencia" → Gasto, datos_completos: true
+- "Aviso de transferencia" → Gasto o Ingreso según contexto
+- "Débito automático" → Gasto, datos_completos: true
+
+Solo marcá datos_completos: false si es resumen mensual, promo, newsletter o no tiene monto.
 
 Respondé SOLO JSON válido:
 {"monto": N, "moneda": "ARS", "comercio_raw": "", "descripcion": "", "tipo": "Gasto", \
@@ -78,8 +87,15 @@ async def extract_expense_from_email(
     Returns:
         Dict with extracted fields, or datos_completos=False if not an expense.
     """
-    # Truncate body to avoid token waste — bank notifications are short
-    body_truncated = body[:2000] if body else ""
+    # Truncate body — BBVA transfer emails can reach 17K chars after HTML strip.
+    # 8000 chars covers the amount field in even the most verbose bank emails.
+    body_truncated = body[:8000] if body else ""
+
+    # Fast path: template conocido y fijo -> regex, sin gastar IA.
+    regex_result = try_parse_with_regex(sender, subject, body_truncated)
+    if regex_result is not None:
+        logger.info("email_extract: matched via regex parser (no GPT call)")
+        return regex_result
 
     user_message = (
         f"From: {sender}\n"

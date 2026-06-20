@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { api } from '../../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { useNavigate, useLocation, Outlet } from 'react-router';
@@ -8,7 +9,7 @@ import { GastosScreen } from './fina/GastosScreen';
 import { CatsScreen } from './fina/CatsScreen';
 import { ReglasScreen } from './fina/ReglasScreen';
 import { ChatScreen } from './fina/ChatScreen';
-import { NewExpenseSheet, CategoryEditSheet, Drawer, NotificationsPanel, PlansSheet, StoriesViewer } from './fina/Sheets';
+import { NewExpenseSheet, CategoryEditSheet, Drawer, NotificationsPanel, PlansSheet, StoriesViewer, MediosPagoSheet, WhatsAppSheet } from './fina/Sheets';
 
 export function RootLayout() {
   const { user, logout } = useAuth();
@@ -29,6 +30,8 @@ export function RootLayout() {
   const [editingCat, setEditingCat] = useState<any>(null);
   const [plansOpen, setPlansOpen] = useState(false);
   const [storiesOpen, setStoriesOpen] = useState(false);
+  const [mediosPagoOpen, setMediosPagoOpen] = useState(false);
+  const [whatsAppOpen, setWhatsAppOpen] = useState(false);
 
   // Theme
   const [theme, setTheme] = useState<string>(() => {
@@ -68,8 +71,14 @@ export function RootLayout() {
     navigate('/login');
   }
 
-  function confirmDelete() {
-    // TODO: call delete API for deletingTx
+  async function confirmDelete() {
+    if (!deletingTx) return;
+    try {
+      await api.movimientos.delete(String(deletingTx.id));
+      await refresh();
+    } catch (e) {
+      console.error('Error al borrar movimiento', e);
+    }
     setDeletingTx(null);
   }
 
@@ -132,8 +141,12 @@ export function RootLayout() {
         onLogout={handleLogout}
         onOpenPlans={() => setPlansOpen(true)}
         onOpenStories={() => setStoriesOpen(true)}
+        onOpenMediosPago={() => setMediosPagoOpen(true)}
+        onOpenWhatsApp={() => setWhatsAppOpen(true)}
       />
       <PlansSheet open={plansOpen} onClose={() => setPlansOpen(false)} />
+      <MediosPagoSheet open={mediosPagoOpen} onClose={() => setMediosPagoOpen(false)} />
+      <WhatsAppSheet open={whatsAppOpen} onClose={() => setWhatsAppOpen(false)} />
       <StoriesViewer open={storiesOpen} onClose={() => setStoriesOpen(false)} onNav={(t) => setTab(t)} />
       <NotificationsPanel open={notifOpen} onClose={() => setNotifOpen(false)} />
       <NewExpenseSheet open={expenseOpen} onClose={closeSheet} initial={editingTx} onDelete={setDeletingTx} />
