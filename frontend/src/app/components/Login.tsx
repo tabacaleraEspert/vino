@@ -2,11 +2,10 @@ import { useState, lazy, Suspense } from "react";
 import { useNavigate } from "react-router";
 import { Capacitor } from "@capacitor/core";
 import { useAuth } from "../context/AuthContext";
-import { Eye, EyeOff, AlertCircle, ArrowLeft } from "lucide-react";
+import { Eye, EyeOff, AlertCircle } from "lucide-react";
 
 const isNative = Capacitor.isNativePlatform();
 
-// Only import Google web SDK on non-native platforms
 const WebGoogleLogin = isNative
   ? null
   : lazy(() =>
@@ -174,7 +173,7 @@ export function Login() {
             )}
 
             {/* Google */}
-            <div className="flex justify-center mb-5">
+            <div className="mb-5">
               {isNative ? (
                 <button
                   type="button"
@@ -194,14 +193,16 @@ export function Login() {
                 </button>
               ) : WebGoogleLogin ? (
                 <Suspense fallback={<div className="h-10" />}>
-                  <WebGoogleLogin
-                    onSuccess={handleGoogleSuccess}
-                    onError={() => setError("Error al conectar con Google")}
-                    size="large"
-                    width="380"
-                    text={mode === "login" ? "signin_with" : "signup_with"}
-                    shape="rectangular"
-                  />
+                  <div className="w-full overflow-hidden rounded-lg">
+                    <WebGoogleLogin
+                      onSuccess={handleGoogleSuccess}
+                      onError={() => setError("Error al conectar con Google")}
+                      size="large"
+                      width="340"
+                      text={mode === "login" ? "signin_with" : "signup_with"}
+                      shape="rectangular"
+                    />
+                  </div>
                 </Suspense>
               ) : null}
             </div>

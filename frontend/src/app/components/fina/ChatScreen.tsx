@@ -8,6 +8,27 @@ interface Message {
   text: string;
 }
 
+/** Render chat text with line breaks and **bold** support */
+function FormattedText({ text }: { text: string }) {
+  const parts = text.split('\n');
+  return (
+    <>
+      {parts.map((line, i) => (
+        <span key={i}>
+          {i > 0 && <br />}
+          {line.split(/(\*\*.+?\*\*)/).map((seg, j) =>
+            seg.startsWith('**') && seg.endsWith('**') ? (
+              <strong key={j}>{seg.slice(2, -2)}</strong>
+            ) : (
+              <span key={j}>{seg}</span>
+            ),
+          )}
+        </span>
+      ))}
+    </>
+  );
+}
+
 const SUGGESTED_CHIPS = [
   'Resumen del mes',
   '¿Cuánto gasté en súper?',
@@ -40,11 +61,11 @@ export function ChatScreen() {
     setIsLoading(true);
 
     try {
-      const res = await apiFetch<{ message?: string; response?: string }>('/chat/message', {
+      const res = await apiFetch<{ reply?: string }>('/chat/ask', {
         method: 'POST',
         body: JSON.stringify({ message: text.trim() }),
       });
-      const finaText = res.response || res.message || 'Listo, ahí te mando la info.';
+      const finaText = res.reply || 'Listo, ahí te mando la info.';
       setMessages((prev) => [
         ...prev,
         { id: `f-${Date.now()}`, role: 'fina', text: finaText },
@@ -194,8 +215,9 @@ export function ChatScreen() {
                   maxWidth: '75%',
                   fontSize: '14px',
                   lineHeight: 1.5,
+                  whiteSpace: 'pre-wrap',
                 }}>
-                  {msg.text}
+                  <FormattedText text={msg.text} />
                 </div>
               </div>
             )

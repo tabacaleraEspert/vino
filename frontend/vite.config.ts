@@ -29,8 +29,9 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8000',
+        target: process.env.VITE_PROXY_TARGET || 'https://vino-backend-bkbge8cwfffsdrhc.brazilsouth-01.azurewebsites.net',
         changeOrigin: true,
+        secure: !process.env.VITE_PROXY_TARGET,
       },
     },
   },
